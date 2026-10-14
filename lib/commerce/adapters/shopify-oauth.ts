@@ -74,8 +74,8 @@ export interface InstallUrlInput {
 /** The merchant-facing authorize URL. Throws when the shop is not a valid myshopify.com host. */
 export function buildInstallUrl(input: InstallUrlInput): string {
   const shop = normalizeShopDomain(input.shop)
-  if (!shop) throw new ConnectionError('invalid_url', RO_MESSAGES.invalid_url, false, 'install url: invalid shop domain')
-  if (!input.clientId || !input.redirectUri || !input.state) throw new ConnectionError('not_configured', RO_MESSAGES.not_configured, false, 'install url: missing app configuration')
+  if (!shop) throw new ConnectionError('invalid_url', SHOPIFY_MESSAGES.invalid_url, false, 'install url: invalid shop domain')
+  if (!input.clientId || !input.redirectUri || !input.state) throw new ConnectionError('not_configured', SHOPIFY_MESSAGES.not_configured, false, 'install url: missing app configuration')
   const url = new URL(`https://${shop}/admin/oauth/authorize`)
   url.searchParams.set('client_id', input.clientId)
   url.searchParams.set('scope', normalizeScopes(input.scopes).join(','))
@@ -160,9 +160,9 @@ const AccessTokenResponseSchema = z.object({
  */
 export async function exchangeAccessToken(input: ExchangeAccessTokenInput): Promise<ShopifyAccessToken> {
   const shop = normalizeShopDomain(input.shop)
-  if (!shop) throw new ConnectionError('invalid_url', RO_MESSAGES.invalid_url, false, 'token exchange: invalid shop domain')
-  if (!input.clientId || !input.clientSecret) throw new ConnectionError('not_configured', RO_MESSAGES.not_configured, false, 'token exchange: app not configured')
-  if (!input.code) throw new ConnectionError('unauthorized', RO_MESSAGES.oauth_code, false, 'token exchange: missing code')
+  if (!shop) throw new ConnectionError('invalid_url', SHOPIFY_MESSAGES.invalid_url, false, 'token exchange: invalid shop domain')
+  if (!input.clientId || !input.clientSecret) throw new ConnectionError('not_configured', SHOPIFY_MESSAGES.not_configured, false, 'token exchange: app not configured')
+  if (!input.code) throw new ConnectionError('unauthorized', SHOPIFY_MESSAGES.oauth_code, false, 'token exchange: missing code')
   let res
   try {
     res = await safeFetch(`https://${shop}/admin/oauth/access_token`, {
@@ -179,37 +179,37 @@ export async function exchangeAccessToken(input: ExchangeAccessTokenInput): Prom
     // Shopify answers 400/401 for a used, expired or foreign code: the
     // merchant has to restart the install, so it is an "unauthorized" input.
     if (res.status === 400 || res.status === 401 || res.status === 403) {
-      throw new ConnectionError('unauthorized', RO_MESSAGES.oauth_code, false, `token exchange: http ${res.status}`)
+      throw new ConnectionError('unauthorized', SHOPIFY_MESSAGES.oauth_code, false, `token exchange: http ${res.status}`)
     }
     throw errorForHttpStatus(res.status, 'token exchange', looksLikeHtml(res.text))
   }
   const parsed = AccessTokenResponseSchema.safeParse(res.json)
-  if (!parsed.success) throw new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, 'token exchange: unexpected body shape')
+  if (!parsed.success) throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, 'token exchange: unexpected body shape')
   return { accessToken: parsed.data.access_token, scope: parsed.data.scope ?? '', expiresIn: parsed.data.expires_in ?? null }
 }
 
 // ─── Error translation shared with the adapter ──────────────────────────────
 
-/** Merchant-facing Romanian messages: never a secret, a token or a provider body. */
-export const RO_MESSAGES: Record<ConnectionFailureCode | 'oauth_code' | 'frozen' | 'locked' | 'webhook_url' | 'webhook_refused' | 'secrets_shape', string> = {
-  invalid_url: 'Domeniul magazinului nu este valid. Folosește domeniul de forma magazin.myshopify.com.',
-  ssrf_blocked: 'Adresa magazinului nu este permisă.',
-  unreachable: 'Magazinul Shopify nu poate fi contactat momentan. Încearcă din nou în câteva minute.',
-  unauthorized: 'Shopify a respins token-ul de acces. Reconectează magazinul.',
-  forbidden: 'Shopify nu permite accesul aplicației la acest magazin (permisiuni lipsă sau magazin restricționat).',
-  not_a_store: 'Adresa nu corespunde unui magazin Shopify activ.',
-  api_version_unsupported: 'Versiunea API Shopify folosită nu mai este suportată. Contactează suportul.',
-  rate_limited: 'Shopify limitează temporar cererile. Încearcă din nou în câteva secunde.',
-  timeout: 'Magazinul Shopify nu a răspuns la timp. Încearcă din nou.',
-  redirect: 'Shopify a răspuns cu o redirecționare. Folosește domeniul myshopify.com al magazinului.',
-  invalid_response: 'Shopify a trimis un răspuns neașteptat. Încearcă din nou sau contactează suportul.',
-  not_configured: 'Aplicația Shopify nu este configurată pe platformă.',
-  oauth_code: 'Codul de autorizare Shopify nu este valid sau a expirat. Reia conectarea din pagina magazinului.',
-  frozen: 'Magazinul Shopify este suspendat (plată restantă). Reia conectarea după ce magazinul este reactivat.',
-  locked: 'Magazinul Shopify este blocat de Shopify. Contactează suportul Shopify.',
-  webhook_url: 'Adresa publică pentru webhook-uri nu este configurată pe platformă.',
-  webhook_refused: 'Shopify a refuzat înregistrarea webhook-urilor. Verifică permisiunile aplicației și încearcă din nou.',
-  secrets_shape: 'Token-ul de acces Shopify lipsește sau are un format greșit. Reconectează magazinul.',
+/** Merchant-facing messages (English): never a secret, a token or a provider body. */
+export const SHOPIFY_MESSAGES: Record<ConnectionFailureCode | 'oauth_code' | 'frozen' | 'locked' | 'webhook_url' | 'webhook_refused' | 'secrets_shape', string> = {
+  invalid_url: 'The store domain is not valid. Use the store.myshopify.com form of the domain.',
+  ssrf_blocked: 'The store address is not allowed.',
+  unreachable: 'The Shopify store cannot be reached right now. Try again in a few minutes.',
+  unauthorized: 'Shopify rejected the access token. Reconnect the store.',
+  forbidden: 'Shopify does not allow the app to access this store (missing permissions or a restricted store).',
+  not_a_store: 'The address does not belong to an active Shopify store.',
+  api_version_unsupported: 'The Shopify API version in use is no longer supported. Contact support.',
+  rate_limited: 'Shopify is temporarily throttling requests. Try again in a few seconds.',
+  timeout: 'The Shopify store did not respond in time. Try again.',
+  redirect: 'Shopify answered with a redirect. Use the store\'s myshopify.com domain.',
+  invalid_response: 'Shopify sent an unexpected response. Try again or contact support.',
+  not_configured: 'The Shopify app is not configured on the platform.',
+  oauth_code: 'The Shopify authorization code is not valid or has expired. Restart the connection from the store page.',
+  frozen: 'The Shopify store is frozen (overdue payment). Reconnect once the store is reactivated.',
+  locked: 'The Shopify store is locked by Shopify. Contact Shopify support.',
+  webhook_url: 'The public webhook address is not configured on the platform.',
+  webhook_refused: 'Shopify refused the webhook registration. Check the app permissions and try again.',
+  secrets_shape: 'The Shopify access token is missing or malformed. Reconnect the store.',
 }
 
 export function looksLikeHtml(text: string): boolean {
@@ -219,15 +219,15 @@ export function looksLikeHtml(text: string): boolean {
 /** HTTP status → ConnectionError (https://shopify.dev/docs/api/usage/response-codes, 2026-10-13). */
 export function errorForHttpStatus(status: number, operation: string, html = false): ConnectionError {
   const detail = `${operation}: http ${status}`
-  if (status === 401) return new ConnectionError('unauthorized', RO_MESSAGES.unauthorized, false, detail)
-  if (status === 402) return new ConnectionError('forbidden', RO_MESSAGES.frozen, false, detail)
-  if (status === 403) return new ConnectionError('forbidden', RO_MESSAGES.forbidden, false, detail)
-  if (status === 404 || status === 410) return new ConnectionError('not_a_store', RO_MESSAGES.not_a_store, false, detail)
-  if (status === 423) return new ConnectionError('forbidden', RO_MESSAGES.locked, false, detail)
-  if (status === 429) return new ConnectionError('rate_limited', RO_MESSAGES.rate_limited, true, detail)
-  if (status >= 500) return new ConnectionError('unreachable', RO_MESSAGES.unreachable, true, detail)
-  if (html) return new ConnectionError('not_a_store', RO_MESSAGES.not_a_store, false, `${detail} (html body)`)
-  return new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, detail)
+  if (status === 401) return new ConnectionError('unauthorized', SHOPIFY_MESSAGES.unauthorized, false, detail)
+  if (status === 402) return new ConnectionError('forbidden', SHOPIFY_MESSAGES.frozen, false, detail)
+  if (status === 403) return new ConnectionError('forbidden', SHOPIFY_MESSAGES.forbidden, false, detail)
+  if (status === 404 || status === 410) return new ConnectionError('not_a_store', SHOPIFY_MESSAGES.not_a_store, false, detail)
+  if (status === 423) return new ConnectionError('forbidden', SHOPIFY_MESSAGES.locked, false, detail)
+  if (status === 429) return new ConnectionError('rate_limited', SHOPIFY_MESSAGES.rate_limited, true, detail)
+  if (status >= 500) return new ConnectionError('unreachable', SHOPIFY_MESSAGES.unreachable, true, detail)
+  if (html) return new ConnectionError('not_a_store', SHOPIFY_MESSAGES.not_a_store, false, `${detail} (html body)`)
+  return new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, detail)
 }
 
 const URL_SHAPE_REASON = /not a URL|only https|credentials in the URL|port .* is not allowed|empty host|host name is not valid/
@@ -237,18 +237,18 @@ export function translateStoreError(err: unknown, operation: string): Connection
   if (err instanceof ConnectionError) return err
   if (err instanceof UnsafeUrlError) {
     const code: ConnectionFailureCode = URL_SHAPE_REASON.test(err.reason) ? 'invalid_url' : 'ssrf_blocked'
-    return new ConnectionError(code, RO_MESSAGES[code], false, `${operation}: ${err.reason}`)
+    return new ConnectionError(code, SHOPIFY_MESSAGES[code], false, `${operation}: ${err.reason}`)
   }
   if (err instanceof StoreHttpError) {
     switch (err.code) {
       case 'timeout':
-        return new ConnectionError('timeout', RO_MESSAGES.timeout, true, `${operation}: timeout`)
+        return new ConnectionError('timeout', SHOPIFY_MESSAGES.timeout, true, `${operation}: timeout`)
       case 'network':
-        return new ConnectionError('unreachable', RO_MESSAGES.unreachable, true, `${operation}: network`)
+        return new ConnectionError('unreachable', SHOPIFY_MESSAGES.unreachable, true, `${operation}: network`)
       case 'redirect':
-        return new ConnectionError('redirect', RO_MESSAGES.redirect, false, `${operation}: redirect ${err.status ?? ''}`.trim())
+        return new ConnectionError('redirect', SHOPIFY_MESSAGES.redirect, false, `${operation}: redirect ${err.status ?? ''}`.trim())
       case 'too_large':
-        return new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, `${operation}: response too large`)
+        return new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, `${operation}: response too large`)
       case 'http':
         return errorForHttpStatus(err.status ?? 0, operation)
     }
@@ -256,5 +256,5 @@ export function translateStoreError(err: unknown, operation: string): Connection
   // A failure we did not anticipate (a bug, an exotic runtime error): keep the
   // class name for the logs, never the message, which could echo request data.
   const name = err instanceof Error ? err.name : typeof err
-  return new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, `${operation}: unexpected ${name}`)
+  return new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, `${operation}: unexpected ${name}`)
 }

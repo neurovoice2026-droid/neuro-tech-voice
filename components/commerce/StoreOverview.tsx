@@ -14,12 +14,12 @@ import { platformName } from '@/lib/commerce/platforms'
 import { cn } from '@/lib/utils'
 import { AutomationCard } from './AutomationCard'
 import { formatCount, formatDateTime, relativeTime } from './format'
-import { SYNC_STATUS_LABEL } from './labels'
+import { STORE_PATHS, SYNC_STATUS_LABEL } from './labels'
 import { ProblemsList } from './ProblemsList'
 import { RunsTable } from './RunsTable'
 import { ConnectionStatusChip } from './StatusChips'
 
-// The store overview, shared by /magazin and the e-commerce dashboard:
+// The store overview, shared by /store and the e-commerce dashboard:
 // connection + last sync, the three counts, the call queue, the automation
 // tiles, the latest automation calls and the problems to fix. Everything on
 // it comes from GET /api/commerce/overview.
@@ -30,19 +30,21 @@ interface StoreOverviewProps {
   error: string | null
   onRetry: () => void
   onAutomationChanged: (automation: AutomationDto) => void
-  /** 'full' = the /magazin page (every block); 'compact' = the dashboard strip (no recent runs table). */
+  /** 'full' = the /store page (every block); 'compact' = the dashboard strip (no recent runs table). */
   variant?: 'full' | 'compact'
   className?: string
 }
 
 const QUEUE_LABEL: Array<{ key: keyof CommerceOverviewDto['queue']; label: string }> = [
-  { key: 'eligible', label: 'Eligibile' },
-  { key: 'scheduled', label: 'Programate' },
-  { key: 'calling', label: 'În apel' },
-  { key: 'completed', label: 'Finalizate' },
-  { key: 'suppressed', label: 'Suprimate' },
-  { key: 'failed', label: 'Eșuate' },
+  { key: 'eligible', label: 'Eligible' },
+  { key: 'scheduled', label: 'Scheduled' },
+  { key: 'calling', label: 'Calling' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'suppressed', label: 'Suppressed' },
+  { key: 'failed', label: 'Failed' },
 ]
+
+const STAT_LINK = 'underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground'
 
 function ConnectionSummary({ connection }: { connection: ConnectionDto }) {
   const syncing = connection.sync?.status === 'running' || connection.sync?.status === 'pending'
@@ -74,13 +76,13 @@ function ConnectionSummary({ connection }: { connection: ConnectionDto }) {
                 <>
                   <RefreshCw className="size-3.5 shrink-0" aria-hidden="true" />
                   <span>
-                    Ultima sincronizare reușită:{' '}
+                    Last successful sync:{' '}
                     {lastOk ? (
                       <time dateTime={lastOk} title={formatDateTime(lastOk)} className="text-foreground">
                         {relativeTime(lastOk)}
                       </time>
                     ) : (
-                      <span className="text-foreground">niciodată</span>
+                      <span className="text-foreground">never</span>
                     )}
                   </span>
                 </>
@@ -91,8 +93,8 @@ function ConnectionSummary({ connection }: { connection: ConnectionDto }) {
             )}
           </div>
         </div>
-        <Link href="/magazin/conexiuni" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start sm:shrink-0')}>
-          Conexiune
+        <Link href={STORE_PATHS.connections} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'self-start sm:shrink-0')}>
+          Connection
           <ArrowRight aria-hidden="true" />
         </Link>
       </div>
@@ -104,11 +106,11 @@ function NoConnection() {
   return (
     <EmptyState
       icon={Store}
-      title="Magazinul nu este conectat"
-      description="Conectează platforma magazinului ca să vezi comenzile, clienții și produsele aici și să pornești apelurile automate."
+      title="The store is not connected"
+      description="Connect the store platform to see orders, customers and products here and to start automated calls."
       action={
-        <Link href="/magazin/conexiuni" className={buttonVariants({ size: 'sm' })}>
-          Conectează magazinul
+        <Link href={STORE_PATHS.connections} className={buttonVariants({ size: 'sm' })}>
+          Connect store
           <ArrowRight aria-hidden="true" />
         </Link>
       }
@@ -120,14 +122,14 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
   if (isLoading) {
     return (
       <Card className={cn('py-0', className)}>
-        <OrbLoader label="Se încarcă prezentarea magazinului…" className="min-h-[320px]" />
+        <OrbLoader label="Loading the store overview…" className="min-h-[320px]" />
       </Card>
     )
   }
   if (!overview) {
     return (
       <Card className={cn('gap-0 py-0', className)}>
-        <CommerceCardError message="Prezentarea magazinului nu a putut fi încărcată." detail={error} onRetry={onRetry} className="py-8" />
+        <CommerceCardError message="The store overview could not be loaded." detail={error} onRetry={onRetry} className="py-8" />
       </Card>
     )
   }
@@ -141,7 +143,7 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
         <Card className="gap-0 py-0">
           <CommerceCardError
             role="status"
-            message="Prezentarea nu a putut fi reîmprospătată; cifrele de mai jos pot fi vechi."
+            message="The overview could not be refreshed; the numbers below may be out of date."
             detail={error}
             onRetry={onRetry}
           />
@@ -150,29 +152,29 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
 
       {problems.length > 0 && (
         <section aria-labelledby="overview-problems">
-          <SectionHeading as="h2" title={<span id="overview-problems">De rezolvat</span>} description="Ce împiedică magazinul sau apelurile automate să funcționeze." />
+          <SectionHeading as="h2" title={<span id="overview-problems">To fix</span>} description="What keeps the store or the automated calls from working." />
           <ProblemsList problems={problems} />
         </section>
       )}
 
       <section aria-labelledby="overview-connection">
-        <SectionHeading as="h2" title={<span id="overview-connection">Conexiune</span>} description="Platforma magazinului și ultima sincronizare." />
+        <SectionHeading as="h2" title={<span id="overview-connection">Connection</span>} description="The store platform and the last sync." />
         {connection ? <ConnectionSummary connection={connection} /> : <NoConnection />}
       </section>
 
       {connection && (
         <section aria-labelledby="overview-counts">
-          <SectionHeading as="h2" title={<span id="overview-counts">Date sincronizate</span>} />
+          <SectionHeading as="h2" title={<span id="overview-counts">Synced data</span>} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatTile label="Comenzi" value={formatCount(counts?.orders)} icon={Package} hint={<Link href="/magazin/comenzi" className="underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">Vezi comenzile</Link>} />
-            <StatTile label="Clienți" value={formatCount(counts?.customers)} icon={Users} hint={<Link href="/magazin/clienti" className="underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">Vezi clienții</Link>} />
-            <StatTile label="Produse" value={formatCount(counts?.products)} icon={Store} hint={<Link href="/magazin/produse" className="underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">Vezi produsele</Link>} />
+            <StatTile label="Orders" value={formatCount(counts?.orders)} icon={Package} hint={<Link href={STORE_PATHS.orders} className={STAT_LINK}>View orders</Link>} />
+            <StatTile label="Customers" value={formatCount(counts?.customers)} icon={Users} hint={<Link href={STORE_PATHS.customers} className={STAT_LINK}>View customers</Link>} />
+            <StatTile label="Products" value={formatCount(counts?.products)} icon={Store} hint={<Link href={STORE_PATHS.products} className={STAT_LINK}>View products</Link>} />
           </div>
         </section>
       )}
 
       <section aria-labelledby="overview-queue">
-        <SectionHeading as="h2" title={<span id="overview-queue">Coada de apeluri</span>} description="Apelurile automate, după starea lor." />
+        <SectionHeading as="h2" title={<span id="overview-queue">Call queue</span>} description="The automated calls, by status." />
         <Card className="gap-0 py-0">
           <CardContent className="grid grid-cols-2 gap-3 py-5 sm:grid-cols-3 lg:grid-cols-6">
             {QUEUE_LABEL.map(({ key, label }) => (
@@ -185,11 +187,11 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
       <section aria-labelledby="overview-automations">
         <SectionHeading
           as="h2"
-          title={<span id="overview-automations">Automatizări</span>}
-          description="Pornește sau pune în pauză fiecare automatizare; setările complete sunt în pagina ei."
+          title={<span id="overview-automations">Automations</span>}
+          description="Enable or pause each automation; the full settings live on its page."
           action={
-            <Link href="/magazin/automatizari" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-my-1')}>
-              Toate setările
+            <Link href={STORE_PATHS.automations} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-my-1')}>
+              All settings
               <ArrowRight aria-hidden="true" />
             </Link>
           }
@@ -203,29 +205,29 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
         ) : (
           <EmptyState
             icon={Store}
-            title="Automatizările apar după conectarea magazinului"
-            description="Fiecare platformă oferă alte date, așa că automatizările disponibile se stabilesc după conectare."
+            title="Automations appear once the store is connected"
+            description="Each platform provides different data, so the available automations are known after connecting."
           />
         )}
       </section>
 
       {variant === 'full' && (
         <section aria-labelledby="overview-runs">
-          <SectionHeading as="h2" title={<span id="overview-runs">Apeluri automate recente</span>} description="Ultimele apeluri plasate de automatizări." />
+          <SectionHeading as="h2" title={<span id="overview-runs">Recent automated calls</span>} description="The latest calls placed by automations." />
           <RunsTable
             runs={recentRuns}
             isLoading={false}
             error={null}
             onRetry={onRetry}
-            footerLink={{ href: '/magazin/automatizari', label: 'Vezi istoricul complet în Automatizări' }}
+            footerLink={{ href: STORE_PATHS.automations, label: 'View the full history in Automations' }}
           />
         </section>
       )}
 
       {variant === 'compact' && recentRuns.length > 0 && (
         <div className="flex justify-end">
-          <Link href="/magazin" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-mr-2')}>
-            Prezentarea completă a magazinului
+          <Link href={STORE_PATHS.overview} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-mr-2')}>
+            Full store overview
             <ArrowRight aria-hidden="true" />
           </Link>
         </div>

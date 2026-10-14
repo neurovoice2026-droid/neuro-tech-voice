@@ -3,7 +3,8 @@ import 'server-only'
 // workspace, so one tenant could exhaust the voice slots of every tenant.
 // Three gates run before any provider call that creates a custom voice:
 //   1. plan: only plans whose entitlements include voice cloning
-//      (lib/pages/entitlements.ts: pro, business, custom; not trial/starter);
+//      (lib/pages/entitlements.ts: pro, business, custom and the store plans
+//      priced like them, store_growth and above; not trial/starter/store_starter);
 //   2. a cap of active custom voices per organization
 //      (ELEVENLABS_MAX_CLONES_PER_ORG, default 2), re-checked after the
 //      registry insert so two concurrent requests cannot both pass it;
@@ -17,7 +18,8 @@ import { RequestError } from '@/lib/api/http'
 import { getVoiceQuota, type ELVoiceQuota } from '@/lib/elevenlabs/api/voices'
 import { entitlementsFor, requiredPlanFor } from '@/lib/pages/entitlements'
 import type { Logger } from '@/lib/observability/logger'
-import type { Plan } from '@/types'
+import { PLANS, isPlan, planFamilyOf } from '@/types'
+import type { BusinessType, Plan, PlanFamily } from '@/types'
 import { isProviderError } from './errors'
 
 export const VOICE_CAPACITY_MESSAGE = 'New voices cannot be added on the platform right now. Please try again later or choose a voice you already have.'
@@ -40,10 +42,18 @@ export function maxCustomVoicesPerOrg(): number {
   return Number.isInteger(v) && v >= 0 && v <= 50 ? v : DEFAULT_MAX_CUSTOM_VOICES
 }
 
-const PLANS: readonly Plan[] = ['trial', 'starter', 'pro', 'business', 'custom']
-
 function asPlan(raw: string | null | undefined): Plan {
-  return PLANS.includes(raw as Plan) ? (raw as Plan) : 'trial'
+  return isPlan(raw) ? raw : 'trial'
+}
+
+/**
+ * The family the organization buys from: that of its current paid plan, or
+ * (on the trial, or an unknown plan) the one its business type gets. Service
+ * plans when neither is known, as before the store plans existed.
+ */
+function planFamilyFor(plan: string | null | undefined, businessType?: BusinessType | null): PlanFamily {
+  const family = PLANS[asPlan(plan)].family
+  return family === 'any' ? planFamilyOf(businessType) : family
 }
 
 /** Whether the organization's plan includes custom voices (unknown plans get trial rights, never more). */
@@ -51,15 +61,15 @@ export function customVoicesAllowed(plan: string | null | undefined): boolean {
   return entitlementsFor(asPlan(plan)).voiceCloning
 }
 
-export function requiredPlanForCustomVoices(): Plan {
-  return requiredPlanFor('voiceCloning')
+/** The cheapest plan with custom voices that this organization can actually buy (its own family). */
+export function requiredPlanForCustomVoices(plan?: string | null, businessType?: BusinessType | null): Plan {
+  return requiredPlanFor('voiceCloning', planFamilyFor(plan, businessType))
 }
 
-export function assertCustomVoicePlan(plan: string | null | undefined): void {
+export function assertCustomVoicePlan(plan: string | null | undefined, businessType?: BusinessType | null): void {
   if (customVoicesAllowed(plan)) return
-  const required = requiredPlanForCustomVoices()
-  const name = required.charAt(0).toUpperCase() + required.slice(1)
-  throw new RequestError('forbidden', `Custom voices are available on the ${name} plan and above.`, 403, {
+  const required = requiredPlanForCustomVoices(plan, businessType)
+  throw new RequestError('forbidden', `Custom voices are available on the ${PLANS[required].name} plan and above.`, 403, {
     reason: 'plan',
     required_plan: required,
   })

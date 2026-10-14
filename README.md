@@ -22,7 +22,7 @@ npm run dev                    # http://localhost:3000
 ```
 
 Database: apply the SQL files in `supabase/migrations/` in order (001 → 021,
-then 023, 024 and 025; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+then 023, 024, 025 and 026; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
 SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
 ships it, apply `022_security_performance_hardening.sql`: it is the former
@@ -59,18 +59,25 @@ configuration. Working hours are enforced before any provider is used.
 * Automated, manual and live test procedure:
   [`docs/voice-provider-test-plan.md`](docs/voice-provider-test-plan.md)
 
-## E-commerce vertical (Magazin)
+## E-commerce vertical (Store)
 
 A sign-up chooses its business type (service business or online store). Store
 organizations connect WooCommerce, Shopify, Magento, PrestaShop or a custom
 JSON API, mirror orders/customers/products, and run outbound automations
 (cash-on-delivery confirmation, abandoned cart, order follow-up) through the
-same outbound-call path as the rest of the product. Set-up, platform
+same outbound-call path as the rest of the product, all managed from the
+**Store** section of the dashboard (`/store/*`: orders, customers, products,
+automations, connections, do-not-call, settings). Set-up, platform
 prerequisites, the custom connector contract, webhooks, the job scheduler
 (the `commerce` step of `/api/cron/voice-maintenance`, so the 5-minute
 schedule above applies), retention and the runbook:
 [`docs/commerce-integrations.md`](docs/commerce-integrations.md). Requires
-migrations `024_commerce.sql` and `025_commerce_fk_indexes.sql` and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`.
+migrations `024_commerce.sql`, `025_commerce_fk_indexes.sql` and `026_store_plans.sql`
+and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`. Online stores buy the store plans
+(Store Starter, Growth, Scale from $100/month, Store Enterprise sales-led;
+`PLANS` in `types/index.ts`): their Stripe prices are created by the app on
+first checkout, so the `STRIPE_STORE_*` ids in `.env.example` are optional
+(docs §11).
 
 ## Deployment (Vercel)
 

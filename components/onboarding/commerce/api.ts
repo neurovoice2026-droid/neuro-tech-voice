@@ -1,7 +1,7 @@
 'use client'
 
 // The store onboarding's fetch helpers: one way to call our commerce routes,
-// one error shape (message, code, reason) and Romanian fallbacks. Talks only
+// one error shape (message, code, reason) and English fallbacks. Talks only
 // to our own API routes; secrets go straight from the form into the request
 // body and are never kept anywhere else.
 
@@ -19,12 +19,12 @@ export class CommerceRequestError extends Error {
 }
 
 function fallbackFor(status: number, fallback: string): string {
-  if (status === 401) return 'Sesiunea a expirat. Autentifică-te din nou.'
-  if (status === 403) return 'Această acțiune nu este permisă pentru contul tău.'
-  if (status === 404) return 'Resursa nu a fost găsită.'
-  if (status === 413) return 'Conținutul trimis este prea mare.'
-  if (status === 429) return 'Prea multe cereri. Așteaptă un moment și încearcă din nou.'
-  if (status === 503) return 'Serviciul nu este disponibil momentan. Încearcă din nou în curând.'
+  if (status === 401) return 'Your session has expired. Sign in again.'
+  if (status === 403) return 'This action is not allowed for your account.'
+  if (status === 404) return 'The resource was not found.'
+  if (status === 413) return 'The submitted content is too large.'
+  if (status === 429) return 'Too many requests. Wait a moment and try again.'
+  if (status === 503) return 'The service is unavailable right now. Try again shortly.'
   return fallback
 }
 
@@ -40,10 +40,10 @@ export async function readCommerceError(res: Response, fallback: string): Promis
   return new CommerceRequestError(message ?? fallbackFor(res.status, fallback), res.status, code, reason)
 }
 
-/** A Romanian message for anything a fetch threw. */
+/** A message the merchant can read for anything a fetch threw. */
 export function commerceErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof CommerceRequestError) return err.message
-  if (err instanceof TypeError) return 'Eroare de rețea. Verifică conexiunea și încearcă din nou.'
+  if (err instanceof TypeError) return 'Network error. Check your connection and try again.'
   return fallback
 }
 
@@ -53,7 +53,7 @@ export function isAbort(err: unknown): boolean {
 
 /** No answer within the request's time limit: every wait in this flow ends with a message, never a spinner. */
 export const REQUEST_TIMEOUT_MS = 30_000
-export const TIMEOUT_MESSAGE = 'Serverul nu a răspuns la timp. Încearcă din nou.'
+export const TIMEOUT_MESSAGE = 'The server did not respond in time. Please try again.'
 
 interface JsonRequestInit {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -102,11 +102,13 @@ export async function requestJson<T>(url: string, init: JsonRequestInit): Promis
   }
 }
 
+export const PROGRESS_NOT_SAVED = 'Your progress could not be saved.'
+
 /** Persists the resume position; a failure only affects where a reload lands, so the caller just reports it. */
 export async function persistStep(step: number): Promise<void> {
   await requestJson<{ onboarding_step: number }>('/api/commerce/onboarding/step', {
     method: 'POST',
     body: { step },
-    fallback: 'Progresul nu a putut fi salvat.',
+    fallback: PROGRESS_NOT_SAVED,
   })
 }

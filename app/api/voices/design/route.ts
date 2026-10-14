@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const { supabase, user, org } = await requireOrg()
     log = log.child({ orgId: org.id })
     const body = await parseJsonBody(request, BodySchema, 8 * 1024)
-    assertCustomVoicePlan(org.plan)
+    assertCustomVoicePlan(org.plan, org.business_type)
     if (!el.isConfigured()) throw new RequestError('not_configured', 'Voice design is not available on the platform right now.', 503)
     await assertCustomVoiceCap(createAdminClient(), org.id)
     await enforceRateLimit(

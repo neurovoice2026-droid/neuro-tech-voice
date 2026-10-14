@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     await enforceRateLimit(RATE_LIMITS.commerceRead, ctx.org.id)
     const url = new URL(request.url)
     const type = url.searchParams.get('type') ?? ''
-    if (!(AUTOMATION_TYPES as readonly string[]).includes(type)) throw new RequestError('invalid_request', 'Tip de automatizare necunoscut.', 400)
+    if (!(AUTOMATION_TYPES as readonly string[]).includes(type)) throw new RequestError('invalid_request', 'Unknown automation type.', 400)
     const connId = url.searchParams.get('connection_id')
     const connection = connId ? await ownedConnection(ctx.db, ctx.org.id, connId) : await primaryConnection(ctx.db, ctx.org.id)
     const { data: agent } = await ctx.db.from('agents').select('name').eq('org_id', ctx.org.id).order('created_at', { ascending: true }).limit(1).maybeSingle()

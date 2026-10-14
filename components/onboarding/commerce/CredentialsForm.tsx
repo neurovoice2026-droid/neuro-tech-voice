@@ -17,10 +17,12 @@ import type { ConnectField, PlatformDescriptor } from '@/lib/commerce/platforms'
 import type { ConnectionDto } from '@/lib/commerce/types'
 import { commerceErrorMessage, requestJson } from './api'
 import { FormSelect } from './fields'
-import { ErrorBlock, optionalLabel } from './shared'
+import { ErrorBlock } from './shared'
 
 /** The route reaches the store, checks the keys and registers webhooks before it answers. */
 const CONNECT_TIMEOUT_MS = 90_000
+
+const CONNECT_FAILED = 'The store could not be connected.'
 
 type FormValues = Record<string, string>
 
@@ -33,9 +35,9 @@ function buildSchema(fields: ConnectField[]) {
   const shape: Record<string, z.ZodType<string>> = {}
   for (const f of fields) {
     let rule = z.string().trim()
-    if (f.type === 'url') rule = rule.refine((v) => !v || isHttpsUrl(v), 'Introdu o adresă care începe cu https://')
-    if (f.type === 'select') rule = rule.refine((v) => !v || (f.options ?? []).some((o) => o.value === v), 'Alege o opțiune')
-    shape[f.key] = f.required ? rule.refine((v) => v.length > 0, 'Câmp obligatoriu') : rule
+    if (f.type === 'url') rule = rule.refine((v) => !v || isHttpsUrl(v), 'Enter an address that starts with https://')
+    if (f.type === 'select') rule = rule.refine((v) => !v || (f.options ?? []).some((o) => o.value === v), 'Choose an option')
+    shape[f.key] = f.required ? rule.refine((v) => v.length > 0, 'This field is required') : rule
   }
   return z.object(shape)
 }
@@ -78,12 +80,12 @@ export function CredentialsForm({ descriptor, displayName, onConnected }: Creden
       const data = await requestJson<{ connection: ConnectionDto }>('/api/commerce/connections', {
         method: 'POST',
         body: { platform: descriptor.id, store_url, display_name: displayName || undefined, secrets },
-        fallback: 'Magazinul nu a putut fi conectat.',
+        fallback: CONNECT_FAILED,
         timeoutMs: CONNECT_TIMEOUT_MS,
       })
       onConnected(data.connection)
     } catch (err) {
-      setError(commerceErrorMessage(err, 'Magazinul nu a putut fi conectat.'))
+      setError(commerceErrorMessage(err, CONNECT_FAILED))
     } finally {
       // Never shown again, whatever the outcome: the keys are typed afresh on a retry.
       clearSecrets()
@@ -95,7 +97,7 @@ export function CredentialsForm({ descriptor, displayName, onConnected }: Creden
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-8">
       <section aria-labelledby="connect-instructions-title" className="rounded-2xl bg-secondary p-5">
         <h3 id="connect-instructions-title" className="text-[13px] leading-[19px] font-medium text-foreground">
-          Cum obții datele de acces
+          How to get your access keys
         </h3>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-[19px] text-muted-foreground">
           {descriptor.instructions.map((line) => (
@@ -108,7 +110,7 @@ export function CredentialsForm({ descriptor, displayName, onConnected }: Creden
           rel="noreferrer"
           className="mt-3 inline-flex items-center gap-1.5 text-[13px] leading-[19px] font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
         >
-          Documentație
+          Documentation
           <ExternalLink className="size-3.5" aria-hidden="true" />
         </a>
       </section>
@@ -128,16 +130,16 @@ export function CredentialsForm({ descriptor, displayName, onConnected }: Creden
 
       {error && (
         <ErrorBlock
-          title="Conectarea nu a reușit"
-          message={`${error} Cheile introduse au fost șterse din formular; introdu-le din nou și reîncearcă.`}
+          title="The connection failed"
+          message={`${error} The keys you entered were cleared from the form; enter them again and retry.`}
           onRetry={() => firstSecretRef.current?.focus()}
-          retryLabel="Reintrodu cheile"
+          retryLabel="Re-enter the keys"
         />
       )}
 
-      <Button type="submit" size="lg" loading={submitting} loadingState="connecting" loadingText="Se conectează…" className="w-full sm:w-auto">
+      <Button type="submit" size="lg" loading={submitting} loadingState="connecting" loadingText="Connecting…" className="w-full sm:w-auto">
         <Plug aria-hidden="true" />
-        Conectează magazinul
+        Connect store
       </Button>
     </form>
   )
@@ -158,7 +160,7 @@ function CatalogField({ field, form, error, disabled, inputRef }: CatalogFieldPr
   }
   const registration = form.register(field.key)
   return (
-    <Field label={field.label} htmlFor={id} labelAction={optionalLabel(field.required)} hint={field.help} error={error}>
+    <Field label={field.label} htmlFor={id} optional={!field.required} hint={field.help} error={error}>
       <Input
         id={id}
         type={field.type === 'secret' ? 'password' : field.type === 'url' ? 'url' : 'text'}
@@ -181,7 +183,7 @@ function CatalogField({ field, form, error, disabled, inputRef }: CatalogFieldPr
 function SelectCatalogField({ field, form, error, disabled, id }: Omit<CatalogFieldProps, 'inputRef'> & { id: string }) {
   const { field: control } = useController({ control: form.control, name: field.key })
   return (
-    <Field label={field.label} htmlFor={id} labelAction={optionalLabel(field.required)} hint={field.help} error={error}>
+    <Field label={field.label} htmlFor={id} optional={!field.required} hint={field.help} error={error}>
       <FormSelect
         id={id}
         value={control.value ?? ''}

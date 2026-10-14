@@ -1,6 +1,23 @@
 // ─── Organization ────────────────────────────────────────────────────────────
 
-export type Plan = 'trial' | 'starter' | 'pro' | 'business' | 'custom'
+/**
+ * Plan ids as stored in organizations.plan (CHECK constraint of migration 026).
+ * Service plans (starter … custom) are sold to service organizations, store
+ * plans (store_*) to online stores; the trial is shared. See PLANS.
+ */
+export type Plan =
+  | 'trial'
+  | 'starter'
+  | 'pro'
+  | 'business'
+  | 'custom'
+  | 'store_starter'
+  | 'store_growth'
+  | 'store_scale'
+  | 'store_enterprise'
+
+/** Which product a plan belongs to: the service product or the online-store product. */
+export type PlanFamily = 'services' | 'ecommerce'
 
 /** Which onboarding and dashboard an organization gets (migration 024). NULL = the owner has not chosen yet. */
 export type BusinessType = 'services' | 'ecommerce'
@@ -428,6 +445,8 @@ export interface PlanConfig {
   stripe_price_id_annual: string
   /** Custom tier — routes to "contact sales" instead of Stripe checkout. */
   contact_sales?: boolean
+  /** Who may hold the plan: a service organization, an online store, or ('any', the trial only) both. */
+  family: PlanFamily | 'any'
 }
 
 export type BillingInterval = 'month' | 'year'
@@ -439,6 +458,12 @@ export type BillingInterval = 'month' | 'year'
 // Pricing model: blended COGS ≈ $0.10/min (ElevenLabs voice + Twilio telephony).
 // Each paid tier is sized so the gross margin stays ≥ 60% even at full usage;
 // overage is billed at the marginal sell price (~$0.25/min) to protect margin.
+// Store plans (family 'ecommerce') follow the same model with a larger minute
+// allowance per dollar, because their calls are short outbound confirmations
+// (~1.5 min each: "~230 order confirmations" = 350 minutes): $100 for 350
+// minutes is $0.29/min (65% margin at full usage), $250 for 950 is $0.26/min
+// (62%), $500 for 2,000 is $0.25/min (60%); Store Enterprise is negotiated.
+// Annual = 10 × monthly on every paid plan (two months free).
 export const PLANS: Record<Plan, PlanConfig> = {
   trial: {
     name: 'Trial',
@@ -453,6 +478,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     ],
     stripe_price_id: '',
     stripe_price_id_annual: '',
+    family: 'any',
   },
   starter: {
     name: 'Starter',
@@ -468,6 +494,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     ],
     stripe_price_id: process.env.STRIPE_STARTER_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID ?? '',
+    family: 'services',
   },
   pro: {
     name: 'Pro',
@@ -485,6 +512,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     ],
     stripe_price_id: process.env.STRIPE_PRO_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_PRO_ANNUAL_PRICE_ID ?? '',
+    family: 'services',
   },
   business: {
     name: 'Business',
@@ -502,6 +530,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
     ],
     stripe_price_id: process.env.STRIPE_BUSINESS_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_BUSINESS_ANNUAL_PRICE_ID ?? '',
+    family: 'services',
   },
   custom: {
     name: 'Custom',
@@ -518,8 +547,115 @@ export const PLANS: Record<Plan, PlanConfig> = {
     stripe_price_id: '',
     stripe_price_id_annual: '',
     contact_sales: true,
+    family: 'services',
+  },
+  // Store plans: the Stripe price ids are optional. Without them the app finds
+  // or creates the price by lookup key (lib/stripe/store-prices.ts).
+  store_starter: {
+    name: 'Store Starter',
+    price_monthly: 100,
+    price_annual: 1000,
+    minutes_limit: 350,
+    overage_per_min: 0.25,
+    features: [
+      '350 minutes/month (~230 order confirmations)',
+      'COD confirmation, abandoned cart & delivery follow-up calls',
+      'WooCommerce, Shopify, Magento, PrestaShop or custom API',
+      'Live order lookups during calls',
+      'Overage at $0.25/min',
+      'Email support',
+    ],
+    stripe_price_id: process.env.STRIPE_STORE_STARTER_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_STORE_STARTER_ANNUAL_PRICE_ID ?? '',
+    family: 'ecommerce',
+  },
+  store_growth: {
+    name: 'Store Growth',
+    price_monthly: 250,
+    price_annual: 2500,
+    minutes_limit: 950,
+    overage_per_min: 0.22,
+    features: [
+      '950 minutes/month (~630 order confirmations)',
+      'Everything in Store Starter',
+      'Call recordings & analytics',
+      'Overage at $0.22/min',
+      'Priority support',
+    ],
+    stripe_price_id: process.env.STRIPE_STORE_GROWTH_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_STORE_GROWTH_ANNUAL_PRICE_ID ?? '',
+    family: 'ecommerce',
+  },
+  store_scale: {
+    name: 'Store Scale',
+    price_monthly: 500,
+    price_annual: 5000,
+    minutes_limit: 2000,
+    overage_per_min: 0.2,
+    features: [
+      '2,000 minutes/month (~1,300 order confirmations)',
+      'Everything in Store Growth',
+      'All integrations',
+      'Dedicated onboarding',
+      'Overage at $0.20/min',
+    ],
+    stripe_price_id: process.env.STRIPE_STORE_SCALE_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_STORE_SCALE_ANNUAL_PRICE_ID ?? '',
+    family: 'ecommerce',
+  },
+  store_enterprise: {
+    name: 'Store Enterprise',
+    price_monthly: 1000,
+    price_annual: 10000,
+    minutes_limit: 4500,
+    overage_per_min: 0.18,
+    features: [
+      'From 4,500 minutes/month',
+      'Custom scripts & SLA',
+      'Overage from $0.18/min',
+      'Dedicated support',
+    ],
+    stripe_price_id: '',
+    stripe_price_id_annual: '',
+    contact_sales: true,
+    family: 'ecommerce',
   },
 }
+
+/** The plans a service organization may buy, cheapest first (the trial is implicit). */
+export const SERVICE_PLANS: readonly Plan[] = ['starter', 'pro', 'business', 'custom'] as const
+
+/** The plans an online store may buy, cheapest first (the trial is implicit). */
+export const STORE_PLANS: readonly Plan[] = ['store_starter', 'store_growth', 'store_scale', 'store_enterprise'] as const
+
+/** True for a string that names a plan (never for '__proto__' or a plan Stripe knows but we do not). */
+export function isPlan(value: unknown): value is Plan {
+  return typeof value === 'string' && Object.hasOwn(PLANS, value)
+}
+
+/** The plan family an organization buys from: online stores get the store plans, everything else (services, legacy NULL) the service plans. */
+export function planFamilyOf(businessType: BusinessType | null | undefined): PlanFamily {
+  return businessType === 'ecommerce' ? 'ecommerce' : 'services'
+}
+
+/** The paid plans offered to an organization of this business type, cheapest first. */
+export function plansForBusinessType(businessType: BusinessType | null | undefined): readonly Plan[] {
+  return planFamilyOf(businessType) === 'ecommerce' ? STORE_PLANS : SERVICE_PLANS
+}
+
+/**
+ * Whether an organization of this business type may hold the plan: the trial
+ * always, otherwise only a plan of its own family. The server enforces this
+ * at checkout and onboarding (409 plan_not_available); the UI only shows the
+ * matching family.
+ */
+export function planAllowedFor(plan: Plan, businessType: BusinessType | null | undefined): boolean {
+  if (plan === 'trial') return true
+  return PLANS[plan]?.family === planFamilyOf(businessType)
+}
+
+/** The 409 plan_not_available message of checkout and onboarding. */
+export const PLAN_NOT_AVAILABLE_MESSAGE = 'This plan is not available for your type of business.'
 
 /** Pick the Stripe price id for a plan + billing interval. */
 export function stripePriceId(plan: Plan, interval: BillingInterval): string {

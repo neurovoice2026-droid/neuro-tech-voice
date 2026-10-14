@@ -26,7 +26,7 @@ export function ShopifyConnect({ descriptor }: ShopifyConnectProps) {
     e.preventDefault()
     const domain = normalizeShopDomain(shop)
     if (!domain) {
-      setError('Introdu domeniul myshopify.com al magazinului (ex. magazinul-tau.myshopify.com).')
+      setError('Enter your store’s myshopify.com domain (e.g. your-store.myshopify.com).')
       return
     }
     setError(null)
@@ -39,7 +39,7 @@ export function ShopifyConnect({ descriptor }: ShopifyConnectProps) {
     <form onSubmit={handleContinue} noValidate className="space-y-8">
       <section aria-labelledby="shopify-instructions-title" className="rounded-2xl bg-secondary p-5">
         <h3 id="shopify-instructions-title" className="text-[13px] leading-[19px] font-medium text-foreground">
-          Cum funcționează instalarea
+          How the install works
         </h3>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px] leading-[19px] text-muted-foreground">
           {descriptor.instructions.map((line) => (
@@ -48,14 +48,14 @@ export function ShopifyConnect({ descriptor }: ShopifyConnectProps) {
         </ol>
       </section>
 
-      <Field label="Domeniul magazinului" htmlFor="shop_domain" error={error} hint="Se acceptă și doar numele magazinului; adăugăm noi .myshopify.com.">
+      <Field label="Store domain" htmlFor="shop_domain" error={error} hint="The store name alone works too; we add .myshopify.com for you.">
         <Input
           id="shop_domain"
           type="text"
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
-          placeholder="magazinul-tau.myshopify.com"
+          placeholder="your-store.myshopify.com"
           value={shop}
           onChange={(e) => setShop(e.target.value)}
           disabled={leaving}
@@ -63,8 +63,8 @@ export function ShopifyConnect({ descriptor }: ShopifyConnectProps) {
         />
       </Field>
 
-      <Button type="submit" size="lg" loading={leaving} loadingState="connecting" loadingText="Te trimitem în Shopify…" className="w-full sm:w-auto">
-        Continuă în Shopify
+      <Button type="submit" size="lg" loading={leaving} loadingState="connecting" loadingText="Taking you to Shopify…" className="w-full sm:w-auto">
+        Continue in Shopify
         <ArrowUpRight aria-hidden="true" />
       </Button>
     </form>

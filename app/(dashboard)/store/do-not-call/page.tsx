@@ -1,5 +1,5 @@
 import { SuppressionsPage } from '@/components/commerce/SuppressionsPage'
 
-export default function MagazinNuSunaPage() {
+export default function StoreDoNotCallPage() {
   return <SuppressionsPage />
 }

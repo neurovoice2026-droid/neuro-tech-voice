@@ -38,24 +38,24 @@ export const AUTOMATION_LIMITS = {
 
 const integer = (min: number, max: number) =>
   z
-    .number({ error: 'Introdu un număr întreg' })
-    .int('Introdu un număr întreg')
-    .min(min, `Cel puțin ${min}`)
-    .max(max, `Cel mult ${max}`)
+    .number({ error: 'Enter a whole number' })
+    .int('Enter a whole number')
+    .min(min, `At least ${min}`)
+    .max(max, `At most ${max}`)
 
 const httpsUrlOrEmpty = z
   .string()
   .trim()
-  .max(500, 'Cel mult 500 de caractere')
-  .refine((v) => v === '' || (URL.canParse(v) && new URL(v).protocol === 'https:'), 'Adresa trebuie să înceapă cu https://')
+  .max(500, 'At most 500 characters')
+  .refine((v) => v === '' || (URL.canParse(v) && new URL(v).protocol === 'https:'), 'The address must start with https://')
 
 export function automationFormSchema(type: AutomationType) {
   return z
     .object({
       delay_minutes: integer(...AUTOMATION_LIMITS.delay_minutes),
-      window_start: z.string().regex(CLOCK, 'Ora de început este de forma 09:00'),
-      window_end: z.string().regex(CLOCK, 'Ora de sfârșit este de forma 18:00'),
-      days: z.array(z.enum(WEEKDAYS)).min(1, 'Alege cel puțin o zi'),
+      window_start: z.string().regex(CLOCK, 'The start time looks like 09:00'),
+      window_end: z.string().regex(CLOCK, 'The end time looks like 18:00'),
+      days: z.array(z.enum(WEEKDAYS)).min(1, 'Choose at least one day'),
       /** '' = the organization's time zone. */
       timezone: z.string().trim().max(64),
       daily_cap: integer(...AUTOMATION_LIMITS.daily_cap),
@@ -63,36 +63,36 @@ export function automationFormSchema(type: AutomationType) {
       max_attempts: integer(...AUTOMATION_LIMITS.max_attempts),
       retry_minutes: integer(...AUTOMATION_LIMITS.retry_minutes),
       cod_payment_methods: z
-        .array(z.string().trim().min(1).max(AUTOMATION_LIMITS.cod_method_max_length, `Cel mult ${AUTOMATION_LIMITS.cod_method_max_length} de caractere`))
-        .max(AUTOMATION_LIMITS.cod_methods_max, `Cel mult ${AUTOMATION_LIMITS.cod_methods_max} de metode`),
+        .array(z.string().trim().min(1).max(AUTOMATION_LIMITS.cod_method_max_length, `At most ${AUTOMATION_LIMITS.cod_method_max_length} characters`))
+        .max(AUTOMATION_LIMITS.cod_methods_max, `At most ${AUTOMATION_LIMITS.cod_methods_max} payment methods`),
       follow_up_status: z.enum(FOLLOW_UP_STATUSES),
       /** Text so an empty field reads as "any total" rather than NaN. */
       min_order_total: z
         .string()
         .trim()
-        .refine((v) => v === '' || (Number.isFinite(Number(v)) && Number(v) >= 0), 'Introdu o sumă pozitivă sau lasă gol'),
-      template: z.string().trim().min(20, 'Scriptul are cel puțin 20 de caractere').max(4_000, 'Cel mult 4000 de caractere'),
+        .refine((v) => v === '' || (Number.isFinite(Number(v)) && Number(v) >= 0), 'Enter a positive amount or leave it empty'),
+      template: z.string().trim().min(20, 'The script needs at least 20 characters').max(4_000, 'At most 4000 characters'),
       tone: z.enum(['formal', 'friendly']),
-      brand_name: z.string().trim().max(100, 'Cel mult 100 de caractere'),
+      brand_name: z.string().trim().max(100, 'At most 100 characters'),
       transfer_number: z
         .string()
         .trim()
-        .refine((v) => v === '' || E164_REGEX.test(v), 'Număr în format internațional, de exemplu +40712345678'),
+        .refine((v) => v === '' || E164_REGEX.test(v), 'Use the international format, for example +40712345678'),
       return_policy_url: httpsUrlOrEmpty,
     })
     .superRefine((values, ctx) => {
       // Same rule as the server's CallWindowSchema: the window ends after it starts (no overnight windows).
       if (!((parseClock(values.window_start) ?? 0) < (parseClock(values.window_end) ?? 0))) {
-        ctx.addIssue({ code: 'custom', path: ['window_end'], message: 'Ora de început trebuie să fie înaintea orei de sfârșit' })
+        ctx.addIssue({ code: 'custom', path: ['window_end'], message: 'The start time must be before the end time' })
       }
       if (type === 'abandoned_cart' && values.delay_minutes < ABANDONED_CART_MIN_DELAY) {
-        ctx.addIssue({ code: 'custom', path: ['delay_minutes'], message: `Coșurile abandonate se sună după cel puțin ${ABANDONED_CART_MIN_DELAY} de minute` })
+        ctx.addIssue({ code: 'custom', path: ['delay_minutes'], message: `Abandoned carts are called after at least ${ABANDONED_CART_MIN_DELAY} minutes` })
       }
       if (type === 'cod_confirmation' && values.cod_payment_methods.length === 0) {
-        ctx.addIssue({ code: 'custom', path: ['cod_payment_methods'], message: 'Adaugă cel puțin o metodă de plată care înseamnă ramburs' })
+        ctx.addIssue({ code: 'custom', path: ['cod_payment_methods'], message: 'Add at least one payment method that means cash on delivery' })
       }
       for (const name of unknownTemplateVariables(values.template)) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: `Variabila {{${name}}} nu există; folosește-le pe cele din caseta de ajutor` })
+        ctx.addIssue({ code: 'custom', path: ['template'], message: `The variable {{${name}}} does not exist; use the ones listed in the help box` })
       }
     })
 }
@@ -155,6 +155,9 @@ export interface ServerFieldError {
   message: string
 }
 
+/** Shown on a field whose server issue carried no usable message. */
+export const GENERIC_FIELD_ERROR = 'This value is not accepted'
+
 /**
  * Field errors from the `details` of a 400 (`[{ path, message }]`, lib/api/http.ts
  * parseJsonBody): one per form field, in the server's order; issues on paths the
@@ -171,7 +174,7 @@ export function serverFieldErrors(details: unknown): ServerFieldError[] {
     const field = formFieldForIssuePath(path)
     if (!field || seen.has(field)) continue
     seen.add(field)
-    out.push({ field, message: typeof message === 'string' && message.trim() ? message.trim() : 'Valoarea nu este acceptată' })
+    out.push({ field, message: typeof message === 'string' && message.trim() ? message.trim() : GENERIC_FIELD_ERROR })
   }
   return out
 }

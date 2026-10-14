@@ -38,6 +38,17 @@ describe('mirror upserts', () => {
     expect(db.tables.commerce_order_items.filter((i) => i.connection_id === CONN_A)).toHaveLength(2)
   })
 
+  it('keeps the items summary language-neutral past six lines (the dashboard shows it, the agent reads it aloud)', async () => {
+    const db = commerceDb({})
+    const ctx = { orgId: ORG_A, connectionId: CONN_A, country: 'RO' }
+    const items = Array.from({ length: 8 }, (_, i) => ({ externalId: `li${i}`, productExternalId: `p${i}`, sku: `S${i}`, name: `Item ${i}`, quantity: i + 1, unitPrice: 10, total: 10 * (i + 1) }))
+    const [first] = await upsertOrders(asClient(db), ctx, [normalizedOrder({ items })], ['cod'])
+    expect(first.row.items_summary).toBe('1 × Item 0, 2 × Item 1, 3 × Item 2, 4 × Item 3, 5 × Item 4, 6 × Item 5 +2')
+    expect(first.row.items_summary).not.toMatch(/[ăâîșț]|\b(și|încă|and|more)\b/)
+    const [short] = await upsertOrders(asClient(db), ctx, [normalizedOrder({ externalId: '1002', items: items.slice(0, 2), payloadHash: 'h3' })], ['cod'])
+    expect(short.row.items_summary).toBe('1 × Item 0, 2 × Item 1')
+  })
+
   it('never undoes a do-not-call flag when a customer is re-imported', async () => {
     const db = commerceDb({})
     const ctx = { orgId: ORG_A, connectionId: CONN_A, country: 'RO' }

@@ -1,6 +1,6 @@
 'use client'
 
-// Step 1 — Despre magazin: the store profile. Saved through
+// Step 1 — About your store: the store profile. Saved through
 // POST /api/commerce/onboarding/store (which also moves the resume position to 2).
 
 import { useState } from 'react'
@@ -17,12 +17,14 @@ import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
 import { StepActions, StepBody } from '../../StepIndicator'
 import { commerceErrorMessage, requestJson } from '../api'
-import { COUNTRIES, CURRENCIES, LANGUAGE_LABELS_RO, TIMEZONES } from '../copy'
+import { COUNTRIES, CURRENCIES, TIMEZONES } from '../copy'
 import { FormSelect } from '../fields'
 import { useCommerceNavigation } from '../navigation'
-import { CommerceStepHeader, OPTIONAL_LABEL } from '../shared'
+import { CommerceStepHeader } from '../shared'
 
-// "magazin.ro" and "www.magazin.ro" are accepted like full URLs (as in Step1Company); the
+const SAVE_FAILED = 'Your store details could not be saved.'
+
+// "your-store.com" and "www.your-store.com" are accepted like full URLs (as in Step1Company); the
 // value is normalized once it is known to be valid.
 function normalizeUrl(value: string): string {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`
@@ -39,23 +41,23 @@ function isValidWebsite(value: string): boolean {
 }
 
 const schema = z.object({
-  display_name: z.string().trim().min(2, 'Numele magazinului are cel puțin 2 caractere').max(100, 'Cel mult 100 de caractere'),
+  display_name: z.string().trim().min(2, 'Use at least 2 characters').max(100, 'Use at most 100 characters'),
   website: z
     .string()
     .optional()
     .or(z.literal(''))
-    .refine((v) => !v || isValidWebsite(v), { message: 'Introdu o adresă validă (ex. www.magazinul-tau.ro)' }),
-  country: z.string().min(1, 'Alege țara'),
-  timezone: z.string().min(1, 'Alege fusul orar'),
-  language: z.string().min(1, 'Alege limba agentului'),
-  currency: z.string().min(1, 'Alege moneda'),
+    .refine((v) => !v || isValidWebsite(v), { message: 'Enter a valid address (e.g. www.your-store.com)' }),
+  country: z.string().min(1, 'Choose a country'),
+  timezone: z.string().min(1, 'Choose a time zone'),
+  language: z.string().min(1, 'Choose the agent language'),
+  currency: z.string().min(1, 'Choose a currency'),
 })
 
 type FormValues = z.infer<typeof schema>
 
 const LANGUAGE_OPTIONS = AGENT_LANGUAGES.map((l) => ({
   value: l.value,
-  label: LANGUAGE_LABELS_RO[l.value] ?? l.label,
+  label: l.label,
   icon: <FlagIcon country={l.country} className="h-3 w-[18px]" />,
 }))
 
@@ -94,13 +96,13 @@ export function StoreStep() {
       await requestJson<{ ok: true }>('/api/commerce/onboarding/store', {
         method: 'POST',
         body: { ...values, website },
-        fallback: 'Datele magazinului nu au putut fi salvate.',
+        fallback: SAVE_FAILED,
       })
       setProfile({ ...values, website })
       // The route stored the position (step 2) together with the profile.
       goTo(2, { persist: false })
     } catch (err) {
-      toast.error(commerceErrorMessage(err, 'Datele magazinului nu au putut fi salvate.'))
+      toast.error(commerceErrorMessage(err, SAVE_FAILED))
     } finally {
       setSaving(false)
     }
@@ -112,17 +114,17 @@ export function StoreStep() {
     <div>
       <CommerceStepHeader
         step={1}
-        title="Spune-ne despre magazinul tău"
-        description="Numele, țara și moneda apar în apelurile agentului și în comenzile sincronizate."
+        title="Tell us about your store"
+        description="The name, country and currency appear in the agent's calls and in the synced orders."
       />
 
       <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <StepBody className="space-y-8">
-          <Field label="Numele magazinului" htmlFor="display_name" error={errors.display_name?.message}>
-            <Input id="display_name" placeholder="Magazinul Exemplu" autoComplete="organization" {...nameField} className="h-11" />
+          <Field label="Store name" htmlFor="display_name" error={errors.display_name?.message}>
+            <Input id="display_name" placeholder="Example Store" autoComplete="organization" {...nameField} className="h-11" />
           </Field>
 
-          <Field label="Site-ul magazinului" htmlFor="website" labelAction={OPTIONAL_LABEL} error={errors.website?.message}>
+          <Field label="Store website" htmlFor="website" optional error={errors.website?.message}>
             <div className="relative">
               <Globe className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
@@ -130,7 +132,7 @@ export function StoreStep() {
                 type="text"
                 inputMode="url"
                 autoComplete="url"
-                placeholder="www.magazinul-tau.ro"
+                placeholder="www.your-store.com"
                 aria-invalid={errors.website ? true : undefined}
                 aria-describedby={describedBy('website', !!errors.website)}
                 {...websiteField}
@@ -140,49 +142,49 @@ export function StoreStep() {
           </Field>
 
           <div className="grid gap-8 sm:grid-cols-2">
-            <Field label="Țara" htmlFor="country" error={errors.country?.message}>
+            <Field label="Country" htmlFor="country" error={errors.country?.message}>
               <FormSelect
                 id="country"
                 value={country.value}
                 onChange={country.onChange}
                 options={COUNTRIES}
-                placeholder="Alege țara"
+                placeholder="Choose a country"
                 invalid={!!errors.country}
                 describedBy={describedBy('country', !!errors.country)}
                 triggerRef={country.ref}
               />
             </Field>
-            <Field label="Fusul orar" htmlFor="timezone" error={errors.timezone?.message} hint="Pentru intervalele în care se fac apelurile.">
+            <Field label="Time zone" htmlFor="timezone" error={errors.timezone?.message} hint="Sets the hours in which calls are made.">
               <FormSelect
                 id="timezone"
                 value={timezone.value}
                 onChange={timezone.onChange}
                 options={TIMEZONES}
-                placeholder="Alege fusul orar"
+                placeholder="Choose a time zone"
                 invalid={!!errors.timezone}
                 describedBy={errors.timezone ? 'timezone-error timezone-hint' : 'timezone-hint'}
                 triggerRef={timezone.ref}
               />
             </Field>
-            <Field label="Limba agentului" htmlFor="language" error={errors.language?.message}>
+            <Field label="Agent language" htmlFor="language" error={errors.language?.message}>
               <FormSelect
                 id="language"
                 value={language.value}
                 onChange={language.onChange}
                 options={LANGUAGE_OPTIONS}
-                placeholder="Alege limba"
+                placeholder="Choose a language"
                 invalid={!!errors.language}
                 describedBy={describedBy('language', !!errors.language)}
                 triggerRef={language.ref}
               />
             </Field>
-            <Field label="Moneda" htmlFor="currency" error={errors.currency?.message}>
+            <Field label="Currency" htmlFor="currency" error={errors.currency?.message}>
               <FormSelect
                 id="currency"
                 value={currency.value}
                 onChange={currency.onChange}
                 options={CURRENCIES}
-                placeholder="Alege moneda"
+                placeholder="Choose a currency"
                 invalid={!!errors.currency}
                 describedBy={describedBy('currency', !!errors.currency)}
                 triggerRef={currency.ref}
@@ -192,8 +194,8 @@ export function StoreStep() {
         </StepBody>
 
         <StepActions>
-          <Button type="submit" size="lg" loading={saving} loadingText="Se salvează…" className="ml-auto max-md:flex-1">
-            Continuă
+          <Button type="submit" size="lg" loading={saving} loadingText="Saving…" className="ml-auto max-md:flex-1">
+            Continue
             <ArrowRight aria-hidden="true" />
           </Button>
         </StepActions>

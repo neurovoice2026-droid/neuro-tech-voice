@@ -5,10 +5,10 @@ import { onboardingVariant } from '@/lib/commerce/business-type'
 import { createLogger } from '@/lib/observability/logger'
 import type { BusinessType } from '@/types'
 
-// The Magazin section exists only for e-commerce organizations: the business
+// The Store section exists only for e-commerce organizations: the business
 // type is read from the organization row on every request (never from the
 // browser), and any other organization is sent back to its dashboard.
-export default async function MagazinLayout({ children }: { children: React.ReactNode }) {
+export default async function StoreLayout({ children }: { children: React.ReactNode }) {
   let businessType: BusinessType | null = null
   try {
     const { supabase, org } = await requireOrg({ allowDeleting: true })
@@ -22,7 +22,7 @@ export default async function MagazinLayout({ children }: { children: React.Reac
     unstable_rethrow(err)
     // Signed out / no organization: the dashboard layout already redirects; render nothing.
     if (err instanceof RequestError && (err.status === 401 || err.status === 404)) return null
-    createLogger({ route: 'page.magazin' }).error('magazin_layout.require_org_failed', err)
+    createLogger({ route: 'page.store' }).error('store_layout.require_org_failed', err)
     throw err
   }
   if (onboardingVariant({ business_type: businessType }) !== 'ecommerce') redirect('/dashboard')

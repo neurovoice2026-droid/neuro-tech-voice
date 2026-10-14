@@ -17,7 +17,7 @@ import { RunOutcomeChip, RunStatusChip } from './StatusChips'
 import { LoadMoreFooter, RecordsPanel } from './ListScaffold'
 
 // One table for every list of automation runs (overview, automation history,
-// order detail). "Vezi apelul" opens the same CallDetailSheet the Calls page
+// order detail). "View call" opens the same CallDetailSheet the Calls page
 // uses, in place, so the person never lands on a list that ignores the id.
 
 interface RunsTableProps {
@@ -29,7 +29,7 @@ interface RunsTableProps {
   onRunChanged?: (run: RunDto) => void
   /** Hides the automation column when every run belongs to one automation. */
   showAutomation?: boolean
-  /** Allows "Anulează" on eligible / scheduled / retry-waiting runs. */
+  /** Allows "Cancel" on eligible / scheduled / retry-waiting runs. */
   cancellable?: boolean
   emptyTitle?: string
   emptyDescription?: React.ReactNode
@@ -41,22 +41,22 @@ interface RunsTableProps {
     loadMoreError: string | null
     onLoadMore: () => void
   }
-  /** Link under the table (e.g. "Vezi toate" on the overview). */
+  /** Link under the table (e.g. "View all" on the overview). */
   footerLink?: { href: string; label: string }
   className?: string
 }
 
 /** When the run matters to the merchant: the scheduled slot while it waits, otherwise its last activity. */
 function runWhen(run: RunDto): { label: string; iso: string | null } {
-  if ((run.status === 'scheduled' || run.status === 'retry_waiting') && run.scheduled_for) return { label: 'Programat', iso: run.scheduled_for }
-  if (run.completed_at) return { label: 'Finalizat', iso: run.completed_at }
-  if (run.last_attempt_at) return { label: 'Ultima încercare', iso: run.last_attempt_at }
-  return { label: 'Creat', iso: run.created_at }
+  if ((run.status === 'scheduled' || run.status === 'retry_waiting') && run.scheduled_for) return { label: 'Scheduled', iso: run.scheduled_for }
+  if (run.completed_at) return { label: 'Completed', iso: run.completed_at }
+  if (run.last_attempt_at) return { label: 'Last attempt', iso: run.last_attempt_at }
+  return { label: 'Created', iso: run.created_at }
 }
 
 export function RunsTable({
   runs, isLoading, error, onRetry, onRunChanged, showAutomation = true, cancellable = false,
-  emptyTitle = 'Niciun apel automat încă', emptyDescription, filtered = false, pagination, footerLink, className,
+  emptyTitle = 'No automated calls yet', emptyDescription, filtered = false, pagination, footerLink, className,
 }: RunsTableProps) {
   const [openCallId, setOpenCallId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -66,9 +66,9 @@ export function RunsTable({
     try {
       const next = await cancelRun(run.id)
       onRunChanged?.(next)
-      toast.success('Apelul a fost anulat', { description: `Comanda #${run.reference} nu va mai fi sunată de această automatizare.` })
+      toast.success('Call canceled', { description: `Order #${run.reference} will no longer be called by this automation.` })
     } catch (err) {
-      toast.error('Apelul nu a putut fi anulat', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+      toast.error('The call could not be canceled', { description: commerceErrorMessage(err, 'Try again.') })
     } finally {
       setCancellingId(null)
     }
@@ -84,8 +84,8 @@ export function RunsTable({
         filtered={filtered}
         emptyIcon={PhoneOutgoing}
         emptyTitle={emptyTitle}
-        emptyDescription={emptyDescription ?? 'Apelurile automate apar aici de îndată ce o automatizare activă găsește o comandă eligibilă.'}
-        loadingLabel="Se încarcă apelurile automate…"
+        emptyDescription={emptyDescription ?? 'Automated calls show up here as soon as an enabled automation finds an eligible order.'}
+        loadingLabel="Loading automated calls…"
         minHeightClassName="min-h-[240px]"
         className={className}
         footer={
@@ -111,17 +111,17 @@ export function RunsTable({
         }
       >
         <Table>
-          <caption className="sr-only">Apeluri automate</caption>
+          <caption className="sr-only">Automated calls</caption>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">Comandă</TableHead>
-              {showAutomation && <TableHead scope="col" className="hidden @min-[640px]/records:table-cell">Automatizare</TableHead>}
-              <TableHead scope="col" className="hidden @min-[520px]/records:table-cell">Telefon</TableHead>
-              <TableHead scope="col">Stare</TableHead>
-              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Rezultat</TableHead>
-              <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Când</TableHead>
+              <TableHead scope="col">Order</TableHead>
+              {showAutomation && <TableHead scope="col" className="hidden @min-[640px]/records:table-cell">Automation</TableHead>}
+              <TableHead scope="col" className="hidden @min-[520px]/records:table-cell">Phone</TableHead>
+              <TableHead scope="col">Status</TableHead>
+              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Outcome</TableHead>
+              <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">When</TableHead>
               <TableHead scope="col" className="text-right">
-                <span className="sr-only">Acțiuni</span>
+                <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -136,7 +136,7 @@ export function RunsTable({
                     <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
                       {showAutomation && <span className="@min-[640px]/records:hidden">{automationTypeLabel(run.automation_type)} · </span>}
                       <span className="tabular-nums">
-                        încercarea {run.attempt}/{run.max_attempts}
+                        attempt {run.attempt}/{run.max_attempts}
                       </span>
                     </span>
                     {run.outcome && (
@@ -190,10 +190,10 @@ export function RunsTable({
                           size="xs"
                           className="tap-44"
                           onClick={() => setOpenCallId(run.call_id)}
-                          aria-label={`Vezi apelul pentru comanda #${run.reference}`}
+                          aria-label={`View the call for order #${run.reference}`}
                         >
                           <PhoneCall aria-hidden="true" />
-                          <span className="hidden @min-[520px]/records:inline">Vezi apelul</span>
+                          <span className="hidden @min-[520px]/records:inline">View call</span>
                         </Button>
                       )}
                       {canCancel && (
@@ -204,10 +204,10 @@ export function RunsTable({
                           loading={cancellingId === run.id}
                           disabled={cancellingId !== null && cancellingId !== run.id}
                           onClick={() => void handleCancel(run)}
-                          aria-label={`Anulează apelul pentru comanda #${run.reference}`}
+                          aria-label={`Cancel the call for order #${run.reference}`}
                         >
                           <Ban aria-hidden="true" />
-                          <span className="hidden @min-[520px]/records:inline">Anulează</span>
+                          <span className="hidden @min-[520px]/records:inline">Cancel</span>
                         </Button>
                       )}
                     </span>

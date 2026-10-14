@@ -146,7 +146,8 @@ describe('exchangeAccessToken', () => {
       expect(thrown, code).toBeInstanceOf(ConnectionError)
       const error = thrown as ConnectionError
       expect(error.code, code).toBe(code)
-      expect(error.publicMessage).toMatch(/[ăâîșț]|Shopify|magazin/i)
+      expect(error.publicMessage).toMatch(/Shopify|store/)
+      expect(error.publicMessage).not.toMatch(/[ăâîșț]/)
       for (const text of [error.message, error.publicMessage]) {
         expect(text).not.toContain(TOKEN)
         expect(text).not.toContain(SECRET)

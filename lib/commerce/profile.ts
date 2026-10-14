@@ -12,17 +12,17 @@ const url = z
   .string()
   .trim()
   .max(500)
-  .refine((v) => v === '' || (URL.canParse(v) && /^https?:$/.test(new URL(v).protocol)), 'Adresa trebuie să înceapă cu https://')
+  .refine((v) => v === '' || (URL.canParse(v) && /^https?:$/.test(new URL(v).protocol)), 'The URL must start with https://')
 
 export const CommerceProfileSchema = z.object({
-  display_name: z.string().trim().min(2, 'Numele magazinului are cel puțin 2 caractere').max(100),
+  display_name: z.string().trim().min(2, 'The store name must be at least 2 characters').max(100),
   website: url.optional().default(''),
-  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Țara este un cod ISO de două litere'),
+  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Country must be a two-letter ISO code'),
   timezone: z.string().trim().min(1).max(64),
   language: z.string().trim().min(2).max(10),
-  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'Moneda este un cod ISO de trei litere'),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'Currency must be a three-letter ISO code'),
   tone: z.enum(COMMERCE_TONES).default('friendly'),
-  transfer_number: z.string().trim().regex(E164_REGEX, 'Număr în format internațional, ex. +40712345678').nullable().default(null),
+  transfer_number: z.string().trim().regex(E164_REGEX, 'Use the international format, e.g. +40712345678').nullable().default(null),
   return_policy_url: url.nullable().default(null),
 })
 

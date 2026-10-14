@@ -30,6 +30,9 @@ import { commerceErrorMessage, requestJson } from './api'
 import { CAPABILITY_LABELS, CONNECTION_STATUS, SYNC_STATUS, formatDate } from './copy'
 import { useConnectionPoll } from './hooks'
 
+const TEST_FAILED = 'The connection test could not be run.'
+const DISCONNECT_FAILED = 'The store could not be disconnected.'
+
 interface ConnectionPanelProps {
   connection: ConnectionDto
 }
@@ -38,9 +41,9 @@ function syncLine(c: ConnectionDto): string {
   const sync = c.sync
   if (!sync || sync.status === 'idle') {
     const last = formatDate(c.last_successful_sync_at)
-    return last ? `Ultima sincronizare reușită: ${last}` : SYNC_STATUS.idle
+    return last ? `Last successful sync: ${last}` : SYNC_STATUS.idle
   }
-  const kind = sync.kind === 'initial' ? ' inițială' : sync.kind === 'manual' ? ' manuală' : ''
+  const kind = sync.kind === 'initial' ? ' (initial)' : sync.kind === 'manual' ? ' (manual)' : ''
   const counts = Object.entries(sync.counts ?? {})
     .filter(([, n]) => typeof n === 'number' && n > 0)
     .map(([k, n]) => `${n} ${k}`)
@@ -51,13 +54,13 @@ function syncLine(c: ConnectionDto): string {
 function webhookLine(c: ConnectionDto): string {
   if (c.capabilities.webhooks) {
     return c.webhook_topics.length
-      ? `Evenimente în timp real active: ${c.webhook_topics.join(', ')}.`
-      : 'Platforma acceptă evenimente în timp real; webhook-urile se înregistrează la finalul sincronizării.'
+      ? `Real-time events active: ${c.webhook_topics.join(', ')}.`
+      : 'The platform supports real-time events; webhooks are registered when the sync finishes.'
   }
   const minutes = c.capabilities.polling_minutes
   return minutes
-    ? `Fără evenimente în timp real: datele se reîmprospătează la fiecare ${minutes} minute.`
-    : 'Fără evenimente în timp real: datele se reîmprospătează periodic.'
+    ? `No real-time events: data refreshes every ${minutes} minutes.`
+    : 'No real-time events: data refreshes periodically.'
 }
 
 export function ConnectionPanel({ connection }: ConnectionPanelProps) {
@@ -76,17 +79,17 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
     try {
       const result = await requestJson<{ ok: boolean; message: string }>(`/api/commerce/connections/${encodeURIComponent(connection.id)}/test`, {
         method: 'POST',
-        fallback: 'Testul conexiunii nu a putut fi rulat.',
+        fallback: TEST_FAILED,
       })
-      if (result.ok) toast.success(result.message || 'Conexiunea funcționează.')
-      else toast.error(result.message || 'Conexiunea nu a răspuns corect.')
+      if (result.ok) toast.success(result.message || 'The connection works.')
+      else toast.error(result.message || 'The connection did not respond correctly.')
       // The test may have refreshed the stored capabilities / status.
       const fresh = await requestJson<{ connection: ConnectionDto }>(`/api/commerce/connections/${encodeURIComponent(connection.id)}`, {
-        fallback: 'Starea conexiunii nu a putut fi citită.',
+        fallback: 'The connection status could not be read.',
       })
       setConnection(fresh.connection)
     } catch (err) {
-      toast.error(commerceErrorMessage(err, 'Testul conexiunii nu a putut fi rulat.'))
+      toast.error(commerceErrorMessage(err, TEST_FAILED))
     } finally {
       setTesting(false)
     }
@@ -98,13 +101,13 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
     try {
       const data = await requestJson<{ connection: ConnectionDto }>(`/api/commerce/connections/${encodeURIComponent(connection.id)}/disconnect`, {
         method: 'POST',
-        fallback: 'Magazinul nu a putut fi deconectat.',
+        fallback: DISCONNECT_FAILED,
       })
       setConnection(data.connection)
       setDisconnectOpen(false)
-      toast.success('Magazinul a fost deconectat. Datele de acces au fost șterse.')
+      toast.success('The store was disconnected. Its access credentials were deleted.')
     } catch (err) {
-      toast.error(commerceErrorMessage(err, 'Magazinul nu a putut fi deconectat.'))
+      toast.error(commerceErrorMessage(err, DISCONNECT_FAILED))
     } finally {
       setDisconnecting(false)
     }
@@ -140,13 +143,13 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
           )}
 
           <div className="grid grid-cols-3 gap-2">
-            <StatTile size="sm" label="Produse" value={connection.counts.products.toLocaleString('ro-RO')} loading={polling && connection.counts.products === 0} />
-            <StatTile size="sm" label="Clienți" value={connection.counts.customers.toLocaleString('ro-RO')} loading={polling && connection.counts.customers === 0} />
-            <StatTile size="sm" label="Comenzi" value={connection.counts.orders.toLocaleString('ro-RO')} loading={polling && connection.counts.orders === 0} />
+            <StatTile size="sm" label="Products" value={connection.counts.products.toLocaleString('en-US')} loading={polling && connection.counts.products === 0} />
+            <StatTile size="sm" label="Customers" value={connection.counts.customers.toLocaleString('en-US')} loading={polling && connection.counts.customers === 0} />
+            <StatTile size="sm" label="Orders" value={connection.counts.orders.toLocaleString('en-US')} loading={polling && connection.counts.orders === 0} />
           </div>
 
           <div>
-            <h3 className="text-[13px] leading-[19px] font-medium text-foreground">Ce poate face conexiunea</h3>
+            <h3 className="text-[13px] leading-[19px] font-medium text-foreground">What the connection can do</h3>
             <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
               {CAPABILITY_LABELS.map(({ key, label }) => {
                 const ok = caps[key] === true
@@ -158,7 +161,7 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
                       <Minus className="size-3.5 shrink-0" aria-hidden="true" />
                     )}
                     {label}
-                    <span className="sr-only">{ok ? ': disponibil' : ': indisponibil'}</span>
+                    <span className="sr-only">{ok ? ': available' : ': unavailable'}</span>
                   </li>
                 )
               })}
@@ -180,13 +183,13 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
           </div>
 
           <div className="flex flex-wrap gap-2 border-t border-rule pt-4">
-            <Button variant="outline" size="sm" onClick={handleTest} loading={testing} loadingText="Se testează…" disabled={polling}>
+            <Button variant="outline" size="sm" onClick={handleTest} loading={testing} loadingText="Testing…" disabled={polling}>
               <Plug aria-hidden="true" />
-              Testează conexiunea
+              Test connection
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setDisconnectOpen(true)} className="text-muted-foreground hover:text-destructive">
               <Unplug aria-hidden="true" />
-              Deconectează
+              Disconnect
             </Button>
           </div>
         </CardContent>
@@ -195,38 +198,38 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
       {timedOut && (
         <Alert variant="warning">
           <AlertTriangle aria-hidden="true" />
-          <AlertTitle>Sincronizarea inițială durează mai mult decât de obicei</AlertTitle>
+          <AlertTitle>The first sync is taking longer than usual</AlertTitle>
           <AlertDescription>
-            Am așteptat 5 minute. Sincronizarea continuă pe server; poți verifica din nou starea sau reveni mai târziu din Magazin → Conexiuni.
+            We waited 5 minutes. The sync continues on the server; you can check the status again now or come back later from Store → Connections.
           </AlertDescription>
           <AlertAction>
             <Button variant="outline" size="sm" onClick={restart}>
-              Reîncearcă
+              Retry
             </Button>
           </AlertAction>
         </Alert>
       )}
       {pollError && !timedOut && (
         <p className="text-[13px] leading-[19px] text-warning" role="status">
-          {pollError} Se reîncearcă automat.
+          {pollError} Retrying automatically.
         </p>
       )}
 
       <Dialog open={disconnectOpen} onOpenChange={(open) => !disconnecting && setDisconnectOpen(open)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Deconectezi magazinul?</DialogTitle>
+            <DialogTitle>Disconnect the store?</DialogTitle>
             <DialogDescription>
-              Datele de acces vor fi șterse și webhook-urile eliminate; comenzile, clienții și produsele deja sincronizate rămân. Automatizările se opresc până
-              reconectezi un magazin.
+              Its access credentials will be deleted and its webhooks removed; the orders, customers and products already synced stay. Automations
+              pause until you connect a store again.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />} disabled={disconnecting}>
-              Renunță
+              Cancel
             </DialogClose>
-            <Button variant="destructive-solid" onClick={handleDisconnect} loading={disconnecting} loadingText="Se deconectează…">
-              Deconectează
+            <Button variant="destructive-solid" onClick={handleDisconnect} loading={disconnecting} loadingText="Disconnecting…">
+              Disconnect
             </Button>
           </DialogFooter>
         </DialogContent>

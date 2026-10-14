@@ -55,7 +55,7 @@ function DaysField({ control, id, error }: { control: FormControl; id: string; e
     field.onChange(WEEKDAYS.filter((d) => next.has(d)))
   }
   return (
-    <Field label={<span id={`${id}-label`}>Zilele în care sună</span>} htmlFor={id} error={error}>
+    <Field label={<span id={`${id}-label`}>Calling days</span>} htmlFor={id} error={error}>
       <div id={id} role="group" aria-labelledby={`${id}-label`} className="flex flex-wrap gap-1.5">
         {WEEKDAYS.map((day) => (
           <Chip key={day} role="checkbox" pressed={selected.has(day)} onClick={() => toggle(day)} aria-label={WEEKDAY_LABEL[day]} className="min-w-10">
@@ -71,13 +71,13 @@ function TimezoneField({ control, id }: { control: FormControl; id: string }) {
   const { field } = useController({ control, name: 'timezone' })
   const zones = useMemo(() => timeZoneOptions(field.value), [field.value])
   return (
-    <Field label="Fus orar" htmlFor={id} hint="Fereastra de apel este citită în acest fus; implicit, fusul organizației.">
+    <Field label="Time zone" htmlFor={id} hint="The call window is read in this time zone; by default, the organization's.">
       <Select value={field.value || ORG_ZONE} onValueChange={(v) => field.onChange(v === ORG_ZONE || !v ? '' : String(v))}>
         <SelectTrigger id={id} className="w-full sm:w-80">
-          <SelectValue>{(v: string) => (v === ORG_ZONE ? 'Fusul organizației' : v)}</SelectValue>
+          <SelectValue>{(v: string) => (v === ORG_ZONE ? 'Organization time zone' : v)}</SelectValue>
         </SelectTrigger>
         <SelectContent className="max-h-72">
-          <SelectItem value={ORG_ZONE}>Fusul organizației</SelectItem>
+          <SelectItem value={ORG_ZONE}>Organization time zone</SelectItem>
           {zones.map((z) => (
             <SelectItem key={z} value={z}>{z}</SelectItem>
           ))}
@@ -90,7 +90,7 @@ function TimezoneField({ control, id }: { control: FormControl; id: string }) {
 function FollowUpStatusField({ control, id }: { control: FormControl; id: string }) {
   const { field } = useController({ control, name: 'follow_up_status' })
   return (
-    <Field label="Statusul comenzii care declanșează apelul" htmlFor={id} hint="Apelul se programează când comanda ajunge la acest status.">
+    <Field label="Order status that triggers the call" htmlFor={id} hint="The call is scheduled when the order reaches this status.">
       <Select value={field.value} onValueChange={(v) => v && field.onChange(String(v))}>
         <SelectTrigger id={id} className="w-full sm:w-80">
           <SelectValue>{(v: string) => FOLLOW_UP_STATUS_LABEL[v as keyof typeof FOLLOW_UP_STATUS_LABEL] ?? v}</SelectValue>
@@ -121,19 +121,19 @@ function PaymentMethodsField({ control, id, error }: { control: FormControl; id:
   }
   return (
     <Field
-      label="Metode de plată care înseamnă ramburs"
+      label="Payment methods that mean cash on delivery"
       htmlFor={id}
       error={error}
-      hint="Identificatorul sau titlul metodei de plată din magazin (de exemplu „cod” sau „Plata la livrare”). Apelul se face doar pentru comenzile cu una dintre ele."
+      hint='The payment method id or title as the store names it (for example "cod" or "Cash on delivery"). Only orders paid with one of them are called.'
     >
       <div className="space-y-2">
         {values.length > 0 && (
-          <ul className="flex flex-wrap gap-1.5" aria-label="Metode adăugate">
+          <ul className="flex flex-wrap gap-1.5" aria-label="Added methods">
             {values.map((value) => (
               <li key={value}>
                 <span className="inline-flex h-8 items-center gap-1 rounded-full bg-secondary pr-1 pl-3 text-[13px] text-foreground">
                   {value}
-                  <Button type="button" variant="ghost" size="icon-xs" className="tap-44 rounded-full text-muted-foreground hover:text-foreground" onClick={() => remove(value)} aria-label={`Elimină ${value}`}>
+                  <Button type="button" variant="ghost" size="icon-xs" className="tap-44 rounded-full text-muted-foreground hover:text-foreground" onClick={() => remove(value)} aria-label={`Remove ${value}`}>
                     <X />
                   </Button>
                 </span>
@@ -159,7 +159,7 @@ function PaymentMethodsField({ control, id, error }: { control: FormControl; id:
           />
           <Button type="button" variant="outline" onClick={add} disabled={!draft.trim()}>
             <Plus aria-hidden="true" />
-            Adaugă
+            Add
           </Button>
         </div>
       </div>
@@ -170,7 +170,7 @@ function PaymentMethodsField({ control, id, error }: { control: FormControl; id:
 function ToneField({ control, id }: { control: FormControl; id: string }) {
   const { field } = useController({ control, name: 'tone' })
   return (
-    <Field label={<span id={`${id}-label`}>Ton</span>} htmlFor={id}>
+    <Field label={<span id={`${id}-label`}>Tone</span>} htmlFor={id}>
       <div id={id} role="radiogroup" aria-labelledby={`${id}-label`} className="flex flex-wrap gap-1.5">
         {(['friendly', 'formal'] as const).map((tone) => (
           <Chip key={tone} role="radio" pressed={field.value === tone} onClick={() => field.onChange(tone)}>
@@ -218,14 +218,14 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
       form.reset(formValuesFrom(next))
       setPreview(null)
       onSaved(next)
-      toast.success('Configurația a fost salvată')
+      toast.success('Configuration saved')
     } catch (err) {
       // A 400 names the fields it refused: show them on the fields, not as one opaque toast.
       const fieldErrors = err instanceof CommerceApiError && err.status === 400 ? serverFieldErrors(err.details) : []
       for (const { field, message } of fieldErrors) form.setError(field, { type: 'server', message })
       if (fieldErrors.length) form.setFocus(fieldErrors[0].field)
-      toast.error('Configurația nu a putut fi salvată', {
-        description: fieldErrors.length ? 'Verifică câmpurile marcate și încearcă din nou.' : commerceErrorMessage(err, 'Verifică datele și încearcă din nou.'),
+      toast.error('The configuration could not be saved', {
+        description: fieldErrors.length ? 'Check the highlighted fields and try again.' : commerceErrorMessage(err, 'Check the values and try again.'),
       })
     }
   }
@@ -236,9 +236,9 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
     try {
       const next = await saveAutomation(type, { connection_id: connectionId, consent_confirmed: true })
       onSaved(next)
-      toast.success('Acordul a fost confirmat', { description: 'Poți activa automatizarea după ce salvezi configurația.' })
+      toast.success('Consent confirmed', { description: 'You can enable the automation once the configuration is saved.' })
     } catch (err) {
-      toast.error('Acordul nu a putut fi confirmat', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+      toast.error('Consent could not be confirmed', { description: commerceErrorMessage(err, 'Try again.') })
     } finally {
       setConsentPending(false)
     }
@@ -254,7 +254,7 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
       if (!ctrl.signal.aborted) setPreview({ text })
     } catch (err) {
       if (isAbortError(err)) return
-      setPreview({ error: commerceErrorMessage(err, 'Previzualizarea nu a putut fi generată.') })
+      setPreview({ error: commerceErrorMessage(err, 'The preview could not be generated.') })
     } finally {
       if (previewAbort.current === ctrl) {
         previewAbort.current = null
@@ -285,21 +285,21 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="divide-y-0">
-      <FormSection as="h3" title="Când sună" description="Întârzierea după eveniment, fereastra de apel și zilele în care automatizarea poate suna.">
+      <FormSection as="h3" title="When it calls" description="The delay after the event, the call window and the days the automation may call on.">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
-            label="Întârziere după eveniment (minute)"
+            label="Delay after the event (minutes)"
             htmlFor={`${id}-delay`}
             error={errors.delay_minutes?.message}
-            hint={type === 'abandoned_cart' ? `Cel puțin ${ABANDONED_CART_MIN_DELAY} de minute, ca să nu suni un client care încă finalizează.` : '0 = imediat ce comanda este eligibilă.'}
+            hint={type === 'abandoned_cart' ? `At least ${ABANDONED_CART_MIN_DELAY} minutes, so a customer who is still checking out is not called.` : '0 = as soon as the order is eligible.'}
           >
             <Input id={`${id}-delay`} type="number" inputMode="numeric" min={type === 'abandoned_cart' ? ABANDONED_CART_MIN_DELAY : AUTOMATION_LIMITS.delay_minutes[0]} max={AUTOMATION_LIMITS.delay_minutes[1]} step={1} {...numberField('delay_minutes')} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="De la" htmlFor={`${id}-start`} error={errors.window_start?.message}>
+            <Field label="From" htmlFor={`${id}-start`} error={errors.window_start?.message}>
               <Input id={`${id}-start`} type="time" step={60} {...form.register('window_start')} />
             </Field>
-            <Field label="Până la" htmlFor={`${id}-end`} error={errors.window_end?.message}>
+            <Field label="Until" htmlFor={`${id}-end`} error={errors.window_end?.message}>
               <Input id={`${id}-end`} type="time" step={60} {...form.register('window_end')} />
             </Field>
           </div>
@@ -308,35 +308,35 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
         <TimezoneField control={form.control} id={`${id}-tz`} />
       </FormSection>
 
-      <FormSection as="h3" title="Limite" description="Câte apeluri pe zi și câte încercări pentru aceeași comandă.">
+      <FormSection as="h3" title="Limits" description="How many calls per day and how many attempts for the same order.">
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Apeluri pe zi (automatizare)" htmlFor={`${id}-daily`} error={errors.daily_cap?.message}>
+          <Field label="Calls per day (this automation)" htmlFor={`${id}-daily`} error={errors.daily_cap?.message}>
             <Input id={`${id}-daily`} type="number" inputMode="numeric" min={AUTOMATION_LIMITS.daily_cap[0]} max={AUTOMATION_LIMITS.daily_cap[1]} step={1} {...numberField('daily_cap')} />
           </Field>
-          <Field label="Apeluri pe zi, pe client" htmlFor={`${id}-per-customer`} error={errors.per_customer_daily_cap?.message} hint="Se aplică peste toate automatizările.">
+          <Field label="Calls per day, per customer" htmlFor={`${id}-per-customer`} error={errors.per_customer_daily_cap?.message} hint="Applies across every automation.">
             <Input id={`${id}-per-customer`} type="number" inputMode="numeric" min={AUTOMATION_LIMITS.per_customer_daily_cap[0]} max={AUTOMATION_LIMITS.per_customer_daily_cap[1]} step={1} {...numberField('per_customer_daily_cap')} />
           </Field>
-          <Field label="Încercări per comandă" htmlFor={`${id}-attempts`} error={errors.max_attempts?.message} hint="1 = fără reîncercare.">
+          <Field label="Attempts per order" htmlFor={`${id}-attempts`} error={errors.max_attempts?.message} hint="1 = no retry.">
             <Input id={`${id}-attempts`} type="number" inputMode="numeric" min={AUTOMATION_LIMITS.max_attempts[0]} max={AUTOMATION_LIMITS.max_attempts[1]} step={1} {...numberField('max_attempts')} />
           </Field>
-          <Field label="Minute între încercări" htmlFor={`${id}-retry`} error={errors.retry_minutes?.message} hint={`Între ${AUTOMATION_LIMITS.retry_minutes[0]} și ${AUTOMATION_LIMITS.retry_minutes[1]} de minute.`}>
+          <Field label="Minutes between attempts" htmlFor={`${id}-retry`} error={errors.retry_minutes?.message} hint={`Between ${AUTOMATION_LIMITS.retry_minutes[0]} and ${AUTOMATION_LIMITS.retry_minutes[1]} minutes.`}>
             <Input id={`${id}-retry`} type="number" inputMode="numeric" min={AUTOMATION_LIMITS.retry_minutes[0]} max={AUTOMATION_LIMITS.retry_minutes[1]} step={5} {...numberField('retry_minutes')} />
           </Field>
         </div>
       </FormSection>
 
-      <FormSection as="h3" title="Criterii" description="Ce comenzi sau coșuri intră în această automatizare.">
+      <FormSection as="h3" title="Criteria" description="Which orders or carts this automation picks up.">
         {type === 'cod_confirmation' && <PaymentMethodsField control={form.control} id={`${id}-cod`} error={errors.cod_payment_methods?.message} />}
         {type === 'order_follow_up' && <FollowUpStatusField control={form.control} id={`${id}-follow` } />}
         {type === 'abandoned_cart' && (
-          <Field label="Valoarea minimă a coșului" htmlFor={`${id}-min-total`} optional error={errors.min_order_total?.message} hint="Coșurile sub această sumă nu sunt sunate. Gol = orice coș.">
+          <Field label="Minimum cart value" htmlFor={`${id}-min-total`} optional error={errors.min_order_total?.message} hint="Carts under this amount are not called. Empty = any cart.">
             <Input id={`${id}-min-total`} type="text" inputMode="decimal" placeholder="150" className="max-w-xs" {...form.register('min_order_total')} />
           </Field>
         )}
       </FormSection>
 
-      <FormSection as="h3" title="Script" description="Ce spune agentul. Variabilele dintre acolade sunt înlocuite cu datele comenzii la fiecare apel.">
-        <Field label="Scriptul apelului" htmlFor={`${id}-template`} error={errors.template?.message}>
+      <FormSection as="h3" title="Script" description="What the agent says. The variables in braces are replaced with the order's data on every call.">
+        <Field label="Call script" htmlFor={`${id}-template`} error={errors.template?.message}>
           <Textarea
             id={`${id}-template`}
             rows={8}
@@ -350,11 +350,11 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
           />
         </Field>
         <div className="rounded-2xl bg-secondary p-4">
-          <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Variabile disponibile</p>
+          <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Available variables</p>
           <ul className="mt-2.5 space-y-2">
             {SCRIPT_VARIABLES.map((variable) => (
               <li key={variable.name} className="flex flex-wrap items-start gap-x-3 gap-y-1 text-[13px] leading-[19px]">
-                <Button type="button" variant="outline" size="xs" className="font-mono" onClick={() => insertVariable(variable.name)} aria-label={`Inserează variabila ${variable.name}`}>
+                <Button type="button" variant="outline" size="xs" className="font-mono" onClick={() => insertVariable(variable.name)} aria-label={`Insert the variable ${variable.name}`}>
                   {`{{${variable.name}}}`}
                 </Button>
                 <span className="min-w-0 flex-1 text-foreground/80">{variable.description}</span>
@@ -364,15 +364,15 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
         </div>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="outline" size="sm" onClick={() => void runPreview()} loading={previewPending} loadingState="composing" loadingText="Se generează…">
+            <Button type="button" variant="outline" size="sm" onClick={() => void runPreview()} loading={previewPending} loadingState="composing" loadingText="Generating…">
               <Eye aria-hidden="true" />
-              Previzualizează cu date de probă
+              Preview with sample data
             </Button>
-            {isDirty && <p className="text-xs leading-4 text-muted-foreground">Previzualizarea folosește scriptul salvat; salvează ca să includă modificările.</p>}
+            {isDirty && <p className="text-xs leading-4 text-muted-foreground">The preview uses the saved script; save to include your changes.</p>}
           </div>
           {preview && 'text' in preview && (
             <div className="rounded-2xl bg-white p-4 shadow-hair" role="status">
-              <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Previzualizare</p>
+              <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Preview</p>
               <p className="mt-2 text-sm leading-[22px] whitespace-pre-line text-foreground">{preview.text}</p>
             </div>
           )}
@@ -381,32 +381,32 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
               <p>{preview.error}</p>
               <Button type="button" variant="outline" size="xs" onClick={() => void runPreview()}>
                 <RotateCw aria-hidden="true" />
-                Încearcă din nou
+                Try again
               </Button>
             </div>
           )}
         </div>
         <ToneField control={form.control} id={`${id}-tone`} />
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Numele brandului" htmlFor={`${id}-brand`} optional error={errors.brand_name?.message} hint="Cum se prezintă agentul; gol = numele magazinului din profil.">
+          <Field label="Brand name" htmlFor={`${id}-brand`} optional error={errors.brand_name?.message} hint="How the agent introduces the store; empty = the store name from the profile.">
             <Input id={`${id}-brand`} maxLength={100} autoComplete="organization" {...form.register('brand_name')} />
           </Field>
-          <Field label="Număr pentru transfer" htmlFor={`${id}-transfer`} optional error={errors.transfer_number?.message} hint="Agentul poate preda apelul aici; gol = fără transfer.">
+          <Field label="Transfer number" htmlFor={`${id}-transfer`} optional error={errors.transfer_number?.message} hint="The agent can hand the call over to this number; empty = no transfer.">
             <Input id={`${id}-transfer`} type="tel" inputMode="tel" placeholder="+40712345678" autoComplete="off" {...form.register('transfer_number')} />
           </Field>
         </div>
-        <Field label="Politica de retur (adresă)" htmlFor={`${id}-return`} optional error={errors.return_policy_url?.message}>
-          <Input id={`${id}-return`} type="url" inputMode="url" placeholder="https://magazinul-tau.ro/retur" autoComplete="off" {...form.register('return_policy_url')} />
+        <Field label="Return policy (URL)" htmlFor={`${id}-return`} optional error={errors.return_policy_url?.message}>
+          <Input id={`${id}-return`} type="url" inputMode="url" placeholder="https://your-store.com/returns" autoComplete="off" {...form.register('return_policy_url')} />
         </Field>
       </FormSection>
 
-      <FormSection as="h3" title="Acordul clienților" description="Fără această confirmare, automatizarea nu poate fi activată.">
+      <FormSection as="h3" title="Customer consent" description="Without this confirmation, the automation cannot be enabled.">
         {consentGiven ? (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-secondary p-4">
-            <StatusChip tone="success" icon={<ShieldCheck aria-hidden="true" />}>Acord confirmat</StatusChip>
+            <StatusChip tone="success" icon={<ShieldCheck aria-hidden="true" />}>Consent confirmed</StatusChip>
             <p className="text-[13px] leading-[19px] text-muted-foreground">
-              Confirmat la <span className="text-foreground tabular-nums">{formatDateTime(automation.consent_confirmed_at)}</span>
-              {automation.consent_version && <span> · versiunea {automation.consent_version}</span>}
+              Confirmed on <span className="text-foreground tabular-nums">{formatDateTime(automation.consent_confirmed_at)}</span>
+              {automation.consent_version && <span> · version {automation.consent_version}</span>}
             </p>
           </div>
         ) : (
@@ -417,9 +417,9 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
                 {CONSENT_TEXT}
               </label>
             </div>
-            <Button type="button" size="sm" onClick={() => void confirmConsent()} disabled={!consentChecked} loading={consentPending} loadingText="Se confirmă…">
+            <Button type="button" size="sm" onClick={() => void confirmConsent()} disabled={!consentChecked} loading={consentPending} loadingText="Confirming…">
               <Check aria-hidden="true" />
-              Confirmă acordul
+              Confirm consent
             </Button>
           </div>
         )}
@@ -430,19 +430,19 @@ export function AutomationForm({ automation, connectionId, onSaved }: Automation
           {isDirty ? (
             <span className="flex items-center gap-2">
               <OrbInline state="breathing" />
-              Modificări nesalvate
+              Unsaved changes
             </span>
           ) : (
-            'Configurația este salvată.'
+            'The configuration is saved.'
           )}
         </p>
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={() => form.reset(formValuesFrom(automation))} disabled={!isDirty || isSubmitting}>
-            Renunță la modificări
+            Discard changes
           </Button>
-          <Button type="submit" loading={isSubmitting} loadingText="Se salvează…" disabled={!isDirty && Boolean(automation.id)}>
+          <Button type="submit" loading={isSubmitting} loadingText="Saving…" disabled={!isDirty && Boolean(automation.id)}>
             <Save aria-hidden="true" />
-            {automation.id ? 'Salvează' : 'Salvează configurația'}
+            {automation.id ? 'Save' : 'Save configuration'}
           </Button>
         </div>
       </div>

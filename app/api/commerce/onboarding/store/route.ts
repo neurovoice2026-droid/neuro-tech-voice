@@ -36,14 +36,14 @@ const StoreSchema = z.object({
   display_name: z
     .string()
     .trim()
-    .min(2, 'Numele magazinului are cel puțin 2 caractere')
-    .max(100, 'Numele magazinului are cel mult 100 de caractere')
+    .min(2, 'The store name needs at least 2 characters')
+    .max(100, 'The store name can have at most 100 characters')
     .refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE),
   website: WebsiteSchema.optional(),
-  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'Țara este un cod ISO de două litere'),
-  timezone: z.string().trim().min(1).max(64).refine(isTimeZone, 'Fus orar necunoscut'),
+  country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, 'The country must be a two-letter ISO code'),
+  timezone: z.string().trim().min(1).max(64).refine(isTimeZone, 'Unknown time zone'),
   language: AgentLanguageSchema.default('ro'),
-  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'Moneda este un cod ISO de trei litere'),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, 'The currency must be a three-letter ISO code'),
 })
 
 export async function POST(request: Request) {
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       .single()
     if (readErr) throw new Error(`organizations read failed: ${readErr.message}`)
     if (row.business_type !== 'ecommerce') {
-      throw new RequestError('precondition_failed', 'Această configurare este disponibilă doar pentru magazine online.', 409, {
+      throw new RequestError('precondition_failed', 'This setup is only available to online stores.', 409, {
         reason: 'not_ecommerce',
       })
     }

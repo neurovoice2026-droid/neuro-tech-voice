@@ -85,7 +85,7 @@ import {
   type VerifiedCommerceEvent,
   type WebhookRegistration,
 } from './types'
-import { RO_MESSAGES, errorForHttpStatus, looksLikeHtml, normalizeScopes, normalizeShopDomain, translateStoreError } from './shopify-oauth'
+import { SHOPIFY_MESSAGES, errorForHttpStatus, looksLikeHtml, normalizeScopes, normalizeShopDomain, translateStoreError } from './shopify-oauth'
 
 /** Latest stable Admin API version (https://shopify.dev/docs/api/usage/versioning, read 2026-10-13: 2026-10, released 2026-10-01, supported until 2027-10-16). */
 export const SHOPIFY_API_VERSION = '2026-10'
@@ -409,7 +409,7 @@ function itemFromNode(v: unknown): NormalizedOrderItem | null {
     externalId: legacyIdFromGid(gid) ?? gid,
     productExternalId: legacyIdFromGid(obj(node.product)?.id),
     sku: str(node.sku),
-    name: str(node.name) ?? str(node.title) ?? 'Produs',
+    name: str(node.name) ?? str(node.title) ?? 'Product',
     quantity,
     unitPrice: money(node.originalUnitPriceSet).amount,
     total: money(node.discountedTotalSet).amount,
@@ -509,7 +509,7 @@ function productFromNode(v: unknown): NormalizedProduct | null {
   return {
     externalId: idString(node.legacyResourceId) ?? legacyIdFromGid(gid) ?? gid,
     sku: str(variant?.sku),
-    name: str(node.title) ?? 'Produs',
+    name: str(node.title) ?? 'Product',
     status: productStatus(str(node.status)),
     price: num(minPrice?.amount) ?? num(variant?.price),
     currency: str(minPrice?.currencyCode),
@@ -551,7 +551,7 @@ function cartFromNode(v: unknown): NormalizedCart | null {
     items: arr(obj(node.lineItems)?.nodes)
       .map(obj)
       .filter((i): i is Rec => !!i)
-      .map((i) => ({ name: str(i.title) ?? 'Produs', quantity: num(i.quantity) ?? 1 })),
+      .map((i) => ({ name: str(i.title) ?? 'Product', quantity: num(i.quantity) ?? 1 })),
     // The last activity on the checkout is when the customer walked away.
     abandonedAt: status === 'abandoned' ? updatedAt : null,
     recoveredOrderExternalId: null,
@@ -586,7 +586,7 @@ function itemFromPayload(v: unknown): NormalizedOrderItem | null {
     externalId,
     productExternalId: idString(item.product_id),
     sku: str(item.sku),
-    name: str(item.name) ?? str(item.title) ?? 'Produs',
+    name: str(item.name) ?? str(item.title) ?? 'Product',
     quantity,
     unitPrice,
     total: unitPrice === null ? null : Math.round((unitPrice * quantity - discount) * 100) / 100,
@@ -676,7 +676,7 @@ function productFromPayload(p: Rec, storeDomain: string): NormalizedProduct | nu
   return {
     externalId,
     sku: str(first?.sku),
-    name: str(p.title) ?? 'Produs',
+    name: str(p.title) ?? 'Product',
     status: productStatus(str(p.status)),
     price: prices.length ? Math.min(...prices) : null,
     currency: null, // the products/update payload carries no currency; the shop currency applies
@@ -711,7 +711,7 @@ function cartFromPayload(p: Rec): NormalizedCart | null {
     items: arr(p.line_items)
       .map(obj)
       .filter((i): i is Rec => !!i)
-      .map((i) => ({ name: str(i.title) ?? 'Produs', quantity: num(i.quantity) ?? 1 })),
+      .map((i) => ({ name: str(i.title) ?? 'Product', quantity: num(i.quantity) ?? 1 })),
     abandonedAt: status === 'abandoned' ? updatedAt : null,
     recoveredOrderExternalId: null,
     providerUpdatedAt: updatedAt,
@@ -742,17 +742,17 @@ function capabilitiesFrom(scopes: ReadonlySet<string>, probe: PhoneProbe): Comme
   const customers = hasScope(scopes, 'customers')
   const customerPhone = (orders || customers) && probe !== 'redacted'
   const notes: string[] = []
-  if (!orders) notes.push('Permisiunea read_orders lipsește: comenzile și checkout-urile abandonate nu pot fi citite.')
-  if (!customers) notes.push('Permisiunea read_customers lipsește: clienții nu pot fi citiți.')
-  if (!products) notes.push('Permisiunea read_products lipsește: produsele nu pot fi citite.')
-  if (orders && !hasScope(scopes, 'all_orders')) notes.push('Fără permisiunea read_all_orders, Shopify expune doar comenzile din ultimele 60 de zile.')
+  if (!orders) notes.push('The read_orders permission is missing: orders and abandoned checkouts cannot be read.')
+  if (!customers) notes.push('The read_customers permission is missing: customers cannot be read.')
+  if (!products) notes.push('The read_products permission is missing: products cannot be read.')
+  if (orders && !hasScope(scopes, 'all_orders')) notes.push('Without the read_all_orders permission, Shopify only exposes orders from the last 60 days.')
   if ((orders || customers) && probe === 'redacted') {
-    notes.push('Shopify nu a aprobat accesul aplicației la datele protejate ale clienților (telefon, adresă, e-mail): apelurile automate nu pot fi activate până la aprobarea „Protected customer data”.')
+    notes.push('Shopify has not approved the app\'s access to protected customer data (phone, address, email): automated calls cannot be enabled until "Protected customer data" access is approved.')
   }
   if ((orders || customers) && probe === 'unknown') {
-    notes.push('Magazinul nu are încă comenzi sau clienți: accesul la telefoanele clienților se confirmă la prima sincronizare.')
+    notes.push('The store has no orders or customers yet: access to customer phone numbers is confirmed at the first sync.')
   }
-  if (orders && !customerPhone) notes.push('Checkout-urile abandonate necesită telefonul clientului: automatizarea pentru coșuri abandonate nu este disponibilă.')
+  if (orders && !customerPhone) notes.push('Abandoned checkouts need the customer\'s phone number: the abandoned cart automation is not available.')
   return {
     products,
     customers,
@@ -843,25 +843,25 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
     const body = obj(res.json)
     if (!body) {
       const html = looksLikeHtml(res.text)
-      throw new ConnectionError(html ? 'not_a_store' : 'invalid_response', html ? RO_MESSAGES.not_a_store : RO_MESSAGES.invalid_response, false, `${operation}: ${html ? 'html' : 'non-json'} body`)
+      throw new ConnectionError(html ? 'not_a_store' : 'invalid_response', html ? SHOPIFY_MESSAGES.not_a_store : SHOPIFY_MESSAGES.invalid_response, false, `${operation}: ${html ? 'html' : 'non-json'} body`)
     }
     const errors = parseGqlErrors(body.errors)
     const codes = errors.map((e) => e.code).filter((c): c is string => !!c)
     if (codes.includes('THROTTLED')) {
       ctx.log.warn('shopify.throttled', { operation })
-      throw new ConnectionError('rate_limited', RO_MESSAGES.rate_limited, true, `${operation}: THROTTLED`)
+      throw new ConnectionError('rate_limited', SHOPIFY_MESSAGES.rate_limited, true, `${operation}: THROTTLED`)
     }
     const redacted = errors.some((e) => PROTECTED_DATA_RE.test(e.message))
     const data = obj(body.data) ?? {}
     const rootValue = data[root]
     if ((rootValue === null || rootValue === undefined) && errors.length && !(redacted && errors.every((e) => PROTECTED_DATA_RE.test(e.message)))) {
       ctx.log.warn('shopify.graphql.errors', { operation, codes })
-      if (codes.includes('ACCESS_DENIED')) throw new ConnectionError('forbidden', RO_MESSAGES.forbidden, false, `${operation}: ACCESS_DENIED`)
-      if (codes.includes('INTERNAL_SERVER_ERROR')) throw new ConnectionError('unreachable', RO_MESSAGES.unreachable, true, `${operation}: INTERNAL_SERVER_ERROR`)
+      if (codes.includes('ACCESS_DENIED')) throw new ConnectionError('forbidden', SHOPIFY_MESSAGES.forbidden, false, `${operation}: ACCESS_DENIED`)
+      if (codes.includes('INTERNAL_SERVER_ERROR')) throw new ConnectionError('unreachable', SHOPIFY_MESSAGES.unreachable, true, `${operation}: INTERNAL_SERVER_ERROR`)
       if (codes.some((c) => /^(undefinedField|argumentNotAccepted|missingRequiredArguments|unknownEnumValue)$/.test(c))) {
-        throw new ConnectionError('api_version_unsupported', RO_MESSAGES.api_version_unsupported, false, `${operation}: ${codes.join(',')} (api ${ctx.version})`)
+        throw new ConnectionError('api_version_unsupported', SHOPIFY_MESSAGES.api_version_unsupported, false, `${operation}: ${codes.join(',')} (api ${ctx.version})`)
       }
-      throw new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, `${operation}: graphql errors ${codes.join(',') || 'without code'}`)
+      throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, `${operation}: graphql errors ${codes.join(',') || 'without code'}`)
     }
     if (redacted) ctx.log.warn('shopify.protected_data.redacted', { operation })
     // A page that came back with nested errors (e.g. ACCESS_DENIED on
@@ -881,13 +881,13 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
 
   function secretsOf(secrets: Rec): ShopifySecrets {
     const parsed = ShopifySecretsSchema.safeParse(secrets)
-    if (!parsed.success) throw new ConnectionError('unauthorized', RO_MESSAGES.secrets_shape, false, 'secrets: invalid shape')
+    if (!parsed.success) throw new ConnectionError('unauthorized', SHOPIFY_MESSAGES.secrets_shape, false, 'secrets: invalid shape')
     return parsed.data
   }
 
   function contextFor(connection: AdapterConnection, log: Logger): ShopCtx {
     const shop = normalizeShopDomain(connection.storeDomain) ?? normalizeShopDomain(connection.storeUrl)
-    if (!shop) throw new ConnectionError('invalid_url', RO_MESSAGES.invalid_url, false, 'connection: invalid shop domain')
+    if (!shop) throw new ConnectionError('invalid_url', SHOPIFY_MESSAGES.invalid_url, false, 'connection: invalid shop domain')
     const { access_token } = secretsOf(connection.secrets)
     return { shop, token: access_token, version: resolveApiVersion(deps.apiVersionOverride), log: log.child({ provider: 'shopify', storeDomain: shop }) }
   }
@@ -958,7 +958,7 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
     // registration run): the caller re-lists and reuses it.
     if (userErrors.some((m) => /already/i.test(m))) return { taken: true }
     ctx.log.warn('shopify.webhook.create_refused', { topic, userErrors: userErrors.map((m) => m.slice(0, 120)) })
-    throw new ConnectionError('invalid_response', RO_MESSAGES.webhook_refused, false, `webhook create ${topic}: ${userErrors.join('; ').slice(0, 200) || 'no id returned'}`)
+    throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.webhook_refused, false, `webhook create ${topic}: ${userErrors.join('; ').slice(0, 200) || 'no id returned'}`)
   }
 
   /** Deletes one subscription; a missing one is not an error. */
@@ -999,7 +999,7 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
       const endCursor = str(pageInfo?.endCursor)
       if (hasNext && (!endCursor || endCursor === checkpoint.cursor)) {
         ctx.log.warn('shopify.page.cursor_stuck', { operation, pages: checkpoint.pages })
-        throw new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, `${operation}: hasNextPage without a new endCursor`)
+        throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, `${operation}: hasNextPage without a new endCursor`)
       }
       return {
         checkpoint: { cursor: endCursor ?? checkpoint.cursor, modifiedAfter: checkpoint.modifiedAfter, pages: checkpoint.pages + 1 },
@@ -1049,7 +1049,7 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
 
     async validateConnection(input: ConnectInput, log: Logger): Promise<ValidatedStore> {
       const shop = normalizeShopDomain(input.storeUrl)
-      if (!shop) throw new ConnectionError('invalid_url', RO_MESSAGES.invalid_url, false, 'validate: invalid shop domain')
+      if (!shop) throw new ConnectionError('invalid_url', SHOPIFY_MESSAGES.invalid_url, false, 'validate: invalid shop domain')
       const secrets = secretsOf(input.secrets)
       const version = resolveApiVersion(deps.apiVersionOverride)
       const ctx: ShopCtx = { shop, token: secrets.access_token, version, log: log.child({ provider: 'shopify', storeDomain: shop }) }
@@ -1057,7 +1057,7 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
 
       const { data } = await graphql(ctx, 'validate shop', Q.validate, {}, 'shop')
       const shopNode = obj(data.shop)
-      if (!shopNode) throw new ConnectionError('invalid_response', RO_MESSAGES.invalid_response, false, 'validate: shop missing')
+      if (!shopNode) throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.invalid_response, false, 'validate: shop missing')
       const handles = arr(obj(data.currentAppInstallation)?.accessScopes)
         .map((s) => str(obj(s)?.handle))
         .filter((h): h is string => !!h)
@@ -1087,10 +1087,10 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
 
     async registerWebhooks(connection, log): Promise<WebhookRegistration[]> {
       const uri = connection.webhookUrl
-      if (!uri) throw new ConnectionError('not_configured', RO_MESSAGES.webhook_url, false, 'webhooks: no webhook url')
+      if (!uri) throw new ConnectionError('not_configured', SHOPIFY_MESSAGES.webhook_url, false, 'webhooks: no webhook url')
       // Deliveries are signed with the app client secret: without the app
       // configuration nothing could ever be verified, so do not subscribe.
-      if (!appConfig()) throw new ConnectionError('not_configured', RO_MESSAGES.not_configured, false, 'webhooks: app not configured')
+      if (!appConfig()) throw new ConnectionError('not_configured', SHOPIFY_MESSAGES.not_configured, false, 'webhooks: app not configured')
       const ctx = contextFor(connection, log)
       const desired = desiredTopics(connection.capabilities)
       if (!desired.length) return []
@@ -1107,7 +1107,7 @@ export function createShopifyAdapter(deps: ShopifyAdapterDeps = {}): CommerceAda
           } else {
             ours = (await listSubscriptions(ctx)).filter((s) => s.uri === uri)
             existing = ours.find((s) => s.topic === topic)
-            if (!existing) throw new ConnectionError('invalid_response', RO_MESSAGES.webhook_refused, false, `webhook create ${topic}: reported as taken but not listed`)
+            if (!existing) throw new ConnectionError('invalid_response', SHOPIFY_MESSAGES.webhook_refused, false, `webhook create ${topic}: reported as taken but not listed`)
           }
         }
         registrations.push({ topic, externalId: existing.id, source: 'api' })

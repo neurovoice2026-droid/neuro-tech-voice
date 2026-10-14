@@ -3,6 +3,7 @@ import { installFetch, jsonResponse, callAt, type FetchMock } from '@/tests/help
 import {
   CommerceApiError,
   NETWORK_ERROR,
+  STATUS_FALLBACK,
   TIMEOUT_ERROR,
   appendUnique,
   buildQuery,
@@ -14,6 +15,9 @@ import { enableBlocked } from '@/hooks/useCommerceAutomations'
 import { isSyncInProgress, pickCurrentConnection, shopifyStartUrl } from '@/hooks/useCommerceConnections'
 import { isCancellable } from '@/hooks/useCommerceRuns'
 import type { ConnectionDto } from '@/lib/commerce/types'
+
+/** Romanian diacritics or the Romanian words the pre-translation copy used: none may be shown to a merchant. */
+const ROMANIAN = /[ăâîșşțţ]|\b(încearcă|sesiunea|cererea|serviciul|magazin)\b/i
 
 let fetchMock: FetchMock
 
@@ -36,27 +40,37 @@ describe('commerceRequest', () => {
   })
 
   it('turns the route error body into a CommerceApiError with the reason', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Confirmă acordul mai întâi.', code: 'precondition_failed', details: { reason: 'no_consent' } }, 409))
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Confirm consent first.', code: 'precondition_failed', details: { reason: 'no_consent' } }, 409))
     const err = await commerceRequest('/api/commerce/automations/cod_confirmation', { method: 'PUT', json: { enabled: true }, fallback: 'x' }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(CommerceApiError)
     const apiErr = err as CommerceApiError
     expect(apiErr.status).toBe(409)
     expect(apiErr.code).toBe('precondition_failed')
     expect(apiErr.reason).toBe('no_consent')
-    expect(apiErr.message).toBe('Confirmă acordul mai întâi.')
-    expect(enableBlocked(apiErr)?.href).toBe('/magazin/automatizari')
+    expect(apiErr.message).toBe('Confirm consent first.')
+    // The toast repeats the route's own wording and sends the merchant to the Store section's automations page, under its English route.
+    expect(enableBlocked(apiErr)).toEqual({ message: 'Confirm consent first.', href: '/store/automations', action: 'Open automations' })
+    const unknownReason = new CommerceApiError('Something the route explains itself.', 409, 'precondition_failed', { reason: 'brand_new' })
+    expect(enableBlocked(unknownReason)).toEqual({ message: 'Something the route explains itself.', href: null, action: null })
+    expect(enableBlocked(new CommerceApiError('Not found.', 404))).toBeNull()
   })
 
-  it('falls back to a Romanian status message when the body is not JSON', async () => {
+  it('falls back to an English status message when the body is not JSON', async () => {
     const err = await readCommerceError(new Response('<html>', { status: 503 }), 'fallback')
-    expect(err.message).toMatch(/indisponibil/)
+    expect(err.message).toBe(STATUS_FALLBACK[503])
+    expect(err.message).toMatch(/unavailable/i)
+    const expired = await readCommerceError(new Response('', { status: 401 }), 'fallback')
+    expect(expired.message).toMatch(/sign in/i)
+    for (const message of Object.values(STATUS_FALLBACK)) expect(message).not.toMatch(ROMANIAN)
     const generic = await readCommerceError(new Response('', { status: 500 }), 'fallback')
     expect(generic.message).toBe('fallback')
     expect(generic.reason).toBeNull()
   })
 
-  it('maps thrown errors to messages', () => {
+  it('maps thrown errors to English messages', () => {
     expect(commerceErrorMessage(new TypeError('fetch failed'), 'x')).toBe(NETWORK_ERROR)
+    expect(NETWORK_ERROR).toMatch(/connection failed/i)
+    expect(NETWORK_ERROR).not.toMatch(ROMANIAN)
     expect(commerceErrorMessage(new CommerceApiError('server said', 400), 'x')).toBe('server said')
     expect(commerceErrorMessage('weird', 'x')).toBe('x')
   })
@@ -66,7 +80,7 @@ describe('commerceRequest', () => {
     await expect(commerceRequest('/api/commerce/x', { method: 'DELETE', fallback: 'x' })).resolves.toBeUndefined()
   })
 
-  it('gives up on a stalled route after its time budget, in Romanian', async () => {
+  it('gives up on a stalled route after its time budget, with an English message', async () => {
     vi.useFakeTimers()
     try {
       fetchMock.mockImplementationOnce(
@@ -82,6 +96,8 @@ describe('commerceRequest', () => {
       expect(err).toBeInstanceOf(CommerceApiError)
       expect((err as CommerceApiError).code).toBe('timeout')
       expect((err as CommerceApiError).message).toBe(TIMEOUT_ERROR)
+      expect(TIMEOUT_ERROR).toMatch(/did not respond in time/i)
+      expect(TIMEOUT_ERROR).not.toMatch(ROMANIAN)
       expect(commerceErrorMessage(err, 'x')).toBe(TIMEOUT_ERROR)
     } finally {
       vi.useRealTimers()
@@ -122,8 +138,8 @@ function connection(over: Partial<ConnectionDto>): ConnectionDto {
   return {
     id: 'c',
     platform: 'woocommerce',
-    store_url: 'https://shop.ro',
-    store_domain: 'shop.ro',
+    store_url: 'https://shop.example.com',
+    store_domain: 'shop.example.com',
     display_name: null,
     status: 'active',
     capabilities: { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: false, customer_phone: true, polling_minutes: null, notes: [] },
@@ -157,8 +173,9 @@ describe('connection helpers', () => {
     expect(isSyncInProgress(null)).toBe(false)
   })
 
-  it('builds the Shopify start link as a full-page navigation target', () => {
-    expect(shopifyStartUrl('x.myshopify.com')).toBe('/api/commerce/oauth/shopify/start?shop=x.myshopify.com&return_to=magazin')
+  it('builds the Shopify start link as a full-page navigation target that returns to the Store section', () => {
+    expect(shopifyStartUrl('x.myshopify.com')).toBe('/api/commerce/oauth/shopify/start?shop=x.myshopify.com&return_to=store')
+    expect(shopifyStartUrl('x.myshopify.com', 'onboarding')).toBe('/api/commerce/oauth/shopify/start?shop=x.myshopify.com&return_to=onboarding')
   })
 })
 

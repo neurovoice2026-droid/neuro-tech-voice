@@ -1,8 +1,9 @@
-// GET /api/commerce/agent-prompt — the Romanian baseline prompt and first
-// message of the store agent, built from the saved profile (and the agent's
-// saved name). The editor's "Regenerează" may pass what is currently typed
-// (?agent_name, ?tone, ?transfer_number, ?return_policy_url) so the result
-// matches the form rather than the last saved values. Nothing is written.
+// GET /api/commerce/agent-prompt — the baseline prompt and first message of
+// the store agent (written in the language the agent calls in), built from
+// the saved profile (and the agent's saved name). The editor's "Regenerate"
+// may pass what is currently typed (?agent_name, ?tone, ?transfer_number,
+// ?return_policy_url) so the result matches the form rather than the last
+// saved values. Nothing is written.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -26,13 +27,13 @@ const QuerySchema = z.object({
     .trim()
     .max(20)
     .optional()
-    .refine((v) => v === undefined || v === '' || E164_REGEX.test(v), 'Număr în format internațional, ex. +40712345678'),
+    .refine((v) => v === undefined || v === '' || E164_REGEX.test(v), 'Use the international format, e.g. +40712345678'),
   return_policy_url: z
     .string()
     .trim()
     .max(500)
     .optional()
-    .refine((v) => v === undefined || v === '' || isHttpsUrl(v), 'Adresa trebuie să înceapă cu https://'),
+    .refine((v) => v === undefined || v === '' || isHttpsUrl(v), 'The address must start with https://'),
 })
 
 export async function GET(request: Request) {
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
     if (!parsed.success) {
       throw new RequestError(
         'invalid_request',
-        'Unele câmpuri sunt invalide.',
+        'Some fields are invalid.',
         400,
         parsed.error.issues.slice(0, 10).map((i) => ({ path: i.path.join('.'), message: i.message })),
       )
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
     if (orgRes.error) throw new Error(`organizations read failed: ${orgRes.error.message}`)
     if (agentRes.error) throw new Error(`agents read failed: ${agentRes.error.message}`)
     if (orgRes.data.business_type !== 'ecommerce') {
-      throw new RequestError('precondition_failed', 'Această configurare este disponibilă doar pentru magazine online.', 409, {
+      throw new RequestError('precondition_failed', 'This setup is only available to online stores.', 409, {
         reason: 'not_ecommerce',
       })
     }

@@ -8,7 +8,7 @@ import { RUN_STATUSES, RUN_STATUS_LABEL } from './labels'
 import { filterPillClass } from './ListScaffold'
 import { RunsTable } from './RunsTable'
 
-const STATUS_OPTIONS = [{ value: 'all', label: 'Toate stările' }, ...RUN_STATUSES.map((s) => ({ value: s, label: RUN_STATUS_LABEL[s] }))]
+const STATUS_OPTIONS = [{ value: 'all', label: 'All statuses' }, ...RUN_STATUSES.map((s) => ({ value: s, label: RUN_STATUS_LABEL[s] }))]
 
 /** The run history of one configured automation: status filter, cursor pages, cancel on waiting runs. */
 export function AutomationRuns({ automation }: { automation: AutomationDto }) {
@@ -20,9 +20,9 @@ export function AutomationRuns({ automation }: { automation: AutomationDto }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-heading font-title text-[20px] leading-[26px] tracking-[-0.01em]">Istoricul apelurilor</h3>
+        <h3 className="font-heading font-title text-[20px] leading-[26px] tracking-[-0.01em]">Call history</h3>
         <Select value={status} onValueChange={(v) => v && setStatus(String(v))}>
-          <SelectTrigger size="sm" aria-label="Filtrează apelurile după stare" className={filterPillClass(status !== 'all')}>
+          <SelectTrigger size="sm" aria-label="Filter calls by status" className={filterPillClass(status !== 'all')}>
             <SelectValue>{(value: string) => STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value}</SelectValue>
           </SelectTrigger>
           <SelectContent alignItemWithTrigger={false} align="end" className="min-w-44">
@@ -41,8 +41,8 @@ export function AutomationRuns({ automation }: { automation: AutomationDto }) {
         showAutomation={false}
         cancellable
         filtered={status !== 'all'}
-        emptyTitle="Niciun apel încă"
-        emptyDescription="Apelurile apar aici după ce automatizarea este activă și găsește comenzi eligibile."
+        emptyTitle="No calls yet"
+        emptyDescription="Calls show up here once the automation is enabled and finds eligible orders."
         pagination={{
           total: runs.total,
           hasMore: runs.hasMore,

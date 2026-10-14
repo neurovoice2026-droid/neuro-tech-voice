@@ -117,7 +117,7 @@ async function noteDelivery(db: SupabaseClient, connection: ConnectionRow, resul
   if (result.ok) {
     cfg.last_delivery_at = now
   } else {
-    cfg.last_error = result.reason === 'bad_signature' ? 'Semnătura unui webhook a fost respinsă.' : `Webhook respins (${result.reason}).`
+    cfg.last_error = result.reason === 'bad_signature' ? 'A webhook signature was rejected.' : `Webhook rejected (${result.reason}).`
     cfg.last_error_at = now
   }
   const { error } = await db.from('commerce_connections').update({ webhook_config: cfg }).eq('id', connection.id)

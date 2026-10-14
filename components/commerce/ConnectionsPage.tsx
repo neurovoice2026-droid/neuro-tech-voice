@@ -18,16 +18,7 @@ import { PLATFORM_CATALOG, PLATFORM_ORDER } from '@/lib/commerce/platforms'
 import type { CommercePlatform, ConnectionDto } from '@/lib/commerce/types'
 import { ConnectForm } from './ConnectForm'
 import { ConnectionCard } from './ConnectionCard'
-
-/** The Shopify callback's `?error=` codes, in the merchant's words; anything else shows the code. */
-const OAUTH_ERROR: Record<string, string> = {
-  access_denied: 'Instalarea aplicației a fost refuzată în Shopify.',
-  invalid_shop: 'Domeniul magazinului nu este valid.',
-  state_mismatch: 'Sesiunea de conectare a expirat. Pornește din nou conectarea.',
-  not_configured: 'Aplicația Shopify nu este configurată pe platformă. Contactează echipa de suport.',
-  hmac_invalid: 'Răspunsul Shopify nu a putut fi verificat. Pornește din nou conectarea.',
-  token_exchange_failed: 'Shopify nu a emis tokenul de acces. Încearcă din nou.',
-}
+import { oauthErrorMessage } from './labels'
 
 /** The Shopify start / callback return (`?connected=1`, `?error=`), read once and cleared from the URL. */
 function useOauthReturn(onConnected: () => void) {
@@ -37,10 +28,10 @@ function useOauthReturn(onConnected: () => void) {
     const error = searchParams.get('error')
     if (!connected && !error) return
     if (connected) {
-      toast.success('Magazinul Shopify a fost conectat', { description: 'Sincronizarea inițială a pornit.' })
+      toast.success('Shopify store connected', { description: 'The initial sync has started.' })
       onConnected()
     }
-    if (error) toast.error('Conectarea cu Shopify a eșuat', { description: OAUTH_ERROR[error] ?? `Cod: ${error}`, duration: 10_000 })
+    if (error) toast.error('Connecting to Shopify failed', { description: oauthErrorMessage(error), duration: 10_000 })
     const url = new URL(window.location.href)
     url.searchParams.delete('connected')
     url.searchParams.delete('error')
@@ -70,7 +61,7 @@ export function ConnectionsPage() {
       replaceConnection(connection)
       setPlatform(null)
       setReconnect(null)
-      toast.success('Magazinul a fost conectat', { description: 'Sincronizarea inițială a pornit; o poți urmări mai jos.' })
+      toast.success('Store connected', { description: 'The initial sync has started; you can follow it below.' })
     },
     [replaceConnection],
   )
@@ -78,13 +69,13 @@ export function ConnectionsPage() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Magazin"
-        title="Conexiuni"
-        description="Platforma magazinului, ce poate citi și cum se sincronizează."
+        eyebrow="Store"
+        title="Connections"
+        description="The store platform, what it can read and how it syncs."
         meta={
           !isLoading && live.length > 0 ? (
             <StatusChip tone="success" dot className="tabular-nums">
-              {live.length === 1 ? '1 magazin conectat' : `${live.length} magazine conectate`}
+              {live.length === 1 ? '1 store connected' : `${live.length} stores connected`}
             </StatusChip>
           ) : undefined
         }
@@ -93,19 +84,19 @@ export function ConnectionsPage() {
       <div className="space-y-10">
         {isLoading ? (
           <Card className="py-0">
-            <OrbLoader label="Se încarcă conexiunile…" className="min-h-[320px]" />
+            <OrbLoader label="Loading connections…" className="min-h-[320px]" />
           </Card>
         ) : error && connections.length === 0 ? (
           <Card className="gap-0 py-0">
-            <CommerceCardError message="Conexiunile nu au putut fi încărcate." detail={error} onRetry={refetch} className="py-8" />
+            <CommerceCardError message="Connections could not be loaded." detail={error} onRetry={refetch} className="py-8" />
           </Card>
         ) : (
           connections.length > 0 && (
             <section aria-labelledby="connections-list" className="space-y-4">
-              <SectionHeading title={<span id="connections-list">Magazinul tău</span>} />
+              <SectionHeading title={<span id="connections-list">Your store</span>} />
               {error && (
                 <Card className="gap-0 py-0">
-                  <CommerceCardError role="status" message="Lista nu a putut fi reîmprospătată." detail={error} onRetry={refetch} />
+                  <CommerceCardError role="status" message="The list could not be refreshed." detail={error} onRetry={refetch} />
                 </Card>
               )}
               {connections.map((connection) => (
@@ -126,8 +117,8 @@ export function ConnectionsPage() {
         {showConnect && (
           <section aria-labelledby="connect-store">
             <SectionHeading
-              title={<span id="connect-store">Conectează un magazin</span>}
-              description="Alege platforma; fiecare card spune ce citește conectorul și ce nu poate face."
+              title={<span id="connect-store">Connect a store</span>}
+              description="Pick the platform; each card says what the connector reads and what it cannot do."
             />
             <div role="radiogroup" aria-labelledby="connect-store" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {PLATFORM_ORDER.map((id) => {
@@ -153,13 +144,13 @@ export function ConnectionsPage() {
                   <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">{PLATFORM_CATALOG[platform].howItWorks}</p>
                   <div className="mt-3 grid gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Ce citește</p>
+                      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">What it reads</p>
                       <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-[19px] text-foreground/80">
                         {PLATFORM_CATALOG[platform].reads.map((item) => <li key={item}>{item}</li>)}
                       </ul>
                     </div>
                     <div>
-                      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Limite</p>
+                      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Limits</p>
                       <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-[19px] text-muted-foreground">
                         {PLATFORM_CATALOG[platform].limits.map((item) => <li key={item}>{item}</li>)}
                       </ul>
@@ -167,14 +158,14 @@ export function ConnectionsPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <ConnectForm platform={platform} mode="connect" onConnected={handleConnected} onCancel={() => setPlatform(null)} returnTo="magazin" />
+                  <ConnectForm platform={platform} mode="connect" onConnected={handleConnected} onCancel={() => setPlatform(null)} returnTo="store" />
                 </div>
               </Card>
             )}
 
             <p className="mt-4 flex max-w-[760px] items-start gap-2 text-xs leading-[18px] text-muted-foreground">
               <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
-              Cheile de acces sunt criptate la salvare și nu mai pot fi citite din panou. Conectorul citește doar comenzi, clienți și produse; nu modifică nimic în magazin.
+              Access keys are encrypted when saved and can no longer be read from the dashboard. The connector only reads orders, customers and products; it changes nothing in the store.
             </p>
           </section>
         )}
@@ -183,9 +174,9 @@ export function ConnectionsPage() {
       <Dialog open={reconnect !== null} onOpenChange={(open) => !open && setReconnect(null)}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Reconectează magazinul</DialogTitle>
+            <DialogTitle>Reconnect the store</DialogTitle>
             <DialogDescription>
-              {reconnect ? PLATFORM_CATALOG[reconnect.platform].name : ''} · Noile chei le înlocuiesc pe cele vechi; datele sincronizate rămân.
+              {reconnect ? PLATFORM_CATALOG[reconnect.platform].name : ''} · The new keys replace the old ones; the synced data stays.
             </DialogDescription>
           </DialogHeader>
           {reconnect && (
@@ -195,7 +186,7 @@ export function ConnectionsPage() {
               prefill={reconnect.prefill}
               onConnected={handleConnected}
               onCancel={() => setReconnect(null)}
-              returnTo="magazin"
+              returnTo="store"
             />
           )}
         </DialogContent>

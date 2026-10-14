@@ -13,17 +13,9 @@ import { StepHeader } from '../StepIndicator'
 
 type StepHeaderProps = React.ComponentProps<typeof StepHeader>
 
-/** StepHeader with the store flow's labels: the eyebrow reads „Pasul 3 · Acces și sincronizare”. */
+/** StepHeader with the store flow's labels: the eyebrow reads "Step 3 · Access & sync". */
 export function CommerceStepHeader(props: Omit<StepHeaderProps, 'steps' | 'stepWord'>) {
-  return <StepHeader steps={COMMERCE_ONBOARDING_STEPS} stepWord="Pasul" {...props} />
-}
-
-/** Field's `optional` marker says "Optional"; the store flow passes this as `labelAction` instead. */
-export const OPTIONAL_LABEL = <span className="text-xs leading-4 text-muted-foreground">Opțional</span>
-
-/** What Field would render as `optional`, in Romanian, for a field that is not required. */
-export function optionalLabel(required: boolean): React.ReactNode {
-  return required ? undefined : OPTIONAL_LABEL
+  return <StepHeader steps={COMMERCE_ONBOARDING_STEPS} {...props} />
 }
 
 interface ErrorBlockProps {
@@ -35,8 +27,8 @@ interface ErrorBlockProps {
   className?: string
 }
 
-/** A failed request: the server's (Romanian) message and a retry. */
-export function ErrorBlock({ title, message, onRetry, retryLabel = 'Reîncearcă', retrying, className }: ErrorBlockProps) {
+/** A failed request: the server's message and a retry. */
+export function ErrorBlock({ title, message, onRetry, retryLabel = 'Retry', retrying, className }: ErrorBlockProps) {
   return (
     <Alert variant="destructive" className={className}>
       <AlertCircle aria-hidden="true" />
@@ -44,7 +36,7 @@ export function ErrorBlock({ title, message, onRetry, retryLabel = 'Reîncearcă
       <AlertDescription>{message}</AlertDescription>
       {onRetry && (
         <AlertAction>
-          <Button variant="outline" size="sm" onClick={onRetry} loading={retrying} loadingText="Se reîncearcă…">
+          <Button variant="outline" size="sm" onClick={onRetry} loading={retrying} loadingText="Retrying…">
             <RotateCw aria-hidden="true" />
             {retryLabel}
           </Button>

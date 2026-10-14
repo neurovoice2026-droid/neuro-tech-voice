@@ -50,6 +50,9 @@ const userWrites = () => state.user!.calls.filter((c: FakeCall) => c.op !== 'sel
 
 const SELECTED_AT = '2026-10-01T00:00:00Z'
 
+/** The English refusal Step 0 shows (toast) when the type was already chosen. */
+const ALREADY_SELECTED_MESSAGE = 'The business type has already been chosen and cannot be changed.'
+
 beforeEach(() => {
   state.user = fakeDb(userHandler)
   state.admin = fakeDb(adminHandler)
@@ -105,7 +108,7 @@ describe('POST /api/onboarding/business-type', () => {
       state.org = { ...state.org, business_type: 'services', business_type_selected_at: SELECTED_AT, onboarding_step: 5 }
       const res = await post({ business_type: 'ecommerce' })
       expect(res.status).toBe(409)
-      expect(await res.json()).toMatchObject({ code: 'precondition_failed', details: { reason: 'already_selected' } })
+      expect(await res.json()).toMatchObject({ code: 'precondition_failed', error: ALREADY_SELECTED_MESSAGE, details: { reason: 'already_selected' } })
       expect(orgUpdates()).toHaveLength(0)
       expect(state.org).toMatchObject({ business_type: 'services', onboarding_step: 5 })
       expect(onboardingVariant(state.org)).toBe('services')
@@ -141,11 +144,14 @@ describe('POST /api/onboarding/business-type', () => {
     })
   })
 
-  it('refuses any change after onboarding is completed', async () => {
+  it('refuses any change after onboarding is completed, in English', async () => {
     state.org = { ...state.org, business_type: 'services', onboarding_completed: true }
     const res = await post({ business_type: 'ecommerce' })
     expect(res.status).toBe(409)
-    expect(await res.json()).toMatchObject({ details: { reason: 'onboarding_completed' } })
+    expect(await res.json()).toMatchObject({
+      error: 'The business type can no longer be changed once setup is complete.',
+      details: { reason: 'onboarding_completed' },
+    })
     expect(orgUpdates()).toHaveLength(0)
   })
 
@@ -156,10 +162,10 @@ describe('POST /api/onboarding/business-type', () => {
     expect(orgUpdates()).toHaveLength(0)
   })
 
-  it('reports 503 not_configured when migration 024 is not applied', async () => {
+  it('reports 503 not_configured, in English, when migration 024 is not applied', async () => {
     state.user = fakeDb((c) => (c.table === 'organizations' ? { data: null, error: { message: 'column does not exist', code: '42703' } } : { data: null, error: null }))
     const res = await post({ business_type: 'ecommerce' })
     expect(res.status).toBe(503)
-    expect(await res.json()).toMatchObject({ code: 'not_configured' })
+    expect(await res.json()).toMatchObject({ code: 'not_configured', error: 'Choosing a business type is not available yet.' })
   })
 })

@@ -171,13 +171,13 @@ describe('dispatch', () => {
       expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: boom }, NOW)).toBe('retry')
       const stored = String(db.tables.commerce_automation_runs[0].error_message)
       expect(stored).not.toMatch(/elevenlabs|twilio|insert failed|constraint|request_id|422/i)
-      expect(stored).toMatch(/Se reîncearcă automat\.$/)
+      expect(stored).toMatch(/Retrying automatically\.$/)
       expect(db.tables.commerce_automation_runs[0].error_code).toBe('dispatch_failed')
     }
-    expect(dispatchFailureMessage(raw[0], false)).toBe('Furnizorul de voce a respins apelul.')
-    expect(dispatchFailureMessage(new ProviderError({ system: 'elevenlabs', operation: 'twilio.outbound_call', code: 'timeout' }), true)).toBe('Furnizorul de voce nu a răspuns. Se reîncearcă automat.')
-    expect(dispatchFailureMessage(raw[1], false)).toBe('Apelul nu a putut fi pornit.')
-    expect(dispatchFailureMessage('not even an Error', false)).toBe('Apelul nu a putut fi pornit.')
+    expect(dispatchFailureMessage(raw[0], false)).toBe('The voice provider rejected the call.')
+    expect(dispatchFailureMessage(new ProviderError({ system: 'elevenlabs', operation: 'twilio.outbound_call', code: 'timeout' }), true)).toBe('The voice provider did not respond. Retrying automatically.')
+    expect(dispatchFailureMessage(raw[1], false)).toBe('The call could not be started.')
+    expect(dispatchFailureMessage('not even an Error', false)).toBe('The call could not be started.')
   })
 
   it("unlinks the previous attempt's call before a retry dials, so only the new call can settle the run", async () => {
@@ -202,7 +202,7 @@ describe('dispatch', () => {
     db.tables.commerce_carts = [cart('open')]
     let [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
     expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('cancelled')
-    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'cancelled', error_code: 'cart_not_abandoned', eligibility_reason: 'Coșul nu este abandonat' })
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'cancelled', error_code: 'cart_not_abandoned', eligibility_reason: 'Cart is not abandoned' })
     expect(start).not.toHaveBeenCalled()
 
     db = seed({ run: cartRun, automation: { type: 'abandoned_cart' } })
@@ -263,7 +263,7 @@ describe('reconcile', () => {
     // The row is still 'ringing' six hours later: nobody knows whether the customer was reached.
     db.tables.calls = [{ id: CALL_A, org_id: ORG_A, status: 'ringing', started_at: '2026-10-13T02:00:00Z', ended_at: null, duration_seconds: null, termination_reason: null, outcome: null, summary: null, commerce_run_id: 'run-1' }]
     expect(await reconcileStaleCallingRuns(asClient(db), log, NOW)).toBe(1)
-    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'failed', outcome: 'failed', dispatch_uncertain: true, error_code: 'dispatch_uncertain', error_message: 'Apelul nu a putut fi confirmat; nu se reia automat.' })
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'failed', outcome: 'failed', dispatch_uncertain: true, error_code: 'dispatch_uncertain', error_message: 'The call could not be confirmed; it is not retried automatically.' })
     expect(await claimDueRuns(asClient(db), 'w2', 10)).toHaveLength(0)
     vi.setSystemTime(new Date('2026-10-14T08:00:00Z'))
     expect(await claimDueRuns(asClient(db), 'w2', 10)).toHaveLength(0)

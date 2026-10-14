@@ -10,13 +10,13 @@ import { OrbLoader } from '@/components/shared/OrbLoader'
 import { cn } from '@/lib/utils'
 import { formatCount } from './format'
 
-// The pieces every Magazin list shares: the search pill, the white panel
-// that holds a table through its loading / error / empty / filled states, and
-// the "Încarcă mai multe" footer of a cursor-paged list.
+// The pieces every Store list shares: the search pill, the white panel that
+// holds a table through its loading / error / empty / filled states, and the
+// "Load more" footer of a cursor-paged list.
 
-/** The dashboard's CardError with the Magazin section's Romanian retry button (the shared default is English). */
+/** The dashboard's CardError with the Store section's retry wording. */
 export function CommerceCardError(props: Omit<React.ComponentProps<typeof CardError>, 'retryLabel' | 'retryingLabel'>) {
-  return <CardError retryLabel="Încearcă din nou" retryingLabel="Se reîncarcă…" {...props} />
+  return <CardError retryLabel="Try again" retryingLabel="Reloading…" {...props} />
 }
 
 interface SearchFieldProps {
@@ -47,7 +47,7 @@ export function SearchField({ value, onChange, placeholder, label, className }: 
           variant="ghost"
           size="icon-xs"
           onClick={() => onChange('')}
-          aria-label="Șterge căutarea"
+          aria-label="Clear search"
           className="tap-44 absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
         >
           <X />
@@ -86,14 +86,14 @@ export function RecordsPanel({
   if (isLoading) {
     body = <OrbLoader label={loadingLabel} className={minHeightClassName} />
   } else if (error && isEmpty) {
-    body = <CommerceCardError message="Lista nu a putut fi încărcată." detail={error} onRetry={onRetry} className="py-10" />
+    body = <CommerceCardError message="The list could not be loaded." detail={error} onRetry={onRetry} className="py-10" />
   } else if (isEmpty) {
     body = (
       <EmptyState
         bare
         icon={filtered ? Search : emptyIcon}
-        title={filtered ? 'Niciun rezultat' : emptyTitle}
-        description={filtered ? 'Niciun rând nu se potrivește cu căutarea sau filtrele alese.' : emptyDescription}
+        title={filtered ? 'No results' : emptyTitle}
+        description={filtered ? 'No row matches the search or the selected filters.' : emptyDescription}
         action={filtered ? undefined : emptyAction}
       />
     )
@@ -103,7 +103,7 @@ export function RecordsPanel({
         {error && (
           <CommerceCardError
             role="status"
-            message="Lista nu a putut fi reîmprospătată; rândurile afișate pot fi vechi."
+            message="The list could not be refreshed; the rows shown may be out of date."
             detail={error}
             onRetry={onRetry}
             className="border-b border-rule"
@@ -126,21 +126,21 @@ interface LoadMoreFooterProps {
   onLoadMore: () => void
 }
 
-/** "25 din 1.240" plus the next-page button; a failed page shows its error with the button as the retry. */
+/** "25 of 1,240" plus the next-page button; a failed page shows its error with the button as the retry. */
 export function LoadMoreFooter({ shown, total, hasMore, isLoadingMore, loadMoreError, onLoadMore }: LoadMoreFooterProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-5 py-3">
       <p className="text-[13px] text-muted-foreground tabular-nums" aria-live="polite">
-        {typeof total === 'number' ? `${formatCount(shown)} din ${formatCount(total)}` : `${formatCount(shown)} afișate`}
+        {typeof total === 'number' ? `${formatCount(shown)} of ${formatCount(total)}` : `${formatCount(shown)} shown`}
         {loadMoreError && <span className="ml-2 text-destructive">{loadMoreError}</span>}
       </p>
       {hasMore ? (
-        <Button variant="outline" size="sm" onClick={onLoadMore} loading={isLoadingMore} loadingText="Se încarcă…">
+        <Button variant="outline" size="sm" onClick={onLoadMore} loading={isLoadingMore} loadingText="Loading…">
           <ChevronDown aria-hidden="true" />
-          {loadMoreError ? 'Încearcă din nou' : 'Încarcă mai multe'}
+          {loadMoreError ? 'Try again' : 'Load more'}
         </Button>
       ) : (
-        shown > 0 && <span className="text-xs leading-4 text-muted-foreground">Toate rândurile sunt afișate</span>
+        shown > 0 && <span className="text-xs leading-4 text-muted-foreground">All rows are shown</span>
       )}
     </div>
   )

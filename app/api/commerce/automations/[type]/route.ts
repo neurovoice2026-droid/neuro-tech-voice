@@ -10,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ type
     assertSameOrigin(request)
     const ctx = await requireCommerceOrg(log)
     const { type } = await params
-    if (!(AUTOMATION_TYPES as readonly string[]).includes(type)) throw new RequestError('not_found', 'Automatizarea nu există.', 404)
+    if (!(AUTOMATION_TYPES as readonly string[]).includes(type)) throw new RequestError('not_found', 'This automation does not exist.', 404)
     const patch = await parseJsonBody(request, AutomationPatchSchema, 32 * 1024)
     const connection = await ownedConnection(ctx.db, ctx.org.id, patch.connection_id)
     await enforceRateLimit(RATE_LIMITS.commerceAutomationWrite, ctx.org.id)

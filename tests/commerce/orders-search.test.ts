@@ -1,7 +1,7 @@
 // GET /api/commerce/orders?q= searches the columns the Orders page advertises
-// ("numărul comenzii, nume sau oraș"): order number, contact name and shipping
-// city, plus the platform id. The memory DB ignores or(), so the filter the
-// route sends to PostgREST is captured and inspected.
+// ("Search by order number, name or city"): order number, contact name and
+// shipping city, plus the platform id. The memory DB ignores or(), so the
+// filter the route sends to PostgREST is captured and inspected.
 import { describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({ db: null as unknown }))

@@ -1,6 +1,6 @@
 'use client'
 
-// Fetch helpers and the two generic hooks of the Magazin section, modelled on
+// Fetch helpers and the two generic hooks of the Store section, modelled on
 // hooks/useDashboardMetrics.ts: AbortController per request, the server's
 // `{ error, code, details }` body as the message, the last good data kept on
 // a failed refresh. Nothing here touches browser storage: server state is
@@ -9,8 +9,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PagedDto } from '@/lib/commerce/types'
 
-export const NETWORK_ERROR = 'Conexiunea a eșuat. Verifică internetul și încearcă din nou.'
-export const TIMEOUT_ERROR = 'Serverul nu a răspuns la timp. Încearcă din nou.'
+export const NETWORK_ERROR = 'The connection failed. Check your internet connection and try again.'
+export const TIMEOUT_ERROR = 'The server did not respond in time. Try again.'
 /** Default budget of one request; callers that wait on the store (connect, test) pass a longer one. */
 export const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -36,13 +36,17 @@ export class CommerceApiError extends Error {
   }
 }
 
+/** What a failed response reads as when the route sent no message of its own. */
+export const STATUS_FALLBACK: Readonly<Record<number, string>> = {
+  401: 'Your session has expired. Sign in again.',
+  403: 'This action is not allowed for this account.',
+  404: 'The item was not found. It may have been deleted in the meantime.',
+  429: 'Too many requests. Wait a moment and try again.',
+  503: 'The service is unavailable right now. Try again in a few minutes.',
+}
+
 function fallbackByStatus(status: number, fallback: string): string {
-  if (status === 401) return 'Sesiunea a expirat. Autentifică-te din nou.'
-  if (status === 403) return 'Acțiunea nu este permisă pentru acest cont.'
-  if (status === 404) return 'Elementul nu a fost găsit. Poate a fost șters între timp.'
-  if (status === 429) return 'Prea multe cereri. Așteaptă un moment și încearcă din nou.'
-  if (status === 503) return 'Serviciul este indisponibil momentan. Încearcă din nou în câteva minute.'
-  return fallback
+  return STATUS_FALLBACK[status] ?? fallback
 }
 
 /** Reads a failed response into a CommerceApiError (never throws; a non-JSON body means "no server message"). */
@@ -112,7 +116,7 @@ export function commerceErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof CommerceApiError) return err.message
   if (err instanceof TypeError) return NETWORK_ERROR
   if (err instanceof DOMException) {
-    // Abort / timeout reasons carry English browser text; never show that.
+    // Abort / timeout reasons carry the browser's own wording; never show that.
     if (err.name === 'TimeoutError') return TIMEOUT_ERROR
     if (err.name === 'AbortError') return fallback
   }

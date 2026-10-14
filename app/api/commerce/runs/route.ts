@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     for (const key of ['automation_id', 'connection_id', 'call_id'] as const) {
       const v = url.searchParams.get(key)
       if (v) {
-        if (!uuid.safeParse(v).success) throw new RequestError('invalid_request', 'Identificator invalid.', 400)
+        if (!uuid.safeParse(v).success) throw new RequestError('invalid_request', 'Invalid identifier.', 400)
         q = q.eq(key, v)
       }
     }

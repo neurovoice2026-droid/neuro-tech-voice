@@ -39,16 +39,15 @@ interface Classified {
 /** Public-safe classification of a sync failure (never the raw provider body or a secret). */
 export function classifySyncError(err: unknown): Classified {
   if (err instanceof ConnectionError) return { code: err.code, message: err.publicMessage, retryable: err.retryable }
-  if (err instanceof CommerceCryptoError) return { code: 'credentials_unreadable', message: 'Datele de acces nu pot fi citite: reconectează magazinul.', retryable: false }
-  if (err instanceof UnsafeUrlError) return { code: 'ssrf_blocked', message: 'Adresa magazinului nu este permisă.', retryable: false }
+  if (err instanceof CommerceCryptoError) return { code: 'credentials_unreadable', message: 'The stored credentials cannot be read: reconnect the store.', retryable: false }
+  if (err instanceof UnsafeUrlError) return { code: 'ssrf_blocked', message: 'The store URL is not allowed.', retryable: false }
   if (err instanceof StoreHttpError) {
-    if (err.code === 'timeout' || err.code === 'network') return { code: err.code, message: 'Magazinul nu a răspuns. Se reîncearcă automat.', retryable: true }
-    if (err.code === 'redirect') return { code: 'redirect', message: 'Magazinul răspunde cu o redirecționare: folosește adresa finală https.', retryable: false }
-    return { code: err.code, message: 'Răspuns neașteptat de la magazin. Se reîncearcă automat.', retryable: true }
+    if (err.code === 'timeout' || err.code === 'network') return { code: err.code, message: 'The store did not respond. Retrying automatically.', retryable: true }
+    if (err.code === 'redirect') return { code: 'redirect', message: 'The store answers with a redirect: use the final https address.', retryable: false }
+    return { code: err.code, message: 'Unexpected response from the store. Retrying automatically.', retryable: true }
   }
-  const message = err instanceof Error ? err.message : String(err)
-  // Database or coding errors: retry a few times, then surface.
-  return { code: 'internal', message: 'Sincronizarea a întâmpinat o eroare internă. Se reîncearcă automat.', retryable: true, ...(message ? {} : {}) }
+  // Database or coding errors (their own text stays in the server log): retry a few times, then surface.
+  return { code: 'internal', message: 'Sync hit an internal error. Retrying automatically.', retryable: true }
 }
 
 /** Exponential backoff with jitter: 1, 2, 4, 8... minutes (capped at 60) ± 20 %. */
@@ -94,12 +93,12 @@ export async function runSyncJob(db: SupabaseClient, job: SyncJobRow, log: Logge
   const l = log.child({ orgId: job.org_id, connectionId: job.connection_id, jobId: job.id })
   const connection = await loadConnection(db, job.connection_id)
   if (!connection || connection.status === 'disconnected' || connection.status === 'draft') {
-    await finishJob(db, job, opts.owner, { status: 'cancelled', error_code: 'connection_inactive', error_message: 'Conexiunea nu mai este activă.' })
+    await finishJob(db, job, opts.owner, { status: 'cancelled', error_code: 'connection_inactive', error_message: 'The connection is no longer active.' })
     return { jobId: job.id, status: 'failed', counts: {}, error: 'connection_inactive' }
   }
   if (job.attempts > job.max_attempts) {
-    await finishJob(db, job, opts.owner, { status: 'failed', error_code: 'too_many_attempts', error_message: 'Sincronizarea a eșuat de prea multe ori.' })
-    await markConnectionError(db, connection, 'sync_failed', 'Sincronizarea a eșuat repetat; verifică accesul la magazin.', l)
+    await finishJob(db, job, opts.owner, { status: 'failed', error_code: 'too_many_attempts', error_message: 'Sync failed too many times.' })
+    await markConnectionError(db, connection, 'sync_failed', 'Sync failed repeatedly; check the store access.', l)
     return { jobId: job.id, status: 'failed', counts: {}, error: 'too_many_attempts' }
   }
   const counts: Record<string, number> = Object.fromEntries(Object.entries(jobCursor(job.counts)).filter(([, v]) => typeof v === 'number')) as Record<string, number>

@@ -27,6 +27,7 @@ import { deferBackground } from '@/lib/observability/telemetry'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import { ensurePlanPriceId } from '@/lib/stripe/store-prices'
 import { sendEmail } from '@/lib/email/client'
 import { welcomeEmail } from '@/lib/email/templates'
 import {
@@ -47,14 +48,17 @@ import {
 } from '@/lib/agents/ensure-agent'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import { TOTAL_COMMERCE_ONBOARDING_STEPS, isEcommerceOrg } from '@/lib/commerce/business-type'
-import { PLANS, stripePriceId } from '@/types'
-import type { BillingInterval, Plan } from '@/types'
+import { PLANS, PLAN_NOT_AVAILABLE_MESSAGE, planAllowedFor, stripePriceId } from '@/types'
+import type { BillingInterval, BusinessType, Plan } from '@/types'
 import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
 
 // Agent sync with the primary provider + Stripe customer/session creation.
 export const maxDuration = 60
 
-const PLAN_VALUES = ['trial', 'starter', 'pro', 'business', 'custom'] as const satisfies readonly Plan[]
+const PLAN_VALUES = [
+  'trial', 'starter', 'pro', 'business', 'custom',
+  'store_starter', 'store_growth', 'store_scale', 'store_enterprise',
+] as const satisfies readonly Plan[]
 
 /** Agent columns set here that end up in the provider-side agent (AgentSpec). */
 const PROVIDER_AGENT_FIELDS = ['name', 'language', 'system_prompt', 'first_message'] as const
@@ -102,6 +106,18 @@ export async function POST(request: Request) {
       .eq('id', org.id)
       .single()
     if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
+
+    // An online store launches on the trial or a store plan, every other
+    // organization on the trial or a service plan: the row decides, never the
+    // client, and the check runs before anything is written.
+    const businessType = (orgRow.business_type ?? null) as BusinessType | null
+    if (!planAllowedFor(body.plan, businessType)) {
+      throw new RequestError('plan_not_available', PLAN_NOT_AVAILABLE_MESSAGE, 409, {
+        reason: 'plan_not_available',
+        plan: body.plan,
+        business_type: businessType,
+      })
+    }
 
     const companyName = (body.company?.name ?? orgRow.name ?? null) as string | null
     const agent = await ensureAgent(org.id, defaultAgentName(companyName))
@@ -191,15 +207,31 @@ export async function POST(request: Request) {
     // payment/trial actually starts. In demo mode (no Stripe) we grant it directly
     // so the product is usable without a payment provider.
     const planConfig = PLANS[body.plan]
-    // Self-serve paid tiers go through Stripe checkout; trial and custom (which
-    // have no price id) land on the trial tier until billing/sales takes over.
-    // Fall back to the monthly price if an annual one isn't configured yet.
-    const priceId = stripePriceId(body.plan, interval) || planConfig.stripe_price_id
+    // Self-serve paid tiers go through Stripe checkout; the trial and the
+    // sales-led tiers (no price id) land on the trial tier until billing/sales
+    // takes over. Service plans use the env price ids (the monthly one when an
+    // annual one isn't configured yet); store plans are found or created in
+    // Stripe by lookup key, which needs no manual setup but can fail like any
+    // API call, in which case the trial fallback below applies.
+    let priceId = ''
+    let storePriceFailed = false
+    if (planConfig.family === 'ecommerce') {
+      if (!planConfig.contact_sales && isStripeConfigured()) {
+        try {
+          priceId = await ensurePlanPriceId(body.plan, interval)
+        } catch (err) {
+          storePriceFailed = true
+          log.error('onboarding.store_price_failed', err, { plan: body.plan, interval })
+        }
+      }
+    } else {
+      priceId = stripePriceId(body.plan, interval) || planConfig.stripe_price_id
+    }
     const willCheckout = !!priceId && isStripeConfigured()
     // Billing configured but this paid tier has no price id: never grant a
     // paid plan for free — fall back to the trial and flag the misconfiguration.
     const paidWithoutPrice = isStripeConfigured() && !planConfig.contact_sales && planConfig.price_monthly > 0 && !priceId
-    if (paidWithoutPrice) log.error('onboarding.price_not_configured', null, { plan: body.plan, interval })
+    if (paidWithoutPrice && !storePriceFailed) log.error('onboarding.price_not_configured', null, { plan: body.plan, interval })
     const effectivePlan: Plan = willCheckout || planConfig.contact_sales || paidWithoutPrice ? 'trial' : body.plan
 
     // plan / minutes_limit are platform-managed columns (guard trigger): written
@@ -209,7 +241,7 @@ export async function POST(request: Request) {
     // cancelled checkout returns to onboarding instead of dumping them in the app.
     // That return must land on the launch step of the flow the org is in: the
     // service flow launches at step 4, the store flow (both post here) at its
-    // last step — a store org sent back to 4 would reopen "Automatizări" instead.
+    // last step — a store org sent back to 4 would reopen the automations step instead.
     const launchStep = isEcommerceOrg(orgRow) ? TOTAL_COMMERCE_ONBOARDING_STEPS : 4
     const admin = createAdminClient()
     const { error: planErr } = await admin
@@ -266,10 +298,12 @@ export async function POST(request: Request) {
           billing_address_collection: 'required',
           tax_id_collection: { enabled: true },
           customer_update: { address: 'auto', name: 'auto' },
-          metadata: { org_id: org.id },
+          metadata: { org_id: org.id, ntv_plan: body.plan },
           subscription_data: {
             trial_period_days: 14,
-            metadata: { org_id: org.id },
+            // ntv_plan is the billing webhook's second signal for the plan,
+            // after the price id (a store price carries it too).
+            metadata: { org_id: org.id, ntv_plan: body.plan },
           },
         })
 

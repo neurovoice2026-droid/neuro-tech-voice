@@ -332,7 +332,8 @@ describe('validateConnection', () => {
     const err = await failure(adapter.validateConnection({ storeUrl: BASE, secrets: bearerSecrets }, fakeLogger().log))
     expect(err.code).toBe(code)
     expect(err.retryable).toBe(retryable)
-    expect(err.publicMessage).toMatch(/[ăâîșț]|API|magazin/i)
+    expect(err.publicMessage).toMatch(/\bAPI\b|GET \/health/)
+    expect(err.publicMessage).not.toMatch(/[ăâîșț]/)
     expectCleanError(err)
   })
 

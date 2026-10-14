@@ -1,6 +1,6 @@
 'use client'
 
-// Step 5 — Agentul tău: the agent form, then the voice, then an optional
+// Step 5 — Your agent: the agent form, then the voice, then an optional
 // browser test. The phase a reload lands on comes from what is saved: a
 // prompt means the form is done, a voice means the picker is done.
 
@@ -27,7 +27,7 @@ export function AgentStep() {
   if (phase === 'form') {
     return (
       <div>
-        <CommerceStepHeader step={5} title="Configurează agentul magazinului" description="Cum se prezintă, ce ton are și ce spune în apelurile automate și la telefon." />
+        <CommerceStepHeader step={5} title="Set up your store agent" description="How it introduces itself, its tone, and what it says in automated calls and on the phone." />
         <AgentForm onBack={() => goTo(4)} onSaved={() => setPhase('voice')} />
       </div>
     )
@@ -36,7 +36,7 @@ export function AgentStep() {
   if (phase === 'voice') {
     return (
       <div>
-        <CommerceStepHeader step={5} title="Alege vocea agentului" description="Ascultă vocile disponibile pentru limba agentului și alege-o pe cea potrivită magazinului." />
+        <CommerceStepHeader step={5} title="Choose the agent's voice" description="Listen to the voices available for the agent's language and pick the one that suits your store." />
         <VoiceStep onBack={() => setPhase('form')} onSaved={() => setPhase('test')} />
       </div>
     )
@@ -44,14 +44,14 @@ export function AgentStep() {
 
   return (
     <div>
-      <CommerceStepHeader step={5} title="Testează agentul" description="Opțional: vorbește cu agentul din browser înainte de lansare." />
+      <CommerceStepHeader step={5} title="Test your agent" description="Optional: talk to the agent in your browser before launch." />
       <StepBody className="space-y-6">
         <div className="flex flex-wrap items-center gap-2 text-[13px] leading-[19px] text-muted-foreground">
           <StatusChip tone="neutral" icon={<Mic className="size-3.5" aria-hidden="true" />}>
-            {agent?.voice_name ? `Vocea: ${agent.voice_name}` : 'Voce salvată'}
+            {agent?.voice_name ? `Voice: ${agent.voice_name}` : 'Voice saved'}
           </StatusChip>
           <Button variant="link" size="sm" onClick={() => setPhase('voice')} className="h-auto p-0 text-[13px]">
-            Schimbă vocea
+            Change voice
           </Button>
         </div>
 
@@ -61,8 +61,8 @@ export function AgentStep() {
           <Alert role="note">
             <Info aria-hidden="true" />
             <AlertDescription>
-              Agentul nu este încă pornit, așa că nu poate fi testat din browser. Vei putea vorbi cu {agent?.name || 'agentul'} imediat după lansare (pasul
-              următor) și oricând din pagina Agent.
+              The agent is not switched on yet, so it cannot be tested in the browser. You will be able to talk to {agent?.name || 'the agent'} right after
+              launch (the next step) and any time from the Agent page.
             </AlertDescription>
           </Alert>
         )}
@@ -71,10 +71,10 @@ export function AgentStep() {
       <StepActions>
         <Button type="button" variant="ghost" size="lg" onClick={() => setPhase('voice')}>
           <ArrowLeft aria-hidden="true" />
-          Înapoi
+          Back
         </Button>
         <Button type="button" size="lg" onClick={() => goTo(6)} className="ml-auto max-md:flex-1">
-          Continuă
+          Continue
           <ArrowRight aria-hidden="true" />
         </Button>
       </StepActions>

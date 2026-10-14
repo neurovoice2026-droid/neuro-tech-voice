@@ -15,6 +15,7 @@ import {
   isVoiceCapacityProviderError,
   maxCustomVoicesPerOrg,
   quotaBlocker,
+  requiredPlanForCustomVoices,
   resetVoiceQuotaCache,
 } from './voice-capacity'
 import { createLogger } from '@/lib/observability/logger'
@@ -41,6 +42,24 @@ describe('plan gate', () => {
     expect(customVoicesAllowed('enterprise-hack')).toBe(false)
     expect(() => assertCustomVoicePlan('starter')).toThrow(expect.objectContaining({ status: 403, details: { reason: 'plan', required_plan: 'pro' } }))
     expect(() => assertCustomVoicePlan('pro')).not.toThrow()
+  })
+
+  it('store plans follow the service plan priced like them, and the upgrade hint names a plan the store can buy', () => {
+    expect(customVoicesAllowed('store_starter')).toBe(false)
+    expect(customVoicesAllowed('store_growth')).toBe(true)
+    expect(customVoicesAllowed('store_scale')).toBe(true)
+    expect(customVoicesAllowed('store_enterprise')).toBe(true)
+    expect(() => assertCustomVoicePlan('store_starter')).toThrow(expect.objectContaining({
+      status: 403,
+      message: 'Custom voices are available on the Store Growth plan and above.',
+      details: { reason: 'plan', required_plan: 'store_growth' },
+    }))
+    // On the trial the business type decides which family the hint comes from.
+    expect(requiredPlanForCustomVoices('trial', 'ecommerce')).toBe('store_growth')
+    expect(requiredPlanForCustomVoices('trial', 'services')).toBe('pro')
+    expect(requiredPlanForCustomVoices(null)).toBe('pro')
+    expect(() => assertCustomVoicePlan('trial', 'ecommerce')).toThrow(expect.objectContaining({ details: { reason: 'plan', required_plan: 'store_growth' } }))
+    expect(() => assertCustomVoicePlan('starter')).toThrow(expect.objectContaining({ message: 'Custom voices are available on the Pro plan and above.' }))
   })
 })
 

@@ -115,12 +115,12 @@ export const WOOCOMMERCE_WEBHOOK_TOPICS = ['order.created', 'order.updated', 'pr
  */
 export const CART_TOPIC = 'ntv.cart.updated'
 
-/** Merchant-facing notes (Romanian) stored in capabilities.notes. */
-export const NOTE_READ_ONLY_KEY = 'Cheia are doar drepturi de citire: datele ajung prin sincronizare periodică.'
-export const NOTE_NO_WEBHOOK_PERMISSION = 'Utilizatorul cheii nu poate administra webhook-uri WooCommerce: datele ajung prin sincronizare periodică.'
-export const NOTE_WEBHOOKS_UNVERIFIED = 'Înregistrarea webhook-urilor nu a putut fi verificată: datele ajung prin sincronizare periodică.'
-export const NOTE_NO_CART_SOURCE = 'Coșurile abandonate nu există în API-ul standard WooCommerce: apar doar după instalarea plugin-ului companion.'
-export const NOTE_NO_STORE_INFO = 'Cheia nu poate citi starea magazinului (nume, monedă, țară): utilizatorul cheii nu administrează WooCommerce.'
+/** Merchant-facing notes (English) stored in capabilities.notes. */
+export const NOTE_READ_ONLY_KEY = 'The API key is read-only: data arrives through periodic sync.'
+export const NOTE_NO_WEBHOOK_PERMISSION = 'The user behind the API key cannot manage WooCommerce webhooks: data arrives through periodic sync.'
+export const NOTE_WEBHOOKS_UNVERIFIED = 'Webhook registration could not be verified: data arrives through periodic sync.'
+export const NOTE_NO_CART_SOURCE = 'Abandoned carts do not exist in the standard WooCommerce API: they only appear once the companion plugin is installed.'
+export const NOTE_NO_STORE_INFO = 'The API key cannot read the store status (name, currency, country): the user behind the key does not manage WooCommerce.'
 
 /**
  * Connect-form secrets. WooCommerce issues `ck_` + 40 hex and `cs_` + 40 hex
@@ -157,10 +157,10 @@ export function canonicalStoreUrl(raw: string): { storeUrl: string; storeDomain:
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
   } catch (err) {
-    throw new ConnectionError('invalid_url', 'Adresa magazinului nu este validă.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
+    throw new ConnectionError('invalid_url', 'The store address is not valid.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
   }
-  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'Adresa magazinului trebuie să înceapă cu https://.', false, 'store url: not https')
-  if (url.username || url.password) throw new ConnectionError('invalid_url', 'Adresa magazinului nu poate conține utilizator și parolă.', false, 'store url: credentials')
+  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'The store address must start with https://.', false, 'store url: not https')
+  if (url.username || url.password) throw new ConnectionError('invalid_url', 'The store address cannot contain a user name and password.', false, 'store url: credentials')
   let path = url.pathname.replace(/\/wp-json(\/.*)?$/, '').replace(/\/+$/, '')
   if (path === '/') path = ''
   const host = url.hostname.toLowerCase()
@@ -206,7 +206,7 @@ function parseSecrets(secrets: ConnectionSecrets): WooCommerceSecrets {
   if (!parsed.success) {
     throw new ConnectionError(
       'unauthorized',
-      'Cheile API WooCommerce lipsesc sau au un format greșit (Consumer key începe cu ck_, Consumer secret cu cs_).',
+      'The WooCommerce API keys are missing or malformed (the Consumer key starts with ck_, the Consumer secret with cs_).',
       false,
       'woocommerce secrets: invalid shape',
     )
@@ -228,23 +228,23 @@ function looksLikeHtml(res: WcResponse): boolean {
 function unsafeUrlFailure(err: UnsafeUrlError): ConnectionError {
   const reason = err.reason
   if (/private or reserved|resolves to a private|local hosts/.test(reason)) {
-    return new ConnectionError('ssrf_blocked', 'Adresa magazinului indică o rețea privată sau locală; este necesară o adresă publică.', false, `store url: ${reason}`)
+    return new ConnectionError('ssrf_blocked', 'The store address points to a private or local network; a public address is required.', false, `store url: ${reason}`)
   }
-  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'Domeniul magazinului nu poate fi rezolvat (DNS).', true, `store url: ${reason}`)
-  return new ConnectionError('invalid_url', 'Adresa magazinului nu este validă (doar https, fără port neobișnuit).', false, `store url: ${reason}`)
+  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'The store domain cannot be resolved (DNS).', true, `store url: ${reason}`)
+  return new ConnectionError('invalid_url', 'The store address is not valid (https only, no unusual port).', false, `store url: ${reason}`)
 }
 
 function transportFailure(err: StoreHttpError, operation: string): ConnectionError {
   switch (err.code) {
     case 'timeout':
-      return new ConnectionError('timeout', 'Magazinul nu a răspuns la timp.', true, `woocommerce ${operation}: timeout`)
+      return new ConnectionError('timeout', 'The store did not respond in time.', true, `woocommerce ${operation}: timeout`)
     case 'redirect':
-      return new ConnectionError('redirect', 'Magazinul redirecționează către altă adresă; folosește adresa finală (https, cu sau fără www).', false, `woocommerce ${operation}: redirect ${err.status ?? ''}`.trim())
+      return new ConnectionError('redirect', 'The store redirects to another address; use the final address (https, with or without www).', false, `woocommerce ${operation}: redirect ${err.status ?? ''}`.trim())
     case 'too_large':
-      return new ConnectionError('invalid_response', 'Răspunsul magazinului este prea mare.', false, `woocommerce ${operation}: response too large`)
+      return new ConnectionError('invalid_response', 'The store response is too large.', false, `woocommerce ${operation}: response too large`)
     case 'network':
     case 'http':
-      return new ConnectionError('unreachable', 'Magazinul nu a putut fi contactat.', true, `woocommerce ${operation}: ${err.code}`)
+      return new ConnectionError('unreachable', 'The store could not be reached.', true, `woocommerce ${operation}: ${err.code}`)
   }
 }
 
@@ -253,7 +253,7 @@ function httpFailure(res: WcResponse, operation: string, write = false): Connect
   const code = errorCodeOf(res.json)
   const detail = `woocommerce ${operation}: HTTP ${res.status}${code ? ` (${code})` : ''}`
   if (res.status === 401 && write) {
-    return new ConnectionError('forbidden', 'Cheia API nu a fost acceptată pentru scriere: are nevoie de permisiuni Citire/Scriere și să nu fi fost revocată.', false, detail)
+    return new ConnectionError('forbidden', 'The API key was not accepted for writing: it needs Read/Write permissions and must not have been revoked.', false, detail)
   }
   if (res.status === 401 && code && code !== 'woocommerce_rest_authentication_error') {
     // No authentication error at all (e.g. woocommerce_rest_cannot_view): WooCommerce never saw a usable
@@ -261,23 +261,23 @@ function httpFailure(res: WcResponse, operation: string, write = false): Connect
     // unknown key) or the host dropped the Authorization header / is_ssl() is false behind a proxy.
     return new ConnectionError(
       'unauthorized',
-      'Magazinul nu a recunoscut cheile API: Consumer key inexistent, sau serverul nu transmite antetul Authorization către WordPress (găzduire CGI/FastCGI ori HTTPS nedetectat în spatele unui proxy).',
+      'The store did not recognize the API keys: the Consumer key does not exist, or the server does not pass the Authorization header on to WordPress (CGI/FastCGI hosting, or HTTPS not detected behind a proxy).',
       false,
       detail,
     )
   }
-  if (res.status === 401) return new ConnectionError('unauthorized', 'Cheile API nu au fost acceptate de magazin. Verifică Consumer key și Consumer secret (permisiuni Citire/Scriere).', false, detail)
-  if (res.status === 403) return new ConnectionError('forbidden', 'Cheia API nu are permisiunile necesare: utilizatorul cheii trebuie să poată administra WooCommerce.', false, detail)
+  if (res.status === 401) return new ConnectionError('unauthorized', 'The store did not accept the API keys. Check the Consumer key and Consumer secret (Read/Write permissions).', false, detail)
+  if (res.status === 403) return new ConnectionError('forbidden', 'The API key lacks the required permissions: the user behind the key must be able to manage WooCommerce.', false, detail)
   if (res.status === 404 || looksLikeHtml(res)) {
-    return new ConnectionError('not_a_store', 'La această adresă nu răspunde API-ul REST WooCommerce. Verifică adresa și că permalink-urile „pretty” sunt active.', false, detail)
+    return new ConnectionError('not_a_store', 'The WooCommerce REST API does not answer at this address. Check the address and that pretty permalinks are enabled.', false, detail)
   }
-  if (res.status === 429) return new ConnectionError('rate_limited', 'Magazinul limitează cererile; încearcă din nou în câteva minute.', true, detail)
-  if (res.status >= 500) return new ConnectionError('unreachable', 'Magazinul a răspuns cu o eroare de server; încearcă din nou.', true, detail)
-  return new ConnectionError('invalid_response', 'Magazinul a răspuns neașteptat.', false, detail)
+  if (res.status === 429) return new ConnectionError('rate_limited', 'The store is rate limiting requests; try again in a few minutes.', true, detail)
+  if (res.status >= 500) return new ConnectionError('unreachable', 'The store answered with a server error; try again.', true, detail)
+  return new ConnectionError('invalid_response', 'The store answered unexpectedly.', false, detail)
 }
 
 function invalidResponse(operation: string, what: string): ConnectionError {
-  return new ConnectionError('invalid_response', 'Răspunsul magazinului nu are formatul așteptat.', false, `woocommerce ${operation}: ${what}`)
+  return new ConnectionError('invalid_response', 'The store response does not have the expected format.', false, `woocommerce ${operation}: ${what}`)
 }
 
 async function wcRequest(deps: WooCommerceAdapterDeps, ctx: WcContext, operation: string, req: WcRequest): Promise<WcResponse> {
@@ -811,11 +811,11 @@ export function createWooCommerceAdapter(deps: WooCommerceAdapterDeps = {}): Com
 
     async registerWebhooks(connection: AdapterConnection, log: Logger): Promise<WebhookRegistration[]> {
       if (!connection.webhookUrl) {
-        throw new ConnectionError('not_configured', 'Adresa publică pentru webhook-uri nu este configurată pe platformă.', false, 'woocommerce webhooks: no webhook url')
+        throw new ConnectionError('not_configured', 'The public webhook address is not configured on the platform.', false, 'woocommerce webhooks: no webhook url')
       }
       const secrets = parseSecrets(connection.secrets)
       if (!secrets.webhook_secret) {
-        throw new ConnectionError('not_configured', 'Secretul pentru webhook-uri lipsește: reconectează magazinul.', false, 'woocommerce webhooks: no webhook secret')
+        throw new ConnectionError('not_configured', 'The webhook secret is missing: reconnect the store.', false, 'woocommerce webhooks: no webhook secret')
       }
       const ctx = contextFor(canonicalStoreUrl(connection.storeUrl).storeUrl, secrets)
       const deliveryUrl = connection.webhookUrl

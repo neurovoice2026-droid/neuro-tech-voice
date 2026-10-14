@@ -1,6 +1,6 @@
 'use client'
 
-// Step 2 — Conectează magazinul: which platform. Only the catalog's
+// Step 2 — Connect your store: which platform. Only the catalog's
 // description is shown here (what the connector reads, its truthful limits);
 // the real capabilities come from the connection once it exists (step 3).
 
@@ -52,7 +52,7 @@ export function PlatformStep() {
   const { goTo } = useCommerceNavigation()
   const [selected, setSelected] = useState<CommercePlatform | null>(platform)
 
-  // A live connection pins its platform: another store is connected from Magazin → Conexiuni
+  // A live connection pins its platform: another store is connected from Store → Connections
   // after disconnecting this one (step 3 offers that). A draft or disconnected row pins nothing.
   const live = isLiveConnection(connection)
   const descriptor = selected ? PLATFORM_CATALOG[selected] : null
@@ -67,8 +67,8 @@ export function PlatformStep() {
     <div>
       <CommerceStepHeader
         step={2}
-        title="Pe ce platformă este magazinul?"
-        description="Alege platforma ca să vezi ce poate citi conectorul și ce ai nevoie pentru conectare."
+        title="Which platform is your store on?"
+        description="Choose a platform to see what the connector reads and what you need to connect it."
       />
 
       <StepBody className="space-y-6">
@@ -76,13 +76,13 @@ export function PlatformStep() {
           <Alert>
             <Info aria-hidden="true" />
             <AlertDescription>
-              Magazinul <strong>{connection.store_domain}</strong> este deja conectat prin {platformName(connection.platform)}. Continuă ca să îi vezi starea.
+              Your store <strong>{connection.store_domain}</strong> is already connected through {platformName(connection.platform)}. Continue to see its status.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid gap-2">
-          <Label id="platform-label">Platforma magazinului</Label>
+          <Label id="platform-label">Store platform</Label>
           <div role="radiogroup" aria-labelledby="platform-label" className="grid gap-2 sm:grid-cols-2">
             {PLATFORM_ORDER.map((id) => {
               const p = PLATFORM_CATALOG[id]
@@ -94,7 +94,7 @@ export function PlatformStep() {
                   icon={ICONS[id]}
                   title={p.name}
                   description={p.tagline}
-                  badge={<Badge variant="secondary">{p.connectMode === 'oauth' ? 'Instalare OAuth' : 'Chei API'}</Badge>}
+                  badge={<Badge variant="secondary">{p.connectMode === 'oauth' ? 'OAuth install' : 'API keys'}</Badge>}
                   disabled={live && connection?.platform !== id}
                   className={id === 'custom' ? 'sm:col-span-2' : undefined}
                 />
@@ -107,18 +107,18 @@ export function PlatformStep() {
           <Card size="sm" className="gap-0 py-0">
             <CardContent className="space-y-5 py-5">
               <div>
-                <h3 className="text-[15px] leading-[22px] font-medium text-foreground">Cum funcționează</h3>
+                <h3 className="text-[15px] leading-[22px] font-medium text-foreground">How it works</h3>
                 <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">{descriptor.howItWorks}</p>
               </div>
-              <DetailList title="Ce citește din magazin" items={descriptor.reads} />
-              <DetailList title="Limite" items={descriptor.limits} />
+              <DetailList title="What it reads from your store" items={descriptor.reads} />
+              <DetailList title="Limits" items={descriptor.limits} />
               <a
                 href={descriptor.docsUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-[13px] leading-[19px] font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
               >
-                Documentație {descriptor.name}
+                {descriptor.name} documentation
                 <ExternalLink className="size-3.5" aria-hidden="true" />
               </a>
             </CardContent>
@@ -129,10 +129,10 @@ export function PlatformStep() {
       <StepActions>
         <Button type="button" variant="ghost" size="lg" onClick={() => goTo(1)}>
           <ArrowLeft aria-hidden="true" />
-          Înapoi
+          Back
         </Button>
         <Button type="button" size="lg" onClick={handleContinue} disabled={!selected} className="ml-auto max-md:flex-1">
-          Continuă
+          Continue
           <ArrowRight aria-hidden="true" />
         </Button>
       </StepActions>

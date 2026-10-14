@@ -28,6 +28,9 @@ const stripe = {
   },
 }
 vi.mock('@/lib/stripe/client', () => ({ getStripeClient: () => stripe.client, isStripeConfigured: () => stripe.configured }))
+// Store plans resolve their Stripe price by lookup key (lib/stripe/store-prices.ts).
+const ensurePlanPriceId = vi.fn()
+vi.mock('@/lib/stripe/store-prices', () => ({ ensurePlanPriceId: (...a: unknown[]) => ensurePlanPriceId(...a) }))
 vi.mock('@/lib/email/client', () => ({ sendEmail: vi.fn() }))
 
 const enforceRateLimit = vi.fn()
@@ -94,6 +97,7 @@ beforeEach(() => {
   stripe.configured = false
   stripe.client.customers.create.mockReset().mockResolvedValue({ id: 'cus_test' })
   stripe.client.checkout.sessions.create.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/s' })
+  ensurePlanPriceId.mockReset().mockResolvedValue('price_store_starter_month')
 })
 
 describe('POST /api/onboarding/complete', () => {
@@ -168,27 +172,108 @@ describe('POST /api/onboarding/complete', () => {
       }
     })
 
-    it('e-commerce org on a paid plan → stays on the store launch step (6) until the billing webhook completes it', async () => {
+    it('e-commerce org on a paid store plan → stays on the store launch step (6) until the billing webhook completes it', async () => {
       state.org.business_type = 'ecommerce'
       stripe.configured = true
-      const priceId = PLANS.pro.stripe_price_id
-      PLANS.pro.stripe_price_id = 'price_pro_month'
-      try {
-        const body = await (await complete({ plan: 'pro', agent: sameAgent })).json()
-        expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
-      } finally {
-        PLANS.pro.stripe_price_id = priceId
-      }
-      // The cancel_url is /onboarding: with step 4 the store flow would reopen "Automatizări".
+      const body = await (await complete({ plan: 'store_starter', agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      // The cancel_url is /onboarding: with step 4 the store flow would reopen the automations step.
       expect(orgUpdates()[0]).toEqual(expect.objectContaining({ onboarding_step: 6, onboarding_completed: false, plan: 'trial' }))
       expect(orgUpdates().some((p) => p.onboarding_completed === true)).toBe(false)
-      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: 'price_pro_month', quantity: 1 }] }))
+      // The price needs no env id: found or created by lookup key, and the plan is stamped on the subscription.
+      expect(ensurePlanPriceId).toHaveBeenCalledWith('store_starter', 'month')
+      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({
+        line_items: [{ price: 'price_store_starter_month', quantity: 1 }],
+        subscription_data: expect.objectContaining({ metadata: { org_id: ORG, ntv_plan: 'store_starter' } }),
+      }))
+    })
+
+    it('service org on a paid service plan → the env price id, the plan stamped on the subscription', async () => {
+      stripe.configured = true
+      const priceId = PLANS.pro.stripe_price_id_annual
+      PLANS.pro.stripe_price_id_annual = 'price_pro_year'
+      try {
+        const body = await (await complete({ plan: 'pro', annual: true, agent: sameAgent })).json()
+        expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      } finally {
+        PLANS.pro.stripe_price_id_annual = priceId
+      }
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({
+        line_items: [{ price: 'price_pro_year', quantity: 1 }],
+        subscription_data: expect.objectContaining({ metadata: { org_id: ORG, ntv_plan: 'pro' } }),
+      }))
     })
 
     it('e-commerce org on the trial plan → completed at the store launch step (6)', async () => {
       state.org.business_type = 'ecommerce'
       expect((await complete({ plan: 'trial', agent: sameAgent })).status).toBe(200)
       expect(orgUpdates()).toEqual([expect.objectContaining({ onboarding_step: 6, onboarding_completed: true })])
+    })
+  })
+
+  // An online store may only launch on the trial or a store plan, every other
+  // organization only on the trial or a service plan.
+  describe('plan family (409 plan_not_available)', () => {
+    it('a store plan is refused to a service org (explicit or legacy NULL) before anything is written', async () => {
+      for (const businessType of ['services', undefined]) {
+        state.user = fakeDb(handler)
+        state.org = { ...state.org, business_type: businessType }
+        const res = await complete({ plan: 'store_growth', company: { name: 'Other' }, agent: sameAgent })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toMatchObject({
+          code: 'plan_not_available',
+          error: 'This plan is not available for your type of business.',
+          details: { reason: 'plan_not_available', plan: 'store_growth', business_type: businessType ?? null },
+        })
+        expect(state.user!.calls.filter((c: FakeCall) => c.op === 'update')).toHaveLength(0)
+      }
+      expect(ensureAgent).not.toHaveBeenCalled()
+      expect(syncAgentProviders).not.toHaveBeenCalled()
+      expect(orgUpdates()).toEqual([])
+    })
+
+    it('a service plan is refused to an e-commerce org', async () => {
+      state.org.business_type = 'ecommerce'
+      for (const plan of ['starter', 'pro', 'business', 'custom']) {
+        const res = await complete({ plan, agent: sameAgent })
+        expect(res.status, plan).toBe(409)
+        expect(await res.json()).toMatchObject({ code: 'plan_not_available' })
+      }
+      expect(syncAgentProviders).not.toHaveBeenCalled()
+      expect(orgUpdates()).toEqual([])
+    })
+
+    it('a plan id outside the catalogue is a 400', async () => {
+      expect((await complete({ plan: 'enterprise-hack', agent: sameAgent })).status).toBe(400)
+    })
+  })
+
+  describe('store plans and Stripe', () => {
+    it('a store price that cannot be resolved falls back to the trial instead of granting the plan for free', async () => {
+      state.org.business_type = 'ecommerce'
+      stripe.configured = true
+      ensurePlanPriceId.mockRejectedValue(new Error('Stripe is down'))
+      const body = await (await complete({ plan: 'store_scale', agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, redirect: expect.stringContaining('/dashboard') })
+      expect(body.checkout_url).toBeUndefined()
+      expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', minutes_limit: PLANS.trial.minutes_limit, onboarding_completed: true, onboarding_step: 6 })])
+      expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
+    })
+
+    it('the sales-led Store Enterprise lands on the trial without touching Stripe', async () => {
+      state.org.business_type = 'ecommerce'
+      stripe.configured = true
+      expect((await complete({ plan: 'store_enterprise', agent: sameAgent })).status).toBe(200)
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', onboarding_completed: true })])
+    })
+
+    it('without Stripe (demo mode) the store plan is granted directly with its minutes', async () => {
+      state.org.business_type = 'ecommerce'
+      expect((await complete({ plan: 'store_growth', agent: sameAgent })).status).toBe(200)
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'store_growth', minutes_limit: PLANS.store_growth.minutes_limit, onboarding_completed: true })])
     })
   })
 })

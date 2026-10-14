@@ -97,8 +97,9 @@ export async function POST(request: Request) {
     assertSameOrigin(request)
     const { supabase, user, org } = await requireOrg()
     log = log.child({ orgId: org.id })
-    // Before reading the (large) upload: plan and per-org cap.
-    assertCustomVoicePlan(org.plan)
+    // Before reading the (large) upload: plan and per-org cap. The business type
+    // picks the family of the upgrade hint (a store is pointed at a store plan).
+    assertCustomVoicePlan(org.plan, org.business_type)
     const admin = createAdminClient()
     await assertCustomVoiceCap(admin, org.id)
 

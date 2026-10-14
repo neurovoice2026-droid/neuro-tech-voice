@@ -16,7 +16,7 @@ import { StockStatusChip } from './StatusChips'
 
 /** The route filters on in_stock / out_of_stock only (the contract); the other stock states show in the column. */
 const STOCK_OPTIONS = [
-  { value: 'all', label: 'Tot stocul' },
+  { value: 'all', label: 'All stock' },
   { value: 'in_stock', label: STOCK_STATUS_LABEL.in_stock },
   { value: 'out_of_stock', label: STOCK_STATUS_LABEL.out_of_stock },
 ]
@@ -35,21 +35,21 @@ export function ProductsPage() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Magazin"
-        title="Produse"
-        description="Catalogul sincronizat din magazin: preț și stoc, așa cum le vede agentul în timpul apelurilor."
+        eyebrow="Store"
+        title="Products"
+        description="The catalog synced from the store: price and stock, as the agent sees them during calls."
         meta={
           typeof products.total === 'number' ? (
-            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(products.total)} produse</span>
+            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(products.total)} products</span>
           ) : undefined
         }
       />
 
       <div className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <SearchField value={search} onChange={setSearch} placeholder="Caută după nume sau SKU…" label="Caută produse" />
+          <SearchField value={search} onChange={setSearch} placeholder="Search by name or SKU…" label="Search products" />
           <Select value={stock} onValueChange={(v) => v && setStock(String(v))}>
-            <SelectTrigger size="sm" aria-label="Filtrează după stoc" className={filterPillClass(stock !== 'all')}>
+            <SelectTrigger size="sm" aria-label="Filter by stock" className={filterPillClass(stock !== 'all')}>
               <SelectValue>{(value: string) => STOCK_OPTIONS.find((o) => o.value === value)?.label ?? value}</SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false} align="start" className="min-w-40">
@@ -70,9 +70,9 @@ export function ProductsPage() {
           isEmpty={products.items.length === 0}
           filtered={filtered}
           emptyIcon={Tag}
-          emptyTitle="Niciun produs sincronizat"
-          emptyDescription={connection ? 'Produsele apar aici după prima sincronizare a magazinului.' : 'Conectează magazinul ca să vezi produsele.'}
-          loadingLabel="Se încarcă produsele…"
+          emptyTitle="No products synced"
+          emptyDescription={connection ? 'Products show up here after the store’s first sync.' : 'Connect the store to see its products.'}
+          loadingLabel="Loading products…"
           footer={
             <LoadMoreFooter
               shown={products.items.length}
@@ -85,15 +85,15 @@ export function ProductsPage() {
           }
         >
           <Table>
-            <caption className="sr-only">Produse</caption>
+            <caption className="sr-only">Products</caption>
             <TableHeader>
               <TableRow>
-                <TableHead scope="col">Produs</TableHead>
+                <TableHead scope="col">Product</TableHead>
                 <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">SKU</TableHead>
-                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Stare</TableHead>
-                <TableHead scope="col" className="text-right">Preț</TableHead>
-                <TableHead scope="col">Stoc</TableHead>
-                <TableHead scope="col" className="hidden text-right @min-[900px]/records:table-cell">Actualizat</TableHead>
+                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Status</TableHead>
+                <TableHead scope="col" className="text-right">Price</TableHead>
+                <TableHead scope="col">Stock</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[900px]/records:table-cell">Updated</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -112,7 +112,7 @@ export function ProductsPage() {
                     <span className="flex flex-wrap items-center gap-1.5">
                       <StockStatusChip status={product.stock_status} />
                       {typeof product.stock_quantity === 'number' && (
-                        <span className="text-xs leading-4 text-muted-foreground tabular-nums">{formatCount(product.stock_quantity)} buc.</span>
+                        <span className="text-xs leading-4 text-muted-foreground tabular-nums">{formatCount(product.stock_quantity)} units</span>
                       )}
                     </span>
                   </TableCell>

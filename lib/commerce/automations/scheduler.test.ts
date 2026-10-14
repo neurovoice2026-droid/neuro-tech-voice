@@ -37,7 +37,7 @@ describe('scheduler', () => {
     db.tables.commerce_customers = [{ id: 'cust-1', org_id: ORG_A, connection_id: CONN_A, external_id: 'c1', phone_e164: '+40722123456', do_not_call: true, updated_at: 'x' }]
     const ctx = { db: asClient(db), connection: connectionRow() as never, log, now: NOW }
     await applyEvents(ctx, [{ kind: 'order.created', order: normalizedOrder() }])
-    expect(runs(db)[0]).toMatchObject({ status: 'suppressed', eligibility_reason: 'Clientul a cerut să nu fie sunat' })
+    expect(runs(db)[0]).toMatchObject({ status: 'suppressed', eligibility_reason: 'Customer asked not to be called' })
     await applyEvents(ctx, [{ kind: 'order.created', order: normalizedOrder({ externalId: '1002', orderNumber: '1002', customerExternalId: null, contactPhoneRaw: '0733000000', paymentMethod: 'card', paymentMethodTitle: 'Card online' }) }])
     expect(runs(db)).toHaveLength(1)
   })
@@ -51,7 +51,7 @@ describe('scheduler', () => {
     expect(runs(db)).toHaveLength(1)
     expect(runs(db)[0]).toMatchObject({ status: 'scheduled', automation_type: 'abandoned_cart', scheduled_for: '2026-10-13T08:30:00.000Z' })
     await applyEvents(ctx, [{ kind: 'order.created', order: normalizedOrder({ externalId: '2001', orderNumber: '2001', paymentMethod: 'card' }) }])
-    expect(runs(db)[0]).toMatchObject({ status: 'cancelled', eligibility_reason: 'Clientul a finalizat comanda' })
+    expect(runs(db)[0]).toMatchObject({ status: 'cancelled', eligibility_reason: 'Customer completed the order' })
     // A second cart later: recovered → cancelled as well.
     await applyEvents(ctx, [{ kind: 'cart.updated', cart: { ...cart, externalId: 'cart-10', abandonedAt: '2026-10-13T07:50:00Z' } }])
     expect(runs(db)).toHaveLength(2)

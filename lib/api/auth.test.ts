@@ -140,16 +140,18 @@ describe('requireOrg', () => {
     expect(err.message).not.toContain('secret')
   })
 
-  it('returns the user-scoped client, user and org, querying by the user id', async () => {
-    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'Europe/Bucharest', plan: 'pro' }
+  it('returns the user-scoped client, user and org (business type included), querying by the user id', async () => {
+    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'Europe/Bucharest', plan: 'pro', business_type: 'ecommerce' }
     const fake = fakeClient({ user: user(ADMIN_ID), org: { data: org, error: null } })
     vi.mocked(createClient).mockResolvedValue(fake.client)
     const ctx = await requireOrg()
     expect(ctx.org).toEqual(org)
+    expect(ctx.org.business_type).toBe('ecommerce')
     expect(ctx.user.id).toBe(ADMIN_ID)
     expect(ctx.supabase).toBe(fake.client)
     expect(fake.from).toHaveBeenCalledWith('organizations')
-    expect(fake.select).toHaveBeenCalledWith('id, name, timezone, plan, deletion_requested_at')
+    expect(fake.select).toHaveBeenCalledTimes(1)
+    expect(fake.select).toHaveBeenCalledWith('id, name, timezone, plan, deletion_requested_at, business_type')
     expect(fake.eq).toHaveBeenCalledWith('user_id', ADMIN_ID)
   })
 
@@ -161,16 +163,36 @@ describe('requireOrg', () => {
     await expect(requireOrg({ allowDeleting: true })).resolves.toMatchObject({ org })
   })
 
-  it('falls back to the columns of a database without migration 021 (undefined column)', async () => {
-    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'UTC', plan: 'trial' }
-    const maybeSingle = vi
-      .fn()
-      .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column organizations.deletion_requested_at does not exist' } })
-      .mockResolvedValueOnce({ data: org, error: null })
+  /** A client whose org query answers each `results` in turn (one per column list tried). */
+  function clientAnswering(results: Array<{ data: unknown; error: unknown }>) {
+    const maybeSingle = vi.fn()
+    for (const r of results) maybeSingle.mockResolvedValueOnce(r)
     const select = vi.fn(() => ({ eq: () => ({ maybeSingle }) }))
     const client = { auth: { getUser: async () => ({ data: { user: user(ADMIN_ID) }, error: null }) }, from: () => ({ select }) }
     vi.mocked(createClient).mockResolvedValue(client as unknown as ServerClient)
+    return select
+  }
+  const undefinedColumn = (column: string) => ({ data: null, error: { code: '42703', message: `column organizations.${column} does not exist` } })
+
+  it('falls back to the columns of a database without migration 024 (no business_type), keeping the deletion guard', async () => {
+    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'UTC', plan: 'trial', deletion_requested_at: '2026-10-07T10:00:00Z' }
+    const select = clientAnswering([undefinedColumn('business_type'), { data: org, error: null }])
+    expect(await rejection(requireOrg())).toMatchObject({ status: 403, details: { reason: 'account_deleting' } })
+    expect(select).toHaveBeenCalledTimes(2)
+    expect(select).toHaveBeenLastCalledWith('id, name, timezone, plan, deletion_requested_at')
+  })
+
+  it('falls back to the columns of a database without migrations 021 and 024 (undefined columns)', async () => {
+    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'UTC', plan: 'trial' }
+    const select = clientAnswering([undefinedColumn('business_type'), undefinedColumn('deletion_requested_at'), { data: org, error: null }])
     await expect(requireOrg()).resolves.toMatchObject({ org })
+    expect(select).toHaveBeenCalledTimes(3)
     expect(select).toHaveBeenLastCalledWith('id, name, timezone, plan')
+  })
+
+  it('does not retry on errors other than an undefined column', async () => {
+    const select = clientAnswering([{ data: null, error: { code: '42501', message: 'permission denied' } }, { data: { id: 'org_1' }, error: null }])
+    expect(await rejection(requireOrg())).toMatchObject({ status: 500, code: 'internal' })
+    expect(select).toHaveBeenCalledTimes(1)
   })
 })

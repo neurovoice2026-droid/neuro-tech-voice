@@ -1,4 +1,4 @@
-# E-commerce vertical (Magazin): store connections, automations and operations
+# E-commerce vertical (Store): store connections, automations and operations
 
 This document describes the e-commerce vertical of Neuro Tech Voice: how a
 store organization is onboarded, how store platforms are connected and
@@ -43,7 +43,9 @@ agent uses store data during a call, and how to operate it. Code lives in
   completes and including a repeat of the same value; after completion the
   reason is `onboarding_completed`. Service organizations keep the original
   onboarding, dashboard and navigation unchanged; store organizations get the
-  store onboarding, the store overview and the **Magazin** section.
+  store onboarding, the store overview and the **Store** section of the
+  dashboard (`/store/*`: orders, customers, products, automations,
+  connections, do-not-call, settings).
 * **Credentials.** Store credentials are an AES-256-GCM envelope
   (`lib/commerce/crypto.ts`) keyed by `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`,
   with the organization and connection ids as authenticated data: a blob moved
@@ -238,8 +240,9 @@ that recorded nothing). Unanswered calls retry within the automation's
 limits; the provider's call status stays on the call.
 
 Consent: enabling needs the checkbox text stored as `consent_version`
-`2026-10-v1` with the user and time; every campaign script and the baseline
-prompt disclose the AI assistant and honour "nu mă mai sunați" through the
+`2026-10-v2` (bumped whenever the wording changes) with the user and time;
+every campaign script and the baseline prompt disclose the AI assistant and
+honor "nu mă mai sunați" through the
 `mark_do_not_call` tool, which suppresses the customer (and guests by number)
 immediately and cancels their queued runs.
 
@@ -343,17 +346,17 @@ org/connection/run ids and never a number in the clear.
 
 ## 8. Retention, PII and opt-out
 
-* Mirrors live as long as the connection; *Deconectează* erases credentials
-  and webhooks and pauses automations but keeps data; *Șterge datele
-  magazinului* removes the connection and everything under it (cascade).
+* Mirrors live as long as the connection; *Disconnect* erases credentials
+  and webhooks and pauses automations but keeps data; *Delete store data*
+  (Store → Settings) removes the connection and everything under it (cascade).
 * Webhook payloads are cleared once processed (a delivery still queued keeps
   its body until it is processed) and purged after
   `COMMERCE_WEBHOOK_PAYLOAD_RETENTION_DAYS` (7); processed events after 90
   days; the number dialed by a settled run after `COMMERCE_RUN_PHONE_RETENTION_DAYS`
   (90); finished sync jobs after 30 days; audit entries after 365 days.
 * Do-not-call: set by the customer on a call (`mark_do_not_call`), by an
-  operator (Clienți → *Nu suna*), never cleared by an import; lifting it is an
-  explicit operator action with a reason, audited (Lista „Nu suna”).
+  operator (Customers → *Do not call*), never cleared by an import; lifting it
+  is an explicit operator action with a reason, audited (Store → Do-not-call list).
 * Order addresses are kept as a one-line summary and city only; the agent
   confirms the delivery city, never reads a full address unless asked.
 
@@ -383,9 +386,44 @@ org/connection/run ids and never a number in the clear.
   (a tunnel works) with a Read/Write key; place a test order with payment
   method *Cash on delivery* and a phone in your own number's format. Enable
   the COD automation with consent, keep the delay at 15 minutes and the
-  window open; the run appears under Automatizări, then dials your number
+  window open; the run appears under Store → Automations, then dials your number
   from the org's outbound-capable line at the scheduled time. No automated
   test places a real call: the live check is this manual flow.
 * Shopify: a development store with the app installed has protected
   customer data without review.
 * Custom: a few lines of Express implementing §3 behind https.
+
+## 11. Plans and billing
+
+* **Two plan families, one trial.** `organizations.plan` (CHECK of migration
+  026) holds the service plans (`starter`, `pro`, `business`, `custom`) or the
+  store plans (`store_starter` $100, `store_growth` $250, `store_scale` $500,
+  `store_enterprise` from $1,000 a month, sales-led; annual = ten months).
+  `PLANS` in `types/index.ts` is the source of truth (prices, minutes, overage,
+  `family`). An online store may hold only the trial or a store plan, every
+  other organization only the trial or a service plan: `planAllowedFor` is
+  enforced by `POST /api/billing/checkout` and `POST /api/onboarding/complete`
+  (409 `plan_not_available`), and the billing page and the launch step show
+  `plansForBusinessType(org.business_type)` only.
+* **Minutes.** Store plans bill like the others: included minutes per month
+  (350 / 950 / 2,000 / 4,500, about 1.5 minutes per order-confirmation call),
+  then overage per minute. Dispatch refuses a run with `minutes_exhausted`
+  only on plans without overage (the trial), see `lib/telephony/quota.ts`.
+  Call concurrency and entitlements of a store plan are those of the service
+  plan priced like it (`lib/pages/entitlements.ts`, `call-limits.ts`).
+* **No manual Stripe setup.** Service plans use the `STRIPE_*_PRICE_ID` env
+  ids. Store plans do not need them: `ensurePlanPriceId`
+  (`lib/stripe/store-prices.ts`) returns the env id when set, otherwise the
+  Stripe price carrying the lookup key `ntv_<plan>_<month|year>`, otherwise it
+  creates the product (metadata `ntv_plan`) and a recurring USD price with
+  that lookup key and metadata `{ ntv_plan, ntv_interval }`. Both creates
+  carry a Stripe idempotency key (`ntv_product_<plan>`,
+  `ntv_price_<plan>_<interval>`), so two cold lambdas racing on the first
+  checkout share one product and one price. Checkout also stamps `ntv_plan`
+  on the subscription. The billing webhook resolves the plan from the env
+  price map, then the price itself (`resolvePlanFromPrice`: its metadata, then
+  its lookup key), and only then the subscription's `ntv_plan`: Stripe never
+  rewrites that stamp when the price changes (Customer Portal plan switch), so
+  the price must win. A price nobody tagged resets the organization to the
+  trial as before.
+

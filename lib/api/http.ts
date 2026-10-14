@@ -18,6 +18,7 @@ export type ApiErrorCode =
   | 'rate_limited'
   | 'conflict'
   | 'precondition_failed'
+  | 'plan_not_available'
   | 'provider_error'
   | 'not_configured'
   | 'voice_not_provisioned'

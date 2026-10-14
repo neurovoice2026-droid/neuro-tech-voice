@@ -16,7 +16,7 @@ export type OrdersParams = {
 }
 
 export function useCommerceOrders(params: OrdersParams, enabled = true) {
-  return useCommercePaged<OrderListDto>(enabled ? '/api/commerce/orders' : null, params, { fallback: 'Comenzile nu au putut fi încărcate.' })
+  return useCommercePaged<OrderListDto>(enabled ? '/api/commerce/orders' : null, params, { fallback: 'Orders could not be loaded.' })
 }
 
 export interface OrderDetailDto {
@@ -32,7 +32,7 @@ export interface OrderDetailDto {
 
 export function useCommerceOrderDetail(orderId: string | null) {
   const path = orderId ? `/api/commerce/orders/${encodeURIComponent(orderId)}` : null
-  return useCommerceQuery<OrderDetailDto>(path, { fallback: 'Comanda nu a putut fi încărcată.' })
+  return useCommerceQuery<OrderDetailDto>(path, { fallback: 'The order could not be loaded.' })
 }
 
 export type CustomersParams = {
@@ -43,7 +43,7 @@ export type CustomersParams = {
 }
 
 export function useCommerceCustomers(params: CustomersParams, enabled = true) {
-  return useCommercePaged<CustomerListDto>(enabled ? '/api/commerce/customers' : null, params, { fallback: 'Clienții nu au putut fi încărcați.' })
+  return useCommercePaged<CustomerListDto>(enabled ? '/api/commerce/customers' : null, params, { fallback: 'Customers could not be loaded.' })
 }
 
 export type ProductsParams = {
@@ -53,12 +53,12 @@ export type ProductsParams = {
 }
 
 export function useCommerceProducts(params: ProductsParams, enabled = true) {
-  return useCommercePaged<ProductListDto>(enabled ? '/api/commerce/products' : null, params, { fallback: 'Produsele nu au putut fi încărcate.' })
+  return useCommercePaged<ProductListDto>(enabled ? '/api/commerce/products' : null, params, { fallback: 'Products could not be loaded.' })
 }
 
 export function useCommerceSuppressions(params: { connection_id?: string }, enabled = true) {
   return useCommercePaged<CustomerListDto>(enabled ? '/api/commerce/suppressions' : null, params, {
-    fallback: 'Lista „Nu suna” nu a putut fi încărcată.',
+    fallback: 'The do-not-call list could not be loaded.',
   })
 }
 
@@ -67,7 +67,7 @@ export async function suppressCustomer(customerId: string, reason?: string): Pro
   const res = await commerceRequest<{ customer: CustomerListDto }>('/api/commerce/suppressions', {
     method: 'POST',
     json: reason ? { customer_id: customerId, reason } : { customer_id: customerId },
-    fallback: 'Clientul nu a putut fi adăugat în lista „Nu suna”.',
+    fallback: 'The customer could not be added to the do-not-call list.',
   })
   return res.customer
 }
@@ -77,7 +77,7 @@ export async function unsuppressCustomer(customerId: string, reason: string): Pr
   const res = await commerceRequest<{ customer: CustomerListDto }>(`/api/commerce/suppressions/${encodeURIComponent(customerId)}`, {
     method: 'DELETE',
     json: { confirm: true, reason },
-    fallback: 'Clientul nu a putut fi scos din lista „Nu suna”.',
+    fallback: 'The customer could not be removed from the do-not-call list.',
   })
   return res.customer
 }

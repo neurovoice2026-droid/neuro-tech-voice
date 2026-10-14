@@ -36,12 +36,12 @@ export async function POST(request: Request) {
       .single()
     if (readErr) throw new Error(`organizations read failed: ${readErr.message}`)
     if (row.business_type !== 'ecommerce') {
-      throw new RequestError('precondition_failed', 'Această configurare este disponibilă doar pentru magazine online.', 409, {
+      throw new RequestError('precondition_failed', 'This setup is only available to online stores.', 409, {
         reason: 'not_ecommerce',
       })
     }
     if (row.onboarding_completed) {
-      throw new RequestError('precondition_failed', 'Configurarea este deja finalizată.', 409, { reason: 'onboarding_completed' })
+      throw new RequestError('precondition_failed', 'Setup is already complete.', 409, { reason: 'onboarding_completed' })
     }
 
     // onboarding_step is not a guarded column: the tenant client writes it, as the service flow does.

@@ -13,10 +13,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const ctx = await requireCommerceOrg(log)
     const row = await ownedConnection(ctx.db, ctx.org.id, (await params).id)
     const body = request.headers.get('content-length') && request.headers.get('content-length') !== '0' ? await parseJsonBody(request, Body, 2 * 1024) : { resource: 'all' as const }
-    if (row.status !== 'active' && row.status !== 'degraded') throw new RequestError('precondition_failed', 'Conexiunea nu este activă.', 409, { reason: 'connection_inactive' })
-    await enforceRateLimit(RATE_LIMITS.commerceSync, row.id, 'Prea multe sincronizări manuale. Încearcă din nou în câteva minute.')
+    if (row.status !== 'active' && row.status !== 'degraded') throw new RequestError('precondition_failed', 'The connection is not active.', 409, { reason: 'connection_inactive' })
+    await enforceRateLimit(RATE_LIMITS.commerceSync, row.id, 'Too many manual syncs. Try again in a few minutes.')
     const res = await enqueueSyncJob(ctx.db, { orgId: ctx.org.id, connectionId: row.id, kind: 'manual', resource: body.resource })
-    if (res === 'already_active') throw new RequestError('conflict', 'O sincronizare este deja în curs.', 409, { reason: 'already_running' })
+    if (res === 'already_active') throw new RequestError('conflict', 'A sync is already in progress.', 409, { reason: 'already_running' })
     await writeAudit(ctx.db, { orgId: ctx.org.id, actor: 'user', actorUserId: ctx.user.id, action: 'sync.requested', connectionId: row.id, metadata: { resource: body.resource } }, ctx.log)
     return noStore({ queued: true }, 202)
   })

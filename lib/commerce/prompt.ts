@@ -137,9 +137,3 @@ export const DEFAULT_SCRIPTS: Record<AutomationType, string> = {
     'Dacă nu doriți să mai fiți contactat telefonic, spuneți „nu mă mai sunați”.',
   ].join('\n'),
 }
-
-export const AUTOMATION_LABELS: Record<AutomationType, { title: string; description: string }> = {
-  cod_confirmation: { title: 'Confirmarea comenzilor ramburs', description: 'Sună clienții cu comenzi noi plătite ramburs ca să confirme comanda înainte de expediere.' },
-  abandoned_cart: { title: 'Recuperarea coșurilor abandonate', description: 'Sună clienții care au lăsat un coș neterminat și au telefonul în comandă, după un interval de așteptare.' },
-  order_follow_up: { title: 'Follow-up după livrare', description: 'Sună clienții după ce comanda ajunge la statusul ales (de exemplu livrată) ca să verifice că totul e în regulă.' },
-}

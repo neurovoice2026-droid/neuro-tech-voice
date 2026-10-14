@@ -12,10 +12,11 @@ import { Field } from '@/components/shared/FormSection'
 import { CommerceApiError, commerceErrorMessage } from '@/hooks/useCommerceApi'
 import { createConnection, shopifyStartUrl } from '@/hooks/useCommerceConnections'
 import { PLATFORM_CATALOG, type ConnectField } from '@/lib/commerce/platforms'
+import type { ShopifyReturnKey } from '@/lib/commerce/shopify-state'
 import type { CommercePlatform, ConnectionDto } from '@/lib/commerce/types'
-import { clearSecrets, connectSchema, initialConnectValues, normalizeShopDomain, splitConnectValues, type ConnectValues } from './connect-schema'
+import { SHOP_DOMAIN_ERROR, clearSecrets, connectSchema, initialConnectValues, normalizeShopDomain, splitConnectValues, type ConnectValues } from './connect-schema'
 
-// The connect form, shared by the first connection and "Reconectează": its
+// The connect form, shared by the first connection and "Reconnect": its
 // fields come from PLATFORM_CATALOG. Secrets are password inputs, never
 // echoed back, cleared the moment the request returns (success or not), and
 // never kept anywhere but in the form's own state.
@@ -28,7 +29,7 @@ interface ConnectFormProps {
   onConnected: (connection: ConnectionDto) => void
   onCancel?: () => void
   /** Where the Shopify callback brings the browser back. */
-  returnTo?: 'onboarding' | 'magazin'
+  returnTo?: ShopifyReturnKey
 }
 
 interface FormError {
@@ -39,13 +40,13 @@ interface FormError {
 function describeFailure(err: unknown): FormError {
   if (err instanceof CommerceApiError) {
     if (err.status === 503 && err.code === 'not_configured') {
-      return { title: 'Platforma nu este pregătită', message: err.message }
+      return { title: 'The platform is not ready', message: err.message }
     }
-    if (err.status === 409) return { title: 'Magazinul nu a răspuns cum trebuie', message: err.message }
-    if (err.status === 400) return { title: 'Verifică datele introduse', message: err.message }
-    return { title: 'Conectarea a eșuat', message: err.message }
+    if (err.status === 409) return { title: 'The store did not respond as expected', message: err.message }
+    if (err.status === 400) return { title: 'Check the values you entered', message: err.message }
+    return { title: 'Connection failed', message: err.message }
   }
-  return { title: 'Conectarea a eșuat', message: commerceErrorMessage(err, 'Încearcă din nou.') }
+  return { title: 'Connection failed', message: commerceErrorMessage(err, 'Try again.') }
 }
 
 function Instructions({ platform }: { platform: CommercePlatform }) {
@@ -53,7 +54,7 @@ function Instructions({ platform }: { platform: CommercePlatform }) {
   const external = /^https?:\/\//.test(descriptor.docsUrl)
   return (
     <div className="rounded-2xl bg-secondary p-4">
-      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">Cum obții accesul</p>
+      <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">How to get access</p>
       <ol className="mt-2.5 list-decimal space-y-1.5 pl-5 text-[13px] leading-[19px] text-foreground/80">
         {descriptor.instructions.map((step) => (
           <li key={step}>{step}</li>
@@ -65,7 +66,7 @@ function Instructions({ platform }: { platform: CommercePlatform }) {
         rel={external ? 'noopener noreferrer' : undefined}
         className="mt-3 inline-flex items-center gap-1.5 rounded-sm text-[13px] font-medium text-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
       >
-        Documentația {descriptor.name}
+        {descriptor.name} documentation
         {external && <ExternalLink className="size-3.5" aria-hidden="true" />}
       </a>
     </div>
@@ -73,7 +74,7 @@ function Instructions({ platform }: { platform: CommercePlatform }) {
 }
 
 /** Shopify: the browser leaves for the OAuth consent page; nothing is posted from here. */
-function ShopifyForm({ mode, prefill, onCancel, returnTo = 'magazin' }: Omit<ConnectFormProps, 'platform' | 'onConnected'>) {
+function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<ConnectFormProps, 'platform' | 'onConnected'>) {
   const id = useId()
   const [domain, setDomain] = useState(prefill?.store_url ? (normalizeShopDomain(prefill.store_url) ?? '') : '')
   const [error, setError] = useState<string | null>(null)
@@ -83,7 +84,7 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'magazin' }: Omit<Con
     e.preventDefault()
     const shop = normalizeShopDomain(domain)
     if (!shop) {
-      setError('Introdu domeniul magazinului, de forma magazinul-tau.myshopify.com')
+      setError(SHOP_DOMAIN_ERROR)
       return
     }
     setError(null)
@@ -94,12 +95,12 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'magazin' }: Omit<Con
   return (
     <form onSubmit={submit} noValidate className="space-y-5">
       <Instructions platform="shopify" />
-      <Field label="Domeniul magazinului" htmlFor={`${id}-shop`} error={error} hint="Domeniul myshopify.com, nu cel personalizat al magazinului.">
+      <Field label="Store domain" htmlFor={`${id}-shop`} error={error} hint="The myshopify.com domain, not the store's custom domain.">
         <Input
           id={`${id}-shop`}
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
-          placeholder="magazinul-tau.myshopify.com"
+          placeholder="your-store.myshopify.com"
           autoComplete="off"
           spellCheck={false}
           inputMode="url"
@@ -110,11 +111,11 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'magazin' }: Omit<Con
       <div className="flex flex-wrap items-center justify-end gap-2">
         {onCancel && (
           <Button type="button" variant="ghost" onClick={onCancel} disabled={leaving}>
-            Renunță
+            Cancel
           </Button>
         )}
-        <Button type="submit" loading={leaving} loadingState="connecting" loadingText="Te trimitem în Shopify…">
-          {mode === 'reconnect' ? 'Reautorizează în Shopify' : 'Continuă în Shopify'}
+        <Button type="submit" loading={leaving} loadingState="connecting" loadingText="Taking you to Shopify…">
+          {mode === 'reconnect' ? 'Reauthorize in Shopify' : 'Continue in Shopify'}
           <ArrowRight aria-hidden="true" />
         </Button>
       </div>
@@ -192,7 +193,7 @@ function CredentialsForm({ platform, mode, prefill, onConnected, onCancel }: Con
         </Alert>
       )}
 
-      <Field label="Nume afișat" htmlFor={`${id}-display`} optional hint="Cum apare magazinul în panou (implicit, domeniul).">
+      <Field label="Display name" htmlFor={`${id}-display`} optional hint="How the store appears in the dashboard (by default, its domain).">
         <Input
           id={`${id}-display`}
           value={displayName}
@@ -220,7 +221,7 @@ function CredentialsForm({ platform, mode, prefill, onConnected, onCancel }: Con
             htmlFor={fieldId}
             error={error}
             optional={!field.required}
-            hint={secret ? `${field.help ? `${field.help} ` : ''}Nu va mai fi afișat după salvare.` : field.help}
+            hint={secret ? `${field.help ? `${field.help} ` : ''}It will not be shown again after saving.` : field.help}
           >
             <div className="relative">
               {secret && (
@@ -245,11 +246,11 @@ function CredentialsForm({ platform, mode, prefill, onConnected, onCancel }: Con
       <div className="flex flex-wrap items-center justify-end gap-2">
         {onCancel && (
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>
-            Renunță
+            Cancel
           </Button>
         )}
-        <Button type="submit" loading={isSubmitting} loadingState="connecting" loadingText="Se verifică accesul…">
-          {mode === 'reconnect' ? 'Reconectează' : 'Conectează magazinul'}
+        <Button type="submit" loading={isSubmitting} loadingState="connecting" loadingText="Checking access…">
+          {mode === 'reconnect' ? 'Reconnect' : 'Connect store'}
           <ArrowRight aria-hidden="true" />
         </Button>
       </div>

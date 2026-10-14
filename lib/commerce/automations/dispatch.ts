@@ -93,10 +93,10 @@ async function settle(db: SupabaseClient, run: RunRow, owner: string, patch: Rec
 export function dispatchFailureMessage(err: unknown, willRetry: boolean): string {
   const what = isProviderError(err)
     ? err.retryable || err.code === 'circuit_open'
-      ? 'Furnizorul de voce nu a răspuns.'
-      : 'Furnizorul de voce a respins apelul.'
-    : 'Apelul nu a putut fi pornit.'
-  return willRetry ? `${what} Se reîncearcă automat.` : what
+      ? 'The voice provider did not respond.'
+      : 'The voice provider rejected the call.'
+    : 'The call could not be started.'
+  return willRetry ? `${what} Retrying automatically.` : what
 }
 
 /**
@@ -120,12 +120,12 @@ export async function dispatchRun(db: SupabaseClient, run: RunRow, owner: string
   }
 
   const [org, automation, connection, customer] = await Promise.all([loadOrg(db, run.org_id), loadAutomation(db, run.automation_id), loadConnection(db, run.connection_id), loadCustomer(db, run.customer_id)])
-  if (!org || org.deletion_requested_at) return skip('org_unavailable', 'Organizația nu mai este activă', 'cancelled')
-  if (!automation) return skip('automation_missing', 'Automatizarea a fost ștearsă', 'cancelled')
+  if (!org || org.deletion_requested_at) return skip('org_unavailable', 'Organization is no longer active', 'cancelled')
+  if (!automation) return skip('automation_missing', 'Automation was deleted', 'cancelled')
   const state = automationState(automation)
   if (!state.enabled) return skip('automation_disabled', INELIGIBLE_LABELS.automation_disabled, 'cancelled')
   if (!state.consent_confirmed_at) return skip('no_consent', INELIGIBLE_LABELS.no_consent, 'cancelled')
-  if (!connection || (connection.status !== 'active' && connection.status !== 'degraded')) return skip('connection_inactive', 'Conexiunea cu magazinul nu este activă', 'cancelled')
+  if (!connection || (connection.status !== 'active' && connection.status !== 'degraded')) return skip('connection_inactive', 'Store connection is not active', 'cancelled')
 
   const phone = run.to_phone_e164
   if (!phone) return skip('no_phone', INELIGIBLE_LABELS.no_phone, 'suppressed')
@@ -133,7 +133,7 @@ export async function dispatchRun(db: SupabaseClient, run: RunRow, owner: string
 
   const ctx = await loadRunContext(db, run)
   if (run.automation_type === 'cod_confirmation') {
-    if (!ctx.order) return skip('order_missing', 'Comanda nu mai există', 'cancelled')
+    if (!ctx.order) return skip('order_missing', 'Order no longer exists', 'cancelled')
     if (!orderOpenForCod({ ...ctx.order, total: ctx.order.total === null ? null : Number(ctx.order.total) })) return skip('order_not_open', INELIGIBLE_LABELS.order_not_open, 'cancelled')
   } else if (run.automation_type === 'order_follow_up') {
     if (!ctx.order || ['cancelled', 'refunded', 'failed'].includes(ctx.order.status)) return skip('order_not_open', INELIGIBLE_LABELS.order_not_open, 'cancelled')
@@ -144,18 +144,18 @@ export async function dispatchRun(db: SupabaseClient, run: RunRow, owner: string
   }
 
   const timezone = org.timezone ?? readCommerceProfile(org.commerce_profile).timezone
-  if (!insideCallWindow(now, state.config, timezone)) return defer(nextCallSlot(now, state.config, timezone), 'În afara intervalului de apelare')
+  if (!insideCallWindow(now, state.config, timezone)) return defer(nextCallSlot(now, state.config, timezone), 'Outside the call window')
   const bounds = localDayBounds(now, state.config, timezone)
   if ((await countToday(db, { orgId: run.org_id, automationId: run.automation_id, excludeRunId: run.id }, bounds)) >= state.config.daily_cap) {
-    return defer(nextCallSlot(bounds.end, state.config, timezone), 'Limita zilnică a automatizării a fost atinsă')
+    return defer(nextCallSlot(bounds.end, state.config, timezone), 'Daily limit of the automation reached')
   }
   const perCustomer = Math.max(
     await countToday(db, { orgId: run.org_id, phone, excludeRunId: run.id }, bounds),
     run.customer_id ? await countToday(db, { orgId: run.org_id, customerId: run.customer_id, excludeRunId: run.id }, bounds) : 0,
   )
-  if (perCustomer >= state.config.per_customer_daily_cap) return defer(nextCallSlot(bounds.end, state.config, timezone), 'Clientul a fost deja sunat astăzi')
+  if (perCustomer >= state.config.per_customer_daily_cap) return defer(nextCallSlot(bounds.end, state.config, timezone), 'Customer already called today')
   if (!callAllowance({ plan: org.plan, minutes_used: org.minutes_used, minutes_limit: org.minutes_limit }).allowed) {
-    return skip('minutes_exhausted', 'Minutele incluse în plan s-au epuizat')
+    return skip('minutes_exhausted', 'Included plan minutes are used up')
   }
 
   const profile = readCommerceProfile(org.commerce_profile)
@@ -169,7 +169,7 @@ export async function dispatchRun(db: SupabaseClient, run: RunRow, owner: string
     if (unlinkErr) {
       // Nothing was dialed: hand the attempt back instead of dialing with a stale link.
       l.error('commerce.dispatch.unlink_failed', unlinkErr)
-      return defer(nextCallSlot(new Date(now.getTime() + state.config.retry_minutes * 60_000), state.config, timezone), 'Reîncercare amânată')
+      return defer(nextCallSlot(new Date(now.getTime() + state.config.retry_minutes * 60_000), state.config, timezone), 'Retry postponed')
     }
   }
   let result: OutboundResult
@@ -234,7 +234,7 @@ export async function recoverStaleDispatches(db: SupabaseClient, log: Logger, no
   for (const run of (data ?? []) as RunRow[]) {
     const { error: updErr } = await db
       .from('commerce_automation_runs')
-      .update({ status: 'failed', outcome: 'failed', dispatch_uncertain: true, error_code: 'dispatch_uncertain', error_message: 'Apelul nu a putut fi confirmat; nu se reia automat.', completed_at: now.toISOString(), lease_owner: null, lease_until: null })
+      .update({ status: 'failed', outcome: 'failed', dispatch_uncertain: true, error_code: 'dispatch_uncertain', error_message: 'The call could not be confirmed; it is not retried automatically.', completed_at: now.toISOString(), lease_owner: null, lease_until: null })
       .eq('id', run.id)
       .eq('status', 'calling')
       .is('call_id', null)

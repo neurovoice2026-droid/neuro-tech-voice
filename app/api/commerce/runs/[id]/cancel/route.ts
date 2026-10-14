@@ -9,18 +9,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     assertSameOrigin(request)
     const ctx = await requireCommerceOrg(log)
     const { id } = await params
-    if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'Apelul programat nu există.', 404)
+    if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'This scheduled call does not exist.', 404)
     await enforceRateLimit(RATE_LIMITS.commerceAutomationWrite, ctx.org.id)
     const { data, error } = await ctx.db
       .from('commerce_automation_runs')
-      .update({ status: 'cancelled', eligibility_reason: 'Anulat manual', completed_at: new Date().toISOString() })
+      .update({ status: 'cancelled', eligibility_reason: 'Canceled manually', completed_at: new Date().toISOString() })
       .eq('id', id)
       .eq('org_id', ctx.org.id)
       .in('status', ['eligible', 'scheduled', 'retry_waiting'])
       .select(RUN_COLUMNS_WITH_REFS)
       .maybeSingle()
     if (error) throw new Error(`commerce_automation_runs update failed: ${error.message}`)
-    if (!data) throw new RequestError('precondition_failed', 'Apelul nu mai poate fi anulat (este în curs sau încheiat).', 409, { reason: 'not_cancellable' })
+    if (!data) throw new RequestError('precondition_failed', 'The call can no longer be canceled (it is in progress or finished).', 409, { reason: 'not_cancellable' })
     const run = data as RunRow
     await writeAudit(ctx.db, { orgId: ctx.org.id, actor: 'user', actorUserId: ctx.user.id, action: 'run.cancelled', connectionId: run.connection_id, automationId: run.automation_id, runId: run.id, metadata: { reason: 'manual' } }, ctx.log)
     return noStore({ run: runDto(run) })

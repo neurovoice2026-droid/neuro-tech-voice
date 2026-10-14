@@ -16,7 +16,7 @@ export type RunsParams = {
 /** Paged GET /api/commerce/runs; `null` params = nothing to load yet (e.g. the automation is not configured). */
 export function useCommerceRuns(params: RunsParams | null, limit = 25) {
   return useCommercePaged<RunDto>(params ? RUNS_PATH : null, params ?? {}, {
-    fallback: 'Apelurile automate nu au putut fi încărcate.',
+    fallback: 'Automated calls could not be loaded.',
     limit,
   })
 }
@@ -24,7 +24,7 @@ export function useCommerceRuns(params: RunsParams | null, limit = 25) {
 /** The run a call was placed for (CallDetailSheet), or null when the call was not an automation. */
 export function useRunForCall(callId: string | null) {
   const path = callId ? `${RUNS_PATH}?${buildQuery({ call_id: callId, limit: 1 })}` : null
-  const query = useCommerceQuery<{ items: RunDto[] }>(path, { fallback: 'Detaliile apelului automat nu au putut fi încărcate.' })
+  const query = useCommerceQuery<{ items: RunDto[] }>(path, { fallback: 'The automated call details could not be loaded.' })
   return { run: query.data?.items[0] ?? null, isLoading: query.isLoading, error: query.error, refetch: query.refetch }
 }
 
@@ -36,7 +36,7 @@ export async function cancelRun(id: string): Promise<RunDto> {
   const res = await commerceRequest<{ run: RunDto }>(`${RUNS_PATH}/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
     json: {},
-    fallback: 'Apelul nu a putut fi anulat.',
+    fallback: 'The call could not be canceled.',
   })
   return res.run
 }

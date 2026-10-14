@@ -24,21 +24,25 @@ export function parseShopifyState(value: string | null | undefined): ShopifyOAut
 
 export const SHOPIFY_STATE_COOKIE = 'ntv_shopify_oauth'
 
-export type ShopifyReturnKey = 'onboarding' | 'magazin'
+/** 'onboarding' = the store onboarding step; 'store' = the Store section's connections page. */
+export type ShopifyReturnKey = 'onboarding' | 'store'
+
+/** The connections page of the Store section (the default return of the install). */
+export const STORE_CONNECTIONS_PATH = '/store/connections'
 
 /** The page that started the install (allow-listed; never a user-supplied path). */
 export function returnKeyOf(raw: string | null | undefined): ShopifyReturnKey {
-  return raw === 'onboarding' ? 'onboarding' : 'magazin'
+  return raw === 'onboarding' ? 'onboarding' : 'store'
 }
 
 export function returnPathOf(key: string | null | undefined): string {
-  return returnKeyOf(key) === 'onboarding' ? '/onboarding' : '/magazin/conexiuni'
+  return returnKeyOf(key) === 'onboarding' ? '/onboarding' : STORE_CONNECTIONS_PATH
 }
 
 /**
  * Failure codes in the words the two return pages understand
- * (components/onboarding/commerce/copy.ts OAUTH_ERRORS and
- * components/commerce/ConnectionsPage.tsx); a store-validation reason from
+ * (components/commerce/labels.ts OAUTH_ERRORS, shared by the onboarding
+ * step and the Connections page); a store-validation reason from
  * connectStore passes through unchanged and is shown as a generic failure.
  */
 export const OAUTH_ERROR_CODES = ['access_denied', 'invalid_shop', 'state_mismatch', 'hmac_invalid', 'not_configured', 'token_exchange_failed', 'unreachable'] as const
@@ -48,7 +52,7 @@ export type OAuthOutcome = { ok: true } | { ok: false; code: OAuthErrorCode | st
 
 /**
  * Path + query the owner is sent back to. The onboarding step reads
- * `?commerce=connected` / `?commerce_error=`; the Magazin connections page
+ * `?commerce=connected` / `?commerce_error=`; the Store connections page
  * reads `?connected=1` / `?error=`.
  */
 export function oauthReturnUrl(key: string | null | undefined, outcome: OAuthOutcome): string {

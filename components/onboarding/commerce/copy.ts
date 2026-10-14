@@ -1,42 +1,47 @@
-// Romanian copy tables of the store onboarding: statuses, capabilities, the
-// form's option lists and the reasons our routes return. Pure data.
+// Copy tables of the store onboarding: the form's option lists, capability
+// names and the lines of an automation card. Pure data, in English (the
+// agent's own calls follow the store's language, see lib/commerce/prompt.ts).
+// Whatever the dashboard shows too (statuses, the Shopify install errors,
+// the automation names, the consent) comes from components/commerce/labels.ts
+// so a row reads the same in the flow and in the Store section.
 
+import { CONNECTION_STATUSES, CONNECTION_STATUS_LABEL, CONNECTION_STATUS_TONE } from '@/components/commerce/labels'
 import type { StatusTone } from '@/components/shared/StatusChip'
-import type { AutomationConfig, AutomationType, CommerceCapabilities, ConnectionStatus, SyncJobStatus } from '@/lib/commerce/types'
+import type { AutomationConfig, AutomationType, CommerceCapabilities, ConnectionStatus } from '@/lib/commerce/types'
 
 // ─── Step 1 option lists ──────────────────────────────────────────────────────
 
 export const COUNTRIES: ReadonlyArray<{ value: string; label: string }> = [
-  { value: 'RO', label: 'România' },
-  { value: 'MD', label: 'Republica Moldova' },
-  { value: 'HU', label: 'Ungaria' },
+  { value: 'RO', label: 'Romania' },
+  { value: 'MD', label: 'Moldova' },
+  { value: 'HU', label: 'Hungary' },
   { value: 'BG', label: 'Bulgaria' },
-  { value: 'DE', label: 'Germania' },
+  { value: 'DE', label: 'Germany' },
   { value: 'AT', label: 'Austria' },
-  { value: 'IT', label: 'Italia' },
-  { value: 'ES', label: 'Spania' },
-  { value: 'FR', label: 'Franța' },
-  { value: 'GB', label: 'Regatul Unit' },
-  { value: 'IE', label: 'Irlanda' },
-  { value: 'NL', label: 'Țările de Jos' },
-  { value: 'BE', label: 'Belgia' },
-  { value: 'PL', label: 'Polonia' },
-  { value: 'CZ', label: 'Cehia' },
-  { value: 'SK', label: 'Slovacia' },
-  { value: 'GR', label: 'Grecia' },
-  { value: 'PT', label: 'Portugalia' },
-  { value: 'SE', label: 'Suedia' },
-  { value: 'DK', label: 'Danemarca' },
-  { value: 'NO', label: 'Norvegia' },
-  { value: 'FI', label: 'Finlanda' },
-  { value: 'CH', label: 'Elveția' },
-  { value: 'TR', label: 'Turcia' },
-  { value: 'US', label: 'Statele Unite' },
+  { value: 'IT', label: 'Italy' },
+  { value: 'ES', label: 'Spain' },
+  { value: 'FR', label: 'France' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'IE', label: 'Ireland' },
+  { value: 'NL', label: 'Netherlands' },
+  { value: 'BE', label: 'Belgium' },
+  { value: 'PL', label: 'Poland' },
+  { value: 'CZ', label: 'Czechia' },
+  { value: 'SK', label: 'Slovakia' },
+  { value: 'GR', label: 'Greece' },
+  { value: 'PT', label: 'Portugal' },
+  { value: 'SE', label: 'Sweden' },
+  { value: 'DK', label: 'Denmark' },
+  { value: 'NO', label: 'Norway' },
+  { value: 'FI', label: 'Finland' },
+  { value: 'CH', label: 'Switzerland' },
+  { value: 'TR', label: 'Turkey' },
+  { value: 'US', label: 'United States' },
   { value: 'CA', label: 'Canada' },
 ]
 
 export const TIMEZONES: ReadonlyArray<{ value: string; label: string }> = [
-  { value: 'Europe/Bucharest', label: 'Europe/Bucharest (România)' },
+  { value: 'Europe/Bucharest', label: 'Europe/Bucharest (Romania)' },
   { value: 'Europe/Chisinau', label: 'Europe/Chisinau (Moldova)' },
   { value: 'Europe/Budapest', label: 'Europe/Budapest' },
   { value: 'Europe/Sofia', label: 'Europe/Sofia' },
@@ -68,111 +73,52 @@ export const TIMEZONES: ReadonlyArray<{ value: string; label: string }> = [
 ]
 
 export const CURRENCIES: ReadonlyArray<{ value: string; label: string }> = [
-  { value: 'RON', label: 'RON – leu românesc' },
+  { value: 'RON', label: 'RON – Romanian leu' },
   { value: 'EUR', label: 'EUR – euro' },
-  { value: 'MDL', label: 'MDL – leu moldovenesc' },
-  { value: 'USD', label: 'USD – dolar american' },
-  { value: 'GBP', label: 'GBP – liră sterlină' },
-  { value: 'HUF', label: 'HUF – forint' },
-  { value: 'BGN', label: 'BGN – leva' },
-  { value: 'PLN', label: 'PLN – zlot' },
-  { value: 'CZK', label: 'CZK – coroană cehă' },
-  { value: 'CHF', label: 'CHF – franc elvețian' },
+  { value: 'MDL', label: 'MDL – Moldovan leu' },
+  { value: 'USD', label: 'USD – US dollar' },
+  { value: 'GBP', label: 'GBP – pound sterling' },
+  { value: 'HUF', label: 'HUF – Hungarian forint' },
+  { value: 'BGN', label: 'BGN – Bulgarian lev' },
+  { value: 'PLN', label: 'PLN – Polish złoty' },
+  { value: 'CZK', label: 'CZK – Czech koruna' },
+  { value: 'CHF', label: 'CHF – Swiss franc' },
 ]
-
-/** Romanian names of the agent languages (lib/agent-languages.ts keeps the English ones). */
-export const LANGUAGE_LABELS_RO: Record<string, string> = {
-  en: 'Engleză',
-  ro: 'Română',
-  es: 'Spaniolă',
-  fr: 'Franceză',
-  de: 'Germană',
-  it: 'Italiană',
-  pt: 'Portugheză',
-  pl: 'Poloneză',
-  nl: 'Neerlandeză',
-  ja: 'Japoneză',
-  ko: 'Coreeană',
-  zh: 'Chineză (mandarină)',
-  ar: 'Arabă',
-  hi: 'Hindi',
-}
 
 // ─── Connections ──────────────────────────────────────────────────────────────
 
-export const CONNECTION_STATUS: Record<ConnectionStatus, { label: string; tone: StatusTone }> = {
-  draft: { label: 'Neconectat', tone: 'muted' },
-  connecting: { label: 'Se conectează', tone: 'info' },
-  active: { label: 'Activ', tone: 'success' },
-  degraded: { label: 'Parțial funcțional', tone: 'warning' },
-  disconnected: { label: 'Deconectat', tone: 'muted' },
-  error: { label: 'Eroare', tone: 'danger' },
-}
+/** The dashboard's connection statuses with their chip tone: a connection reads the same in Step 3 and in Store → Connections. */
+export const CONNECTION_STATUS = Object.fromEntries(
+  CONNECTION_STATUSES.map((status) => [status, { label: CONNECTION_STATUS_LABEL[status], tone: CONNECTION_STATUS_TONE[status] }]),
+) as Record<ConnectionStatus, { label: string; tone: StatusTone }>
 
-export const SYNC_STATUS: Record<SyncJobStatus | 'idle', string> = {
-  idle: 'Nicio sincronizare în curs',
-  pending: 'Sincronizare în așteptare',
-  running: 'Sincronizare în curs',
-  succeeded: 'Sincronizare finalizată',
-  failed: 'Sincronizarea a eșuat',
-  cancelled: 'Sincronizare anulată',
-}
+export { SYNC_STATUS_LABEL as SYNC_STATUS } from '@/components/commerce/labels'
 
 export const CAPABILITY_LABELS: ReadonlyArray<{ key: keyof Pick<CommerceCapabilities, 'orders' | 'customers' | 'products' | 'webhooks' | 'abandoned_carts' | 'customer_phone'>; label: string }> = [
-  { key: 'orders', label: 'Comenzi' },
-  { key: 'customers', label: 'Clienți' },
-  { key: 'products', label: 'Produse' },
-  { key: 'customer_phone', label: 'Telefonul clienților' },
-  { key: 'webhooks', label: 'Evenimente în timp real (webhook-uri)' },
-  { key: 'abandoned_carts', label: 'Coșuri abandonate' },
+  { key: 'orders', label: 'Orders' },
+  { key: 'customers', label: 'Customers' },
+  { key: 'products', label: 'Products' },
+  { key: 'customer_phone', label: 'Customer phone numbers' },
+  { key: 'webhooks', label: 'Real-time events (webhooks)' },
+  { key: 'abandoned_carts', label: 'Abandoned carts' },
 ]
 
-/** Codes the Shopify callback may append as ?commerce_error=; anything else gets the generic line. */
-export const OAUTH_ERRORS: Record<string, string> = {
-  access_denied: 'Instalarea a fost refuzată în Shopify. Poți încerca din nou când ești gata.',
-  invalid_shop: 'Domeniul magazinului nu este un domeniu myshopify.com valid.',
-  state_mismatch: 'Sesiunea de instalare a expirat. Pornește din nou conectarea.',
-  hmac_invalid: 'Răspunsul primit de la Shopify nu a putut fi verificat. Pornește din nou conectarea.',
-  not_configured: 'Conectarea cu Shopify nu este configurată pe această platformă.',
-  token_exchange_failed: 'Shopify nu a emis un token de acces. Încearcă din nou.',
-  unreachable: 'Shopify nu a răspuns. Încearcă din nou în câteva momente.',
-}
-
-export function oauthErrorMessage(code: string): string {
-  return OAUTH_ERRORS[code] ?? `Conectarea cu Shopify nu a reușit (cod: ${code.slice(0, 40)}).`
-}
+/** The codes the Shopify callback may append as ?commerce_error=, in the words the Connections page shows too. */
+export { OAUTH_ERRORS, oauthErrorMessage } from '@/components/commerce/labels'
 
 // ─── Automations ──────────────────────────────────────────────────────────────
 
-export const AUTOMATION_TITLES: Record<AutomationType, string> = {
-  cod_confirmation: 'Confirmarea comenzilor ramburs',
-  abandoned_cart: 'Recuperarea coșurilor abandonate',
-  order_follow_up: 'Follow-up după livrare/status',
-}
+// The automation names and descriptions are the dashboard's
+// (components/commerce/labels.ts AUTOMATION_TYPE_LABEL / AUTOMATION_TYPE_DESCRIPTION),
+// and a refused enable shows the route's own message. The consent is the
+// versioned wording the server records, so the merchant confirms exactly the
+// text stored under CONSENT_VERSION.
+export { CONSENT_TEXT } from '@/lib/commerce/automations/config'
 
-export const AUTOMATION_DESCRIPTIONS: Record<AutomationType, string> = {
-  cod_confirmation: 'Sună clienții cu comenzi noi plătite ramburs ca să confirme comanda înainte de expediere.',
-  abandoned_cart: 'Sună clienții care au lăsat un coș neterminat și au telefonul în comandă, după un interval de așteptare.',
-  order_follow_up: 'Sună clienții după ce comanda ajunge la statusul ales, ca să verifice că totul este în regulă.',
-}
-
-export const CONSENT_TEXT =
-  'Confirm că am temei legal și acordul clienților pentru a fi contactați telefonic de magazin, inclusiv prin asistent AI, și că voi respecta cererile de a nu mai fi sunați.'
-
-/** Why PUT /api/commerce/automations/[type] refused to enable (details.reason). */
-export const AUTOMATION_ENABLE_REASONS: Record<string, string> = {
-  no_consent: 'Bifează mai întâi confirmarea temeiului legal.',
-  unavailable: 'Această automatizare nu este disponibilă pe platforma magazinului tău.',
-  agent_inactive: 'Agentul nu este încă activ. O poți activa după lansare, din Magazin → Automatizări.',
-  no_phone_number: 'Nu există încă un număr de telefon pentru apeluri. O poți activa după lansare, când ai un număr.',
-  encryption_not_configured: 'Criptarea credențialelor nu este configurată pe platformă.',
-  connection_inactive: 'Conexiunea cu magazinul nu este activă.',
-}
-
-const DAY_LABELS: Record<string, string> = { mon: 'Lu', tue: 'Ma', wed: 'Mi', thu: 'Jo', fri: 'Vi', sat: 'Sâ', sun: 'Du' }
+const DAY_LABELS: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }
 
 export function formatDays(days: string[]): string {
-  if (!days.length) return 'nicio zi'
+  if (!days.length) return 'no days'
   return days.map((d) => DAY_LABELS[d.toLowerCase().slice(0, 3)] ?? d).join(', ')
 }
 
@@ -183,38 +129,40 @@ export function formatMinutes(minutes: number): string {
   return m ? `${h} h ${m} min` : `${h} h`
 }
 
-const ORDER_STATUS_RO: Record<string, string> = {
-  pending: 'în așteptare',
-  processing: 'în procesare',
-  on_hold: 'în așteptare (on hold)',
-  completed: 'finalizată',
-  fulfilled: 'livrată',
-  cancelled: 'anulată',
-  refunded: 'rambursată',
-  failed: 'eșuată',
-  draft: 'ciornă',
-  unknown: 'necunoscut',
+const ORDER_STATUS_LABELS: Record<string, string> = {
+  pending: 'pending',
+  processing: 'processing',
+  on_hold: 'on hold',
+  completed: 'completed',
+  fulfilled: 'fulfilled',
+  cancelled: 'canceled',
+  refunded: 'refunded',
+  failed: 'failed',
+  draft: 'draft',
+  unknown: 'unknown',
 }
+
+const WITH_PHONE_NOT_SUPPRESSED = 'when the order has a valid phone number and it is not on the do-not-call list'
 
 /** Trigger / contact-rule lines of an automation card, from its config. */
 export function automationRules(type: AutomationType, config: AutomationConfig): { trigger: string; contact: string } {
   if (type === 'cod_confirmation') {
-    const methods = config.cod_payment_methods.length ? config.cod_payment_methods.join(', ') : 'metodele ramburs recunoscute de platformă'
+    const methods = config.cod_payment_methods.length ? config.cod_payment_methods.join(', ') : 'the cash-on-delivery methods the platform recognizes'
     return {
-      trigger: `Comandă nouă cu plata ramburs (${methods})`,
-      contact: 'Clientul comenzii, dacă are un număr de telefon valid în comandă și nu este în lista „Nu suna”',
+      trigger: `New cash-on-delivery order (${methods})`,
+      contact: `The order’s customer, ${WITH_PHONE_NOT_SUPPRESSED}`,
     }
   }
   if (type === 'abandoned_cart') {
-    const min = config.min_order_total !== null ? ` cu valoare de cel puțin ${config.min_order_total}` : ''
+    const min = config.min_order_total !== null ? ` worth at least ${config.min_order_total}` : ''
     return {
-      trigger: `Coș abandonat${min}, după ${formatMinutes(config.delay_minutes)}`,
-      contact: 'Clientul coșului, dacă telefonul este cunoscut și nu este în lista „Nu suna”',
+      trigger: `Abandoned cart${min}, after ${formatMinutes(config.delay_minutes)}`,
+      contact: 'The cart’s customer, when the phone number is known and it is not on the do-not-call list',
     }
   }
   return {
-    trigger: `Comanda trece în statusul „${ORDER_STATUS_RO[config.follow_up_status] ?? config.follow_up_status}”`,
-    contact: 'Clientul comenzii, dacă are un număr de telefon valid și nu este în lista „Nu suna”',
+    trigger: `Order moves to the “${ORDER_STATUS_LABELS[config.follow_up_status] ?? config.follow_up_status}” status`,
+    contact: `The order’s customer, ${WITH_PHONE_NOT_SUPPRESSED}`,
   }
 }
 
@@ -226,8 +174,8 @@ export function automationRules(type: AutomationType, config: AutomationConfig):
  * every other page (phone number, billing…) is reachable only after the launch.
  */
 const CHECKLIST_STEP_BY_PATH: ReadonlyArray<readonly [prefix: string, step: number]> = [
-  ['/magazin/conexiuni', 3],
-  ['/magazin/automatizari', 4],
+  ['/store/connections', 3],
+  ['/store/automations', 4],
   ['/agent', 5],
 ]
 
@@ -242,5 +190,5 @@ export function formatDate(iso: string | null | undefined): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return new Intl.DateTimeFormat('ro-RO', { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(d)
 }

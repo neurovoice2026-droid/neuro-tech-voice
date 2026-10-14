@@ -19,18 +19,19 @@ export type IneligibleReason =
   | 'cart_not_abandoned'
   | 'cart_recovered'
 
+/** Merchant-facing reason of a suppressed, skipped or cancelled run (stored on the run, shown in the dashboard). */
 export const INELIGIBLE_LABELS: Record<IneligibleReason, string> = {
-  automation_disabled: 'Automatizarea este oprită',
-  no_consent: 'Consimțământul nu a fost confirmat',
-  before_enabled: 'Comandă anterioară activării',
-  not_cod: 'Nu este plată ramburs',
-  order_not_open: 'Comanda este anulată, plătită sau livrată',
-  status_mismatch: 'Statusul comenzii nu este cel ales',
-  no_phone: 'Fără număr de telefon valid',
-  do_not_call: 'Clientul a cerut să nu fie sunat',
-  below_min_total: 'Sub valoarea minimă configurată',
-  cart_not_abandoned: 'Coșul nu este abandonat',
-  cart_recovered: 'Clientul a finalizat comanda',
+  automation_disabled: 'Automation is turned off',
+  no_consent: 'Customer consent not confirmed',
+  before_enabled: 'Order placed before the automation was enabled',
+  not_cod: 'Not a cash-on-delivery order',
+  order_not_open: 'Order is canceled, paid or shipped',
+  status_mismatch: 'Order status does not match the chosen one',
+  no_phone: 'No valid phone number',
+  do_not_call: 'Customer asked not to be called',
+  below_min_total: 'Below the configured minimum order total',
+  cart_not_abandoned: 'Cart is not abandoned',
+  cart_recovered: 'Customer completed the order',
 }
 
 /** Reasons that produce a visible 'suppressed' run (the merchant should see them); the others produce nothing. */

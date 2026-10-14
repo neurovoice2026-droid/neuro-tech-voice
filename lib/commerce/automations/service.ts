@@ -94,13 +94,13 @@ export async function upsertAutomation(
   if (wantEnabled && !(current?.enabled ?? false)) {
     const availability = automationAvailability(type, readCapabilities(connection.capabilities))
     const fail = (reason: string, message: string) => new RequestError('precondition_failed', message, 409, { reason })
-    if (!availability.available) throw fail('unavailable', availability.reason ?? 'Automatizarea nu este disponibilă pe această platformă.')
-    if (!consentAt) throw fail('no_consent', 'Confirmă mai întâi că ai acordul clienților pentru apeluri.')
-    if (connection.status !== 'active' && connection.status !== 'degraded') throw fail('connection_inactive', 'Conectează magazinul înainte de a porni automatizările.')
-    if (!commerceCryptoConfigured()) throw fail('encryption_not_configured', 'Criptarea datelor de acces nu este configurată pe platformă.')
+    if (!availability.available) throw fail('unavailable', availability.reason ?? 'This automation is not available on this platform.')
+    if (!consentAt) throw fail('no_consent', 'Confirm customer consent for calls first.')
+    if (connection.status !== 'active' && connection.status !== 'degraded') throw fail('connection_inactive', 'Connect the store before enabling automations.')
+    if (!commerceCryptoConfigured()) throw fail('encryption_not_configured', 'Credential encryption is not configured on the platform.')
     const gate = await enableGate(db, input.orgId)
-    if (!gate.agentActive) throw fail('agent_inactive', 'Agentul este oprit: activează-l înainte de a porni automatizările.')
-    if (!gate.hasOutboundNumber) throw fail('no_phone_number', 'Ai nevoie de un număr de telefon activ care poate suna.')
+    if (!gate.agentActive) throw fail('agent_inactive', 'The agent is paused: turn it on before enabling automations.')
+    if (!gate.hasOutboundNumber) throw fail('no_phone_number', 'You need an active phone number that can place calls.')
   }
 
   const row = {
@@ -125,7 +125,7 @@ export async function upsertAutomation(
     if (!wantEnabled) {
       // Pausing cancels what is queued; a running call finishes on its own. The automation is already
       // off (dispatch cancels its runs on claim), so a failure here is reported, not retried.
-      const { error: cancelErr } = await db.from('commerce_automation_runs').update({ status: 'cancelled', eligibility_reason: 'Automatizarea a fost oprită', completed_at: new Date().toISOString() }).eq('automation_id', saved.id).in('status', ['eligible', 'scheduled', 'retry_waiting'])
+      const { error: cancelErr } = await db.from('commerce_automation_runs').update({ status: 'cancelled', eligibility_reason: 'Automation turned off', completed_at: new Date().toISOString() }).eq('automation_id', saved.id).in('status', ['eligible', 'scheduled', 'retry_waiting'])
       if (cancelErr) log.error('commerce.automation.cancel_runs_failed', cancelErr, { automationId: saved.id })
     }
   } else if (patch.config || patch.script || patch.consent_confirmed) {

@@ -73,7 +73,7 @@ export async function reconcileCommerceRun(db: SupabaseClient, callId: string, l
       // The dial was never confirmed and no provider event settled the call: it
       // may have rung and been answered, so the run ends here and is never
       // dialed again (same terms as the recovery sweep in ./dispatch.ts).
-      patch = { status: 'failed', outcome: 'failed', outcome_detail: run.outcome_detail, summary, error_code: 'dispatch_uncertain', error_message: 'Apelul nu a putut fi confirmat; nu se reia automat.', completed_at: now.toISOString(), lease_owner: null, lease_until: null }
+      patch = { status: 'failed', outcome: 'failed', outcome_detail: run.outcome_detail, summary, error_code: 'dispatch_uncertain', error_message: 'The call could not be confirmed; it is not retried automatically.', completed_at: now.toISOString(), lease_owner: null, lease_until: null }
     } else if (RETRYABLE.has(outcome) && run.attempt < run.max_attempts) {
       const { data: automation } = await db.from('commerce_automations').select(AUTOMATION_COLUMNS).eq('id', run.automation_id).maybeSingle()
       const { data: org } = await db.from('organizations').select('timezone, commerce_profile').eq('id', run.org_id).maybeSingle()

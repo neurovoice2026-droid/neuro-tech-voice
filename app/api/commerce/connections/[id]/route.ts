@@ -24,7 +24,7 @@ export async function DELETE(request: Request, { params }: Params) {
     const ctx = await requireCommerceOrg(log)
     const row = await ownedConnection(ctx.db, ctx.org.id, (await params).id)
     const body = await parseJsonBody(request, z.object({ confirm: z.string().trim().max(255) }), 4 * 1024)
-    if (body.confirm.toLowerCase() !== row.store_domain.toLowerCase()) throw new RequestError('precondition_failed', 'Scrie exact domeniul magazinului pentru a confirma ștergerea.', 409, { reason: 'confirm_mismatch' })
+    if (body.confirm.toLowerCase() !== row.store_domain.toLowerCase()) throw new RequestError('precondition_failed', 'Type the store domain exactly to confirm the deletion.', 409, { reason: 'confirm_mismatch' })
     await deleteStore(ctx.db, row, ctx.user.id, ctx.log)
     return noStore({ deleted: true })
   })

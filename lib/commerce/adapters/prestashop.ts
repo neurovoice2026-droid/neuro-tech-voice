@@ -111,14 +111,14 @@ export const REQUIRED_RESOURCES = ['orders', 'order_details', 'order_states', 'c
 /** GET rights that improve the data when present; each missing one adds a note. */
 const OPTIONAL_RESOURCES = ['configurations', 'currencies', 'countries', 'languages', 'stock_availables'] as const
 
-/** Merchant-facing notes (Romanian) stored in capabilities.notes. */
-export const NOTE_NO_WEBHOOKS = 'PrestaShop nu are webhook-uri standard: comenzile, clienții și produsele sunt citite periodic (la 15 minute).'
-export const NOTE_NO_CARTS = 'Coșurile abandonate nu sunt disponibile: Webservice-ul PrestaShop expune coșurile fără telefon și fără acordul clientului, deci nu pot declanșa apeluri.'
-export const NOTE_NO_STOCK = 'Cheia nu poate citi resursa „stock_availables”: stocul produselor apare ca necunoscut.'
-export const NOTE_NO_CONFIG = 'Cheia nu poate citi resursa „configurations”: numele magazinului și fusul orar nu pot fi citite, iar datele comenzilor sunt interpretate ca UTC.'
-export const NOTE_NO_COUNTRIES = 'Cheia nu poate citi resursa „countries”: țara adreselor nu poate fi determinată, iar telefoanele fără prefix internațional nu pot fi apelate.'
-export const NOTE_NO_CURRENCIES = 'Cheia nu poate citi resursa „currencies”: moneda comenzilor nu poate fi determinată.'
-export const NOTE_TIMEZONE_UTC = 'Fusul orar al magazinului (PS_TIMEZONE) nu a putut fi citit: datele comenzilor sunt interpretate ca UTC.'
+/** Merchant-facing notes (English) stored in capabilities.notes. */
+export const NOTE_NO_WEBHOOKS = 'PrestaShop has no standard webhooks: orders, customers and products are read periodically (every 15 minutes).'
+export const NOTE_NO_CARTS = 'Abandoned carts are not available: the PrestaShop Webservice exposes carts without a phone number and without the customer\'s consent, so they cannot trigger calls.'
+export const NOTE_NO_STOCK = 'The key cannot read the "stock_availables" resource: product stock appears as unknown.'
+export const NOTE_NO_CONFIG = 'The key cannot read the "configurations" resource: the store name and time zone cannot be read, and order dates are interpreted as UTC.'
+export const NOTE_NO_COUNTRIES = 'The key cannot read the "countries" resource: the country of addresses cannot be determined, and phone numbers without an international prefix cannot be called.'
+export const NOTE_NO_CURRENCIES = 'The key cannot read the "currencies" resource: the currency of orders cannot be determined.'
+export const NOTE_TIMEZONE_UTC = 'The store time zone (PS_TIMEZONE) could not be read: order dates are interpreted as UTC.'
 
 /**
  * Connect-form secrets. The Webservice refuses any key that is not exactly 32
@@ -152,10 +152,10 @@ export function canonicalStoreUrl(raw: string): { storeUrl: string; storeDomain:
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
   } catch (err) {
-    throw new ConnectionError('invalid_url', 'Adresa magazinului nu este validă.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
+    throw new ConnectionError('invalid_url', 'The store address is not valid.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
   }
-  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'Adresa magazinului trebuie să înceapă cu https://.', false, 'store url: not https')
-  if (url.username || url.password) throw new ConnectionError('invalid_url', 'Adresa magazinului nu poate conține utilizator și parolă.', false, 'store url: credentials')
+  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'The store address must start with https://.', false, 'store url: not https')
+  if (url.username || url.password) throw new ConnectionError('invalid_url', 'The store address cannot contain a user name and password.', false, 'store url: credentials')
   let path = url.pathname.replace(/\/api(\/.*)?$/, '').replace(/\/+$/, '')
   if (path === '/') path = ''
   const host = url.hostname.toLowerCase()
@@ -195,7 +195,7 @@ function contextFor(storeUrl: string, secrets: PrestaShopSecrets): PsContext {
 function parseSecrets(secrets: ConnectionSecrets): PrestaShopSecrets {
   const parsed = PrestaShopSecretsSchema.safeParse(secrets)
   if (!parsed.success) {
-    throw new ConnectionError('unauthorized', 'Cheia Webservice lipsește sau are un format greșit (32 de litere și cifre).', false, 'prestashop secrets: invalid shape')
+    throw new ConnectionError('unauthorized', 'The Webservice key is missing or malformed (32 letters and digits).', false, 'prestashop secrets: invalid shape')
   }
   return parsed.data
 }
@@ -234,10 +234,10 @@ const WS_DISABLED = 22
 const WS_NO_SHOP_RIGHT = 132
 
 function forbiddenResource(resources: readonly string[], detail: string): ConnectionError {
-  const list = resources.map((r) => `„${r}”`).join(', ')
+  const list = resources.map((r) => `"${r}"`).join(', ')
   return new ConnectionError(
     'forbidden',
-    `Cheia Webservice nu are drept de citire (GET) pe ${resources.length > 1 ? 'resursele' : 'resursa'} ${list}. Bifează GET pentru ${resources.length > 1 ? 'ele' : 'ea'} în Parametri avansați → Webservice.`,
+    `The Webservice key has no read (GET) permission on the ${resources.length > 1 ? 'resources' : 'resource'} ${list}. Enable GET for ${resources.length > 1 ? 'them' : 'it'} under Advanced Parameters → Webservice.`,
     false,
     detail,
   )
@@ -246,23 +246,23 @@ function forbiddenResource(resources: readonly string[], detail: string): Connec
 function unsafeUrlFailure(err: UnsafeUrlError): ConnectionError {
   const reason = err.reason
   if (/private or reserved|resolves to a private|local hosts/.test(reason)) {
-    return new ConnectionError('ssrf_blocked', 'Adresa magazinului indică o rețea privată sau locală; este necesară o adresă publică.', false, `store url: ${reason}`)
+    return new ConnectionError('ssrf_blocked', 'The store address points to a private or local network; a public address is required.', false, `store url: ${reason}`)
   }
-  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'Domeniul magazinului nu poate fi rezolvat (DNS).', true, `store url: ${reason}`)
-  return new ConnectionError('invalid_url', 'Adresa magazinului nu este validă (doar https, fără port neobișnuit).', false, `store url: ${reason}`)
+  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'The store domain cannot be resolved (DNS).', true, `store url: ${reason}`)
+  return new ConnectionError('invalid_url', 'The store address is not valid (https only, no unusual port).', false, `store url: ${reason}`)
 }
 
 function transportFailure(err: StoreHttpError, operation: string): ConnectionError {
   switch (err.code) {
     case 'timeout':
-      return new ConnectionError('timeout', 'Magazinul nu a răspuns la timp.', true, `prestashop ${operation}: timeout`)
+      return new ConnectionError('timeout', 'The store did not respond in time.', true, `prestashop ${operation}: timeout`)
     case 'redirect':
-      return new ConnectionError('redirect', 'Magazinul redirecționează către altă adresă; folosește adresa finală (https, cu sau fără www).', false, `prestashop ${operation}: redirect ${err.status ?? ''}`.trim())
+      return new ConnectionError('redirect', 'The store redirects to another address; use the final address (https, with or without www).', false, `prestashop ${operation}: redirect ${err.status ?? ''}`.trim())
     case 'too_large':
-      return new ConnectionError('invalid_response', 'Răspunsul magazinului este prea mare.', false, `prestashop ${operation}: response too large`)
+      return new ConnectionError('invalid_response', 'The store response is too large.', false, `prestashop ${operation}: response too large`)
     case 'network':
     case 'http':
-      return new ConnectionError('unreachable', 'Magazinul nu a putut fi contactat.', true, `prestashop ${operation}: ${err.code}`)
+      return new ConnectionError('unreachable', 'The store could not be reached.', true, `prestashop ${operation}: ${err.code}`)
   }
 }
 
@@ -274,29 +274,29 @@ function httpFailure(res: PsResponse, operation: string, resource?: string): Con
   if (res.status === 401 && codes.includes(WS_NO_RESOURCE_RIGHT)) return forbiddenResource([name], detail)
   if (res.status === 401 && codes.includes(WS_NO_RIGHT_AT_ALL)) return forbiddenResource([...REQUIRED_RESOURCES], detail)
   if (res.status === 401) {
-    return new ConnectionError('unauthorized', 'Cheia Webservice nu a fost acceptată de magazin. Verifică cheia (32 de caractere) și că este activă în Parametri avansați → Webservice.', false, detail)
+    return new ConnectionError('unauthorized', 'The store did not accept the Webservice key. Check the key (32 characters) and that it is enabled under Advanced Parameters → Webservice.', false, detail)
   }
-  if (res.status === 429) return new ConnectionError('rate_limited', 'Magazinul limitează cererile; încearcă din nou în câteva minute.', true, detail)
+  if (res.status === 429) return new ConnectionError('rate_limited', 'The store is rate limiting requests; try again in a few minutes.', true, detail)
   if (res.status === 503 && codes.includes(WS_DISABLED)) {
-    return new ConnectionError('not_a_store', 'Webservice-ul PrestaShop este dezactivat: activează-l din Parametri avansați → Webservice.', false, detail)
+    return new ConnectionError('not_a_store', 'The PrestaShop Webservice is disabled: enable it under Advanced Parameters → Webservice.', false, detail)
   }
   // Any other 5xx, HTML maintenance and firewall pages included, is a transient server failure: retried, never "not a store".
-  if (res.status >= 500) return new ConnectionError('unreachable', 'Magazinul a răspuns cu o eroare de server; încearcă din nou.', true, detail)
+  if (res.status >= 500) return new ConnectionError('unreachable', 'The store answered with a server error; try again.', true, detail)
   if (res.status === 405 && codes.includes(WS_METHOD_NOT_ALLOWED)) return forbiddenResource([name], detail)
   if (res.status === 403) {
     // Only the Webservice's own 403 (code 132) is about shop rights; without its envelope the web server or a firewall refused the request.
     return codes.includes(WS_NO_SHOP_RIGHT)
-      ? new ConnectionError('forbidden', 'Cheia Webservice nu are drepturi pe acest magazin (multi-magazin): asociază cheia cu magazinul.', false, detail)
-      : new ConnectionError('forbidden', 'Serverul magazinului sau un firewall a refuzat cererea (403) înainte de a ajunge la Webservice: permite accesul la /api pentru această platformă.', false, detail)
+      ? new ConnectionError('forbidden', 'The Webservice key has no permissions on this shop (multistore): associate the key with the shop.', false, detail)
+      : new ConnectionError('forbidden', 'The store server or a firewall refused the request (403) before it reached the Webservice: allow this platform to access /api.', false, detail)
   }
   if (res.status === 404 || looksLikeHtml(res)) {
-    return new ConnectionError('not_a_store', 'La această adresă nu răspunde Webservice-ul PrestaShop (/api). Verifică adresa magazinului și că Webservice-ul este activat.', false, detail)
+    return new ConnectionError('not_a_store', 'The PrestaShop Webservice (/api) does not answer at this address. Check the store address and that the Webservice is enabled.', false, detail)
   }
-  return new ConnectionError('invalid_response', 'Magazinul a răspuns neașteptat.', false, detail)
+  return new ConnectionError('invalid_response', 'The store answered unexpectedly.', false, detail)
 }
 
 function invalidResponse(operation: string, what: string): ConnectionError {
-  return new ConnectionError('invalid_response', 'Răspunsul magazinului nu are formatul așteptat.', false, `prestashop ${operation}: ${what}`)
+  return new ConnectionError('invalid_response', 'The store response does not have the expected format.', false, `prestashop ${operation}: ${what}`)
 }
 
 async function psRequest(deps: PrestaShopAdapterDeps, ctx: PsContext, operation: string, req: PsRequest): Promise<PsResponse> {
@@ -875,7 +875,7 @@ export function createPrestaShopAdapter(deps: PrestaShopAdapterDeps = {}): Comme
     if (!listing) throw invalidResponse('api.index', 'not the webservice resource list')
     const platformVersion = platformVersionOf(res.headers)
     if (!versionSupported(platformVersion)) {
-      throw new ConnectionError('api_version_unsupported', `Versiunea PrestaShop ${platformVersion} nu este suportată: este nevoie de PrestaShop ${PRESTASHOP_MIN_VERSION} sau mai nou.`, false, `prestashop api.index: version ${platformVersion}`)
+      throw new ConnectionError('api_version_unsupported', `PrestaShop ${platformVersion} is not supported: PrestaShop ${PRESTASHOP_MIN_VERSION} or newer is required.`, false, `prestashop api.index: version ${platformVersion}`)
     }
     const missing = REQUIRED_RESOURCES.filter((r) => !listing.readable.has(r))
     if (missing.length) throw forbiddenResource(missing, `prestashop api.index: missing GET on ${missing.join(',')}`)

@@ -20,15 +20,15 @@ export function connectionRequestError(err: unknown): RequestError {
     const status = err.code === 'not_configured' ? 503 : 409
     return new RequestError(err.code === 'not_configured' ? 'not_configured' : 'precondition_failed', err.publicMessage, status, { reason: err.code, retryable: err.retryable })
   }
-  if (err instanceof UnsafeUrlError) return new RequestError('invalid_request', 'Adresa magazinului nu este permisă (doar https, fără adrese interne).', 400, { reason: 'ssrf_blocked' })
+  if (err instanceof UnsafeUrlError) return new RequestError('invalid_request', 'The store URL is not allowed (https only, no internal addresses).', 400, { reason: 'ssrf_blocked' })
   if (err instanceof StoreHttpError) {
     const reason = err.code === 'timeout' ? 'timeout' : err.code === 'redirect' ? 'redirect' : 'unreachable'
-    return new RequestError('precondition_failed', reason === 'timeout' ? 'Magazinul nu a răspuns la timp.' : reason === 'redirect' ? 'Magazinul răspunde cu o redirecționare: folosește adresa finală https.' : 'Magazinul nu a putut fi contactat.', 409, { reason, retryable: true })
+    return new RequestError('precondition_failed', reason === 'timeout' ? 'The store did not respond in time.' : reason === 'redirect' ? 'The store answers with a redirect: use the final https address.' : 'The store could not be reached.', 409, { reason, retryable: true })
   }
   if (err instanceof CommerceCryptoError) {
-    if (err.code === 'not_configured' || err.code === 'invalid_key') return new RequestError('not_configured', 'Criptarea datelor de acces nu este configurată pe platformă.', 503, { reason: 'encryption_not_configured' })
+    if (err.code === 'not_configured' || err.code === 'invalid_key') return new RequestError('not_configured', 'Credential encryption is not configured on the platform.', 503, { reason: 'encryption_not_configured' })
     // The stored envelope cannot be read (key version no longer available, tampered, malformed): only a reconnect fixes it.
-    return new RequestError('precondition_failed', 'Datele de acces nu pot fi citite: reconectează magazinul.', 409, { reason: 'credentials_unreadable', retryable: false })
+    return new RequestError('precondition_failed', 'The stored credentials cannot be read: reconnect the store.', 409, { reason: 'credentials_unreadable', retryable: false })
   }
   if (err instanceof RequestError) return err
   throw err
@@ -49,7 +49,7 @@ export interface ConnectInput {
  * so the mirrors and automations survive a key rotation.
  */
 export async function connectStore(db: SupabaseClient, input: ConnectInput, log: Logger): Promise<ConnectionRow> {
-  if (!commerceCryptoConfigured()) throw new RequestError('not_configured', 'Criptarea datelor de acces nu este configurată pe platformă (COMMERCE_CREDENTIALS_ENCRYPTION_KEY).', 503, { reason: 'encryption_not_configured' })
+  if (!commerceCryptoConfigured()) throw new RequestError('not_configured', 'Credential encryption is not configured on the platform (COMMERCE_CREDENTIALS_ENCRYPTION_KEY).', 503, { reason: 'encryption_not_configured' })
   const adapter = adapterFor(input.platform)
   let validated: ValidatedStore
   try {
@@ -100,7 +100,7 @@ export async function connectStore(db: SupabaseClient, input: ConnectInput, log:
   } catch (err) {
     const code = err instanceof ConnectionError ? err.code : 'webhook_registration_failed'
     log.warn('commerce.connect.webhooks_failed', { platform: input.platform, code })
-    webhookConfig = { ...webhookConfig, last_error: err instanceof ConnectionError ? err.publicMessage : 'Webhook-urile nu au putut fi înregistrate; datele ajung prin sincronizare periodică.', last_error_at: new Date().toISOString() }
+    webhookConfig = { ...webhookConfig, last_error: err instanceof ConnectionError ? err.publicMessage : 'Webhooks could not be registered; data arrives through periodic sync.', last_error_at: new Date().toISOString() }
     status = validated.capabilities.webhooks ? 'degraded' : 'active'
   }
   const { error: cfgErr } = await db.from('commerce_connections').update({ webhook_config: webhookConfig, status }).eq('id', id)
@@ -120,7 +120,7 @@ export interface TestResult {
 
 /** Re-validates the stored credentials against the platform; updates status/error accordingly. */
 export async function testConnection(db: SupabaseClient, row: ConnectionRow, log: Logger): Promise<TestResult> {
-  if (!row.encrypted_credentials) return { ok: false, message: 'Conexiunea nu are date de acces: reconectează magazinul.', capabilities: null }
+  if (!row.encrypted_credentials) return { ok: false, message: 'The connection has no credentials: reconnect the store.', capabilities: null }
   const adapter = adapterFor(row.platform)
   try {
     const conn = toAdapterConnection(row)
@@ -132,7 +132,7 @@ export async function testConnection(db: SupabaseClient, row: ConnectionRow, log
       .update({ capabilities: validated.capabilities, error_code: null, error_message: null, ...rewrap, ...(row.status === 'error' || row.status === 'degraded' ? { status: 'active' } : {}) })
       .eq('id', row.id)
     if (error) throw new Error(`commerce_connections update failed: ${error.message}`)
-    return { ok: true, message: 'Conexiunea funcționează.', capabilities: validated.capabilities }
+    return { ok: true, message: 'The connection works.', capabilities: validated.capabilities }
   } catch (err) {
     const mapped = connectionRequestError(err)
     const reason = (mapped.details as { reason?: string } | undefined)?.reason ?? mapped.code
@@ -166,7 +166,7 @@ export async function disconnectStore(db: SupabaseClient, row: ConnectionRow, us
   if (jobsErr) throw new Error(`commerce_sync_jobs update failed: ${jobsErr.message}`)
   const { error: runsErr } = await db
     .from('commerce_automation_runs')
-    .update({ status: 'cancelled', eligibility_reason: 'Magazinul a fost deconectat', completed_at: now })
+    .update({ status: 'cancelled', eligibility_reason: 'Store disconnected', completed_at: now })
     .eq('connection_id', row.id)
     .in('status', ['eligible', 'scheduled', 'retry_waiting'])
   if (runsErr) throw new Error(`commerce_automation_runs update failed: ${runsErr.message}`)

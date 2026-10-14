@@ -9,8 +9,8 @@ import {
   stockStatusLabel, stockStatusTone,
 } from './labels'
 
-// The Magazin section's chips: tone + dot/icon + Romanian text, built on the
-// shared StatusChip so a status is never colour alone.
+// The Store section's chips: tone + dot/icon + text, built on the shared
+// StatusChip so a status is never colour alone.
 
 export function ConnectionStatusChip({ status, className }: { status: string | null | undefined; className?: string }) {
   const connecting = status === 'connecting'
@@ -64,8 +64,8 @@ export function StockStatusChip({ status, className }: { status: string; classNa
 
 export function CodChip({ className }: { className?: string }) {
   return (
-    <StatusChip tone="warning" className={className} title="Plata la livrare (ramburs)">
-      Ramburs
+    <StatusChip tone="warning" className={className} title="Cash on delivery">
+      COD
     </StatusChip>
   )
 }

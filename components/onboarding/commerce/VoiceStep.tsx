@@ -55,8 +55,8 @@ export function VoiceStep({ onBack, onSaved }: VoiceStepProps) {
       // The agent is created at launch, so "pending" is the normal outcome here; only an
       // explicit failure stops the wizard.
       if (result.voice_sync_status === 'failed') {
-        toast.error('Vocea nu a putut fi aplicată', {
-          description: result.error ?? result.agent.voice_sync_error ?? 'Încearcă din nou sau alege altă voce.',
+        toast.error('The voice could not be applied', {
+          description: result.error ?? result.agent.voice_sync_error ?? 'Try again or pick another voice.',
         })
         return
       }
@@ -69,7 +69,7 @@ export function VoiceStep({ onBack, onSaved }: VoiceStepProps) {
       }
       onSaved()
     } catch (err) {
-      toast.error(errorMessage(err, 'Vocea nu a putut fi salvată. Încearcă din nou.'))
+      toast.error(errorMessage(err, 'The voice could not be saved. Please try again.'))
     } finally {
       setPhase('idle')
     }
@@ -94,8 +94,8 @@ export function VoiceStep({ onBack, onSaved }: VoiceStepProps) {
             <>
               <StatusChip tone="neutral" icon={<CheckCircle2 className="text-success-dot" aria-hidden="true" />} className="max-w-full min-w-0 shrink">
                 <span className="truncate">
-                  <span className="sr-only sm:not-sr-only">Selectată: </span>
-                  {selectedName || 'Voce selectată'}
+                  <span className="sr-only sm:not-sr-only">Selected: </span>
+                  {selectedName || 'Voice selected'}
                 </span>
               </StatusChip>
               {selectedLocale && (
@@ -106,17 +106,17 @@ export function VoiceStep({ onBack, onSaved }: VoiceStepProps) {
               )}
             </>
           ) : (
-            <p className="text-[13px] leading-[19px] text-muted-foreground">Alege o voce ca să continui</p>
+            <p className="text-[13px] leading-[19px] text-muted-foreground">Pick a voice to continue</p>
           )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Button variant="ghost" size="lg" onClick={onBack} disabled={busy} className="max-sm:size-11 max-sm:px-0">
             <ArrowLeft aria-hidden="true" />
-            <span className="max-sm:sr-only">Înapoi</span>
+            <span className="max-sm:sr-only">Back</span>
           </Button>
-          <Button size="lg" onClick={handleContinue} disabled={!selectedVoiceId} loading={busy} loadingText={phase === 'adding' ? 'Se adaugă vocea…' : 'Se salvează…'}>
-            Continuă
+          <Button size="lg" onClick={handleContinue} disabled={!selectedVoiceId} loading={busy} loadingText={phase === 'adding' ? 'Adding the voice…' : 'Saving…'}>
+            Continue
             <ArrowRight aria-hidden="true" />
           </Button>
         </div>

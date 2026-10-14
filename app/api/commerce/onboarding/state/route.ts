@@ -37,12 +37,12 @@ export async function GET(request: Request) {
         }
       : null
     const checklist = [
-      { key: 'connection', label: 'Magazin conectat', ok: !!dto && (dto.status === 'active' || dto.status === 'degraded'), href: null },
-      { key: 'sync', label: 'Prima sincronizare finalizată', ok: syncReady, href: null },
-      { key: 'agent', label: 'Agent configurat (nume, voce)', ok: !!agent && !!agent.voice_id, href: null },
-      { key: 'phone', label: 'Număr de telefon activ', ok: gate.hasOutboundNumber, href: '/phone' },
-      { key: 'consent', label: 'Consimțământ confirmat pentru apeluri', ok: automations.some((a) => !!a.consent_confirmed_at), href: null },
-      { key: 'automation', label: 'Cel puțin o automatizare pornită (opțional)', ok: automations.some((a) => a.enabled), href: null },
+      { key: 'connection', label: 'Store connected', ok: !!dto && (dto.status === 'active' || dto.status === 'degraded'), href: null },
+      { key: 'sync', label: 'First sync complete', ok: syncReady, href: null },
+      { key: 'agent', label: 'Agent set up (name, voice)', ok: !!agent && !!agent.voice_id, href: null },
+      { key: 'phone', label: 'Active phone number', ok: gate.hasOutboundNumber, href: '/phone' },
+      { key: 'consent', label: 'Call consent confirmed', ok: automations.some((a) => !!a.consent_confirmed_at), href: null },
+      { key: 'automation', label: 'At least one automation on (optional)', ok: automations.some((a) => a.enabled), href: null },
     ]
     return noStore({
       business_type: ctx.businessType,

@@ -9,6 +9,7 @@ import { ConnectionError, type AdapterConnection, type VerifiedCommerceEvent } f
 import {
   CART_TOPIC,
   NOTE_NO_CART_SOURCE,
+  NOTE_NO_STORE_INFO,
   NOTE_NO_WEBHOOK_PERMISSION,
   NOTE_READ_ONLY_KEY,
   WOOCOMMERCE_API_VERSION,
@@ -239,7 +240,7 @@ describe('validateConnection', () => {
     const store = await adapter.validateConnection({ storeUrl: STORE, secrets: { consumer_key: CK, consumer_secret: CS } }, fakeLogger().log)
     expect(store.currency).toBeNull()
     expect(store.capabilities).toMatchObject({ orders: true, products: true, customers: false })
-    expect(store.capabilities.notes.some((n) => n.includes('starea magazinului'))).toBe(true)
+    expect(store.capabilities.notes).toContain(NOTE_NO_STORE_INFO)
   })
 
   it('maps 401 to unauthorized without leaking the keys anywhere', async () => {

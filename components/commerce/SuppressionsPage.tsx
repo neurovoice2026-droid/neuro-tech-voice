@@ -43,12 +43,12 @@ function RemoveSuppressionDialog({ customer, onClose, onRemoved }: { customer: C
     try {
       const next = await unsuppressCustomer(customer.id, reason.trim())
       onRemoved(next)
-      toast.success('Clientul poate fi sunat din nou', { description: `${next.name} a fost scos din lista „Nu suna”; motivul a fost înregistrat.` })
+      toast.success('The customer can be called again', { description: `${next.name} was removed from the do-not-call list; the reason was recorded.` })
       setReason('')
       setConfirmed(false)
       onClose()
     } catch (err) {
-      toast.error('Clientul nu a putut fi scos din listă', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+      toast.error('The customer could not be removed from the list', { description: commerceErrorMessage(err, 'Try again.') })
     } finally {
       setPending(false)
     }
@@ -58,33 +58,33 @@ function RemoveSuppressionDialog({ customer, onClose, onRemoved }: { customer: C
     <Dialog open={customer !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Scoți clientul din lista „Nu suna”?</DialogTitle>
+          <DialogTitle>Remove the customer from the do-not-call list?</DialogTitle>
           <DialogDescription>
-            {customer?.name || 'Clientul'} va putea fi sunat din nou de automatizări. Acțiunea este înregistrată în jurnal, cu motivul tău.
+            {customer?.name || 'The customer'} can be called again by automations. The action is recorded in the audit log, with your reason.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {optedOut && (
             <p className="rounded-xl bg-warning-soft px-4 py-3 text-[13px] leading-[19px] text-warning">
-              Clientul însuși a cerut să nu mai fie sunat. Scoate-l din listă doar dacă ți-a dat din nou acordul.
+              The customer asked not to be called again. Remove them from the list only if they gave their consent again.
             </p>
           )}
-          <Field label="Motivul" htmlFor={`${id}-reason`} hint={`Între ${SUPPRESSION_REASON_MIN} și ${SUPPRESSION_REASON_MAX} de caractere; de exemplu „clientul a cerut telefonic să fie sunat din nou”.`}>
+          <Field label="Reason" htmlFor={`${id}-reason`} hint={`Between ${SUPPRESSION_REASON_MIN} and ${SUPPRESSION_REASON_MAX} characters; for example "the customer asked by phone to be called again".`}>
             <Textarea id={`${id}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={SUPPRESSION_REASON_MAX} disabled={pending} className="min-h-20" />
           </Field>
           <div className="flex items-start gap-3">
             <Checkbox id={`${id}-confirm`} checked={confirmed} onCheckedChange={(v) => setConfirmed(Boolean(v))} disabled={pending} className="mt-px" />
             <label htmlFor={`${id}-confirm`} className="text-[13px] leading-[19px] text-foreground select-none">
-              Confirm că am temei să contactez din nou acest client.
+              I confirm that I have grounds to contact this customer again.
             </label>
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={close} disabled={pending}>
-            Renunță
+            Cancel
           </Button>
-          <Button variant="destructive-solid" onClick={() => void remove()} disabled={!reasonOk || !confirmed} loading={pending} loadingText="Se înregistrează…">
-            Scoate din listă
+          <Button variant="destructive-solid" onClick={() => void remove()} disabled={!reasonOk || !confirmed} loading={pending} loadingText="Recording…">
+            Remove from list
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -102,12 +102,12 @@ export function SuppressionsPage() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Magazin"
-        title="Lista „Nu suna”"
-        description="Clienții pe care nicio automatizare nu îi sună: cei care au cerut-o în apel, cei adăugați de tine și cei marcați de platformă."
+        eyebrow="Store"
+        title="Do-not-call list"
+        description="Customers that automations never call: those who asked during a call, those you added, and those flagged by the store platform."
         meta={
           typeof list.total === 'number' ? (
-            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(list.total)} clienți</span>
+            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(list.total)} customers</span>
           ) : undefined
         }
       />
@@ -121,9 +121,9 @@ export function SuppressionsPage() {
         }}
         isEmpty={list.items.length === 0}
         emptyIcon={PhoneOff}
-        emptyTitle="Lista este goală"
-        emptyDescription="Un client ajunge aici când cere în apel să nu mai fie sunat sau când îl marchezi din pagina Clienți."
-        loadingLabel="Se încarcă lista…"
+        emptyTitle="The list is empty"
+        emptyDescription="A customer lands here when they ask during a call not to be called again, or when you flag them on the Customers page."
+        loadingLabel="Loading the list…"
         footer={
           <LoadMoreFooter
             shown={list.items.length}
@@ -136,15 +136,15 @@ export function SuppressionsPage() {
         }
       >
         <Table>
-          <caption className="sr-only">Clienți care nu sunt sunați</caption>
+          <caption className="sr-only">Customers who are not called</caption>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">Client</TableHead>
-              <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Telefon</TableHead>
-              <TableHead scope="col">Sursa</TableHead>
-              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Din</TableHead>
+              <TableHead scope="col">Customer</TableHead>
+              <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Phone</TableHead>
+              <TableHead scope="col">Source</TableHead>
+              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Since</TableHead>
               <TableHead scope="col" className="text-right">
-                <span className="sr-only">Acțiuni</span>
+                <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -152,7 +152,7 @@ export function SuppressionsPage() {
             {list.items.map((customer) => (
               <TableRow key={customer.id}>
                 <TableCell className="py-2.5">
-                  <span className="block text-sm font-medium text-foreground">{customer.name || 'Client fără nume'}</span>
+                  <span className="block text-sm font-medium text-foreground">{customer.name || 'Unnamed customer'}</span>
                   <span className="mt-0.5 block text-xs leading-4 text-muted-foreground tabular-nums @min-[560px]/records:hidden">{maskedOrDash(customer.phone_masked)}</span>
                 </TableCell>
                 <TableCell className="hidden tabular-nums @min-[560px]/records:table-cell">{maskedOrDash(customer.phone_masked)}</TableCell>
@@ -163,9 +163,9 @@ export function SuppressionsPage() {
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground tabular-nums @min-[760px]/records:table-cell">{formatDateTime(customer.do_not_call_at)}</TableCell>
                 <TableCell className="text-right">
-                  <Button variant="outline" size="xs" className="tap-44" onClick={() => setRemoving(customer)} aria-label={`Scoate ${customer.name || 'clientul'} din lista „Nu suna”`}>
+                  <Button variant="outline" size="xs" className="tap-44" onClick={() => setRemoving(customer)} aria-label={`Remove ${customer.name || 'the customer'} from the do-not-call list`}>
                     <Undo2 aria-hidden="true" />
-                    Scoate din listă
+                    Remove from list
                   </Button>
                 </TableCell>
               </TableRow>

@@ -38,10 +38,10 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
 
   return (
     <Sheet open={!!orderId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" closeLabel="Închide" className="gap-0 overflow-hidden p-0 sm:max-w-[640px]">
+      <SheetContent side="right" closeLabel="Close" className="gap-0 overflow-hidden p-0 sm:max-w-[640px]">
         <SheetHeader className="shrink-0">
-          <p className={OVERLINE}>Comandă</p>
-          <SheetTitle className="mt-1 truncate tabular-nums">{order ? `#${order.order_number}` : 'Detalii comandă'}</SheetTitle>
+          <p className={OVERLINE}>Order</p>
+          <SheetTitle className="mt-1 truncate tabular-nums">{order ? `#${order.order_number}` : 'Order details'}</SheetTitle>
           {order ? (
             <SheetDescription className="tabular-nums">
               {[order.provider_created_at ? formatDateTime(order.provider_created_at) : null, formatMoney(order.total, order.currency)]
@@ -69,42 +69,42 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
               bare
               icon={TriangleAlert}
               iconClassName="bg-destructive-soft text-destructive shadow-none"
-              title="Comanda nu a putut fi încărcată"
+              title="The order could not be loaded"
               description={error}
               action={
                 <Button variant="outline" size="sm" onClick={refetch}>
-                  <RotateCw aria-hidden="true" /> Încearcă din nou
+                  <RotateCw aria-hidden="true" /> Try again
                 </Button>
               }
             />
           </div>
         ) : isLoading || !order ? (
-          <OrbLoader label="Se încarcă comanda…" className="min-h-[50vh] flex-1" />
+          <OrbLoader label="Loading order…" className="min-h-[50vh] flex-1" />
         ) : (
           <div tabIndex={0} className={cn(PANEL, 'min-h-0 flex-1 divide-y divide-rule overflow-y-auto px-6 pt-5 pb-8')}>
-            <section aria-label="Date de contact și livrare" className="pb-6">
+            <section aria-label="Contact and delivery details" className="pb-6">
               <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
-                <InfoItem label="Client">{order.contact_name ?? '—'}</InfoItem>
-                <InfoItem label="Telefon"><span className="tabular-nums">{maskedOrDash(order.contact_phone_masked)}</span></InfoItem>
-                <InfoItem label="E-mail">{maskedOrDash(order.contact_email_masked)}</InfoItem>
-                <InfoItem label="Metoda de plată">{order.payment_method_title ?? '—'}</InfoItem>
-                <InfoItem label="Livrare">{order.shipping_summary ?? order.shipping_city ?? '—'}</InfoItem>
-                <InfoItem label="Actualizată în magazin"><span className="tabular-nums">{formatDateTime(order.provider_updated_at)}</span></InfoItem>
+                <InfoItem label="Customer">{order.contact_name ?? '—'}</InfoItem>
+                <InfoItem label="Phone"><span className="tabular-nums">{maskedOrDash(order.contact_phone_masked)}</span></InfoItem>
+                <InfoItem label="Email">{maskedOrDash(order.contact_email_masked)}</InfoItem>
+                <InfoItem label="Payment method">{order.payment_method_title ?? '—'}</InfoItem>
+                <InfoItem label="Delivery">{order.shipping_summary ?? order.shipping_city ?? '—'}</InfoItem>
+                <InfoItem label="Updated in store"><span className="tabular-nums">{formatDateTime(order.provider_updated_at)}</span></InfoItem>
               </dl>
             </section>
 
             <section aria-labelledby="order-items-title" className="py-6">
-              <h3 id="order-items-title" className={cn('mb-3', OVERLINE)}>Produse ({formatCount(order.items_count)})</h3>
+              <h3 id="order-items-title" className={cn('mb-3', OVERLINE)}>Items ({formatCount(order.items_count)})</h3>
               {order.items.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground">Produsele comenzii nu au fost sincronizate.</p>
+                <p className="text-[13px] text-muted-foreground">The order items were not synced.</p>
               ) : (
                 <div className="overflow-hidden rounded-2xl shadow-hair">
                   <table className="w-full text-sm">
-                    <caption className="sr-only">Produsele comenzii</caption>
+                    <caption className="sr-only">Order items</caption>
                     <thead>
                       <tr className="border-b border-rule">
-                        <th scope="col" className={cn('h-9 px-4 text-left', OVERLINE)}>Produs</th>
-                        <th scope="col" className={cn('h-9 px-4 text-right', OVERLINE)}>Cant.</th>
+                        <th scope="col" className={cn('h-9 px-4 text-left', OVERLINE)}>Item</th>
+                        <th scope="col" className={cn('h-9 px-4 text-right', OVERLINE)}>Qty</th>
                         <th scope="col" className={cn('h-9 px-4 text-right', OVERLINE)}>Total</th>
                       </tr>
                     </thead>
@@ -124,7 +124,7 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-rule">
-                        <th scope="row" colSpan={2} className="px-4 py-2.5 text-right text-[13px] font-medium text-muted-foreground">Total comandă</th>
+                        <th scope="row" colSpan={2} className="px-4 py-2.5 text-right text-[13px] font-medium text-muted-foreground">Order total</th>
                         <td className="px-4 py-2.5 text-right font-medium text-foreground tabular-nums">{formatMoney(order.total, order.currency)}</td>
                       </tr>
                     </tfoot>
@@ -134,7 +134,7 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
             </section>
 
             <section aria-labelledby="order-runs-title" className="pt-6">
-              <h3 id="order-runs-title" className={cn('mb-3', OVERLINE)}>Apeluri automate pentru această comandă</h3>
+              <h3 id="order-runs-title" className={cn('mb-3', OVERLINE)}>Automated calls for this order</h3>
               <RunsTable
                 runs={runs}
                 isLoading={false}
@@ -142,8 +142,8 @@ export function OrderDetailSheet({ orderId, onClose }: OrderDetailSheetProps) {
                 onRetry={refetch}
                 cancellable
                 onRunChanged={refetch}
-                emptyTitle="Niciun apel automat"
-                emptyDescription="Nicio automatizare nu a sunat (încă) pentru această comandă."
+                emptyTitle="No automated calls"
+                emptyDescription="No automation has called for this order (yet)."
               />
             </section>
           </div>

@@ -2,8 +2,9 @@
 
 // Step 5, first part: the store agent's name, tone, language, transfer
 // number, return policy and the editable prompt / first message. The prompt
-// is pre-filled from GET /api/commerce/agent-prompt (the Romanian baseline
-// for the current form values) and saved with POST /api/commerce/onboarding/agent.
+// is pre-filled from GET /api/commerce/agent-prompt (the baseline, written in
+// the language the agent calls in, for the current form values) and saved
+// with POST /api/commerce/onboarding/agent.
 
 import { useEffect, useRef, useState } from 'react'
 import { useController, useForm } from 'react-hook-form'
@@ -26,40 +27,45 @@ import { cn } from '@/lib/utils'
 import { useCommerceOnboardingStore, type CommerceOnboardingAgent } from '@/store/useCommerceOnboardingStore'
 import { StepActions, StepBody } from '../StepIndicator'
 import { commerceErrorMessage, isAbort, requestJson } from './api'
-import { LANGUAGE_LABELS_RO } from './copy'
 import { FormSelect } from './fields'
-import { OPTIONAL_LABEL } from './shared'
 
 const SYSTEM_PROMPT_MAX = 20_000
 const FIRST_MESSAGE_MAX = 1_000
+
+const GENERATE_FAILED = 'The instructions could not be generated.'
+const SAVE_FAILED = 'The agent could not be saved.'
 
 function isHttpsUrl(value: string): boolean {
   return URL.canParse(value) && /^https?:$/.test(new URL(value).protocol)
 }
 
 const schema = z.object({
-  name: z.string().trim().min(2, 'Numele are cel puțin 2 caractere').max(60, 'Cel mult 60 de caractere'),
+  name: z.string().trim().min(2, 'Use at least 2 characters').max(60, 'Use at most 60 characters'),
   tone: z.enum(['formal', 'friendly']),
-  language: z.string().min(1, 'Alege limba'),
+  language: z.string().min(1, 'Choose a language'),
   transfer_number: z
     .string()
     .trim()
-    .refine((v) => v === '' || normalizeE164(v) !== null, 'Număr în format internațional, ex. +40 712 345 678'),
-  return_policy_url: z.string().trim().refine((v) => v === '' || isHttpsUrl(v), 'Adresa trebuie să înceapă cu https://'),
-  first_message: z.string().trim().min(10, 'Mesajul de început are cel puțin 10 caractere').max(FIRST_MESSAGE_MAX, `Cel mult ${FIRST_MESSAGE_MAX} de caractere`),
-  system_prompt: z.string().max(SYSTEM_PROMPT_MAX, `Cel mult ${SYSTEM_PROMPT_MAX} de caractere`),
+    .refine((v) => v === '' || normalizeE164(v) !== null, 'Use the international format, e.g. +40 712 345 678'),
+  return_policy_url: z.string().trim().refine((v) => v === '' || isHttpsUrl(v), 'The address must start with https://'),
+  first_message: z
+    .string()
+    .trim()
+    .min(10, 'Use at least 10 characters')
+    .max(FIRST_MESSAGE_MAX, `Use at most ${FIRST_MESSAGE_MAX.toLocaleString('en-US')} characters`),
+  system_prompt: z.string().max(SYSTEM_PROMPT_MAX, `Use at most ${SYSTEM_PROMPT_MAX.toLocaleString('en-US')} characters`),
 })
 
 type FormValues = z.infer<typeof schema>
 
 const TONES: ReadonlyArray<{ id: CommerceTone; icon: typeof Award; name: string; desc: string }> = [
-  { id: 'friendly', icon: Heart, name: 'Prietenos', desc: 'Cald și natural, fraze scurte' },
-  { id: 'formal', icon: Award, name: 'Formal', desc: 'Politicos, cu „dumneavoastră”' },
+  { id: 'friendly', icon: Heart, name: 'Friendly', desc: 'Warm and natural, short sentences' },
+  { id: 'formal', icon: Award, name: 'Formal', desc: 'Polite and professional' },
 ]
 
 const LANGUAGE_OPTIONS = AGENT_LANGUAGES.map((l) => ({
   value: l.value,
-  label: LANGUAGE_LABELS_RO[l.value] ?? l.label,
+  label: l.label,
   icon: <FlagIcon country={l.country} className="h-3 w-[18px]" />,
 }))
 
@@ -127,12 +133,12 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
     try {
       return await requestJson<GeneratedPrompt>(`/api/commerce/agent-prompt?${params}`, {
         signal: ctrl.signal,
-        fallback: 'Instrucțiunile nu au putut fi generate.',
+        fallback: GENERATE_FAILED,
       })
     } catch (err) {
       if (ctrl.signal.aborted || isAbort(err)) return null
-      toast.error(commerceErrorMessage(err, 'Instrucțiunile nu au putut fi generate.'), {
-        description: 'Poți scrie instrucțiunile manual sau poți reîncerca cu „Regenerează”.',
+      toast.error(commerceErrorMessage(err, GENERATE_FAILED), {
+        description: 'You can write the instructions yourself or try again with "Regenerate".',
       })
       return null
     } finally {
@@ -199,7 +205,7 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
           system_prompt: untouchedPrompt ? '' : values.system_prompt,
           first_message: untouchedGreeting ? '' : values.first_message,
         },
-        fallback: 'Agentul nu a putut fi salvat.',
+        fallback: SAVE_FAILED,
       })
       const next: CommerceOnboardingAgent = {
         id: data.agent_id,
@@ -215,7 +221,7 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
       setProfile({ tone: values.tone, transfer_number: transfer || null, return_policy_url: values.return_policy_url || null })
       onSaved()
     } catch (err) {
-      toast.error(commerceErrorMessage(err, 'Agentul nu a putut fi salvat.'))
+      toast.error(commerceErrorMessage(err, SAVE_FAILED))
     } finally {
       setSaving(false)
     }
@@ -226,12 +232,12 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
       <StepBody className="space-y-8">
-        <Field label="Numele agentului" htmlFor="agent_name" hint="Așa se prezintă agentul la telefon." error={errors.name?.message}>
-          <Input id="agent_name" placeholder="ex. Maria, Andrei" maxLength={60} autoComplete="off" {...nameField} className="h-11" />
+        <Field label="Agent name" htmlFor="agent_name" hint="How the agent introduces itself on the phone." error={errors.name?.message}>
+          <Input id="agent_name" placeholder="e.g. Maria, Alex" maxLength={60} autoComplete="off" {...nameField} className="h-11" />
         </Field>
 
         <div className="grid gap-2">
-          <Label id="tone-label">Tonul agentului</Label>
+          <Label id="tone-label">Agent tone</Label>
           <div role="radiogroup" aria-labelledby="tone-label" className="grid grid-cols-2 gap-2">
             {TONES.map((t) => (
               <OptionCard
@@ -248,7 +254,7 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
           </div>
         </div>
 
-        <Field label="Limba agentului" htmlFor="agent_language" error={errors.language?.message}>
+        <Field label="Agent language" htmlFor="agent_language" error={errors.language?.message}>
           <FormSelect
             id="agent_language"
             value={language.value}
@@ -264,10 +270,10 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
         <div className="grid gap-8 sm:grid-cols-2">
           {/* Field wires aria-describedby / aria-invalid on a direct Input child. */}
           <Field
-            label="Număr pentru transfer"
+            label="Transfer number"
             htmlFor="transfer_number"
-            labelAction={OPTIONAL_LABEL}
-            hint="Unde ajung clienții care cer un om. Fără număr, agentul notează cererea."
+            optional
+            hint="Where customers who ask for a person are sent. Without a number, the agent takes a note of the request."
             error={errors.transfer_number?.message}
           >
             <Input
@@ -280,12 +286,12 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
               className="h-11"
             />
           </Field>
-          <Field label="Politica de retur" htmlFor="return_policy_url" labelAction={OPTIONAL_LABEL} hint="Agentul trimite clienții la această adresă." error={errors.return_policy_url?.message}>
+          <Field label="Return policy" htmlFor="return_policy_url" optional hint="The agent points customers to this address." error={errors.return_policy_url?.message}>
             <Input
               id="return_policy_url"
               type="url"
               inputMode="url"
-              placeholder="https://magazinul-tau.ro/retur"
+              placeholder="https://your-store.com/returns"
               {...form.register('return_policy_url')}
               className="h-11"
             />
@@ -293,14 +299,14 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
         </div>
 
         <Field
-          label="Mesajul de început"
+          label="Opening message"
           htmlFor="first_message"
-          hint="Primul lucru pe care îl spune agentul când sună un client."
+          hint="The first thing the agent says when it calls a customer."
           error={errors.first_message?.message}
           labelAction={
-            <Button type="button" variant="ghost" size="xs" onClick={generateGreeting} loading={generating === 'greeting'} loadingText="Se generează…" disabled={busy} className="-my-1.5 -mr-2.5">
+            <Button type="button" variant="ghost" size="xs" onClick={generateGreeting} loading={generating === 'greeting'} loadingText="Generating…" disabled={busy} className="-my-1.5 -mr-2.5">
               <Sparkles aria-hidden="true" />
-              Generează
+              Generate
             </Button>
           }
         >
@@ -308,18 +314,18 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
         </Field>
 
         <Field
-          label="Instrucțiunile agentului"
+          label="Agent instructions"
           htmlFor="system_prompt"
-          hint="Generate din profilul magazinului; modifică orice vrei. Variabilele {{…}} sunt completate la fiecare apel."
+          hint="Generated from your store profile, in the agent's language; edit anything you like. The {{…}} variables are filled in on every call."
           error={errors.system_prompt?.message}
           labelAction={
             <span className="flex items-center gap-2">
               <span className={cn('text-xs leading-4 tabular-nums', systemPrompt.length > SYSTEM_PROMPT_MAX * 0.9 ? 'text-warning' : 'text-muted-foreground')}>
-                {systemPrompt.length.toLocaleString('ro-RO')}/{SYSTEM_PROMPT_MAX.toLocaleString('ro-RO')}
+                {systemPrompt.length.toLocaleString('en-US')}/{SYSTEM_PROMPT_MAX.toLocaleString('en-US')}
               </span>
-              <Button type="button" variant="ghost" size="xs" onClick={regeneratePrompt} loading={generating === 'prompt'} loadingText="Se generează…" disabled={busy} className="-my-1.5 -mr-2.5">
+              <Button type="button" variant="ghost" size="xs" onClick={regeneratePrompt} loading={generating === 'prompt'} loadingText="Generating…" disabled={busy} className="-my-1.5 -mr-2.5">
                 <RefreshCw aria-hidden="true" />
-                Regenerează
+                Regenerate
               </Button>
             </span>
           }
@@ -328,7 +334,7 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
             <Textarea id="system_prompt" rows={14} {...form.register('system_prompt')} className="max-h-[480px] resize-none text-[13px] leading-5" />
             {generating === 'initial' && (
               <span className="absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-white px-2 py-1 text-xs text-muted-foreground shadow-pill" role="status">
-                <OrbInline state="composing" /> Se generează…
+                <OrbInline state="composing" /> Generating…
               </span>
             )}
           </div>
@@ -338,10 +344,10 @@ export function AgentForm({ onBack, onSaved }: AgentFormProps) {
       <StepActions>
         <Button type="button" variant="ghost" size="lg" onClick={onBack} disabled={saving}>
           <ArrowLeft aria-hidden="true" />
-          Înapoi
+          Back
         </Button>
-        <Button type="submit" size="lg" loading={saving} loadingText="Se salvează…" disabled={generating === 'initial'} className="ml-auto max-md:flex-1">
-          Continuă
+        <Button type="submit" size="lg" loading={saving} loadingText="Saving…" disabled={generating === 'initial'} className="ml-auto max-md:flex-1">
+          Continue
           <ArrowRight aria-hidden="true" />
         </Button>
       </StepActions>

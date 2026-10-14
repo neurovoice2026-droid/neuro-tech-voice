@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getStripeClient, planFromPriceId } from '@/lib/stripe/client'
+import { getStripeClient, planFromPriceId, resolvePlanFromPrice } from '@/lib/stripe/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
 import { sendEmail } from '@/lib/email/client'
@@ -9,7 +9,7 @@ import { paymentSuccessEmail, paymentFailedEmail } from '@/lib/email/templates'
 import { provisionPhoneNumber } from '@/lib/phone/provision'
 import { createLogger } from '@/lib/observability/logger'
 import { maskPhone } from '@/lib/phone/e164'
-import { PLANS } from '@/types'
+import { PLANS, isPlan } from '@/types'
 import type { Plan } from '@/types'
 
 // Stripe webhook — must be public (no auth) and is authenticated via the
@@ -54,13 +54,13 @@ export async function POST(request: Request) {
             : session.subscription?.id
         if (subscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-          await applySubscription(supabase, subscription, session.metadata?.org_id)
+          await applySubscription(supabase, stripe, subscription, session.metadata?.org_id)
         }
         break
       }
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
-        await applySubscription(supabase, event.data.object as Stripe.Subscription)
+        await applySubscription(supabase, stripe, event.data.object as Stripe.Subscription)
         break
       }
       case 'customer.subscription.deleted': {
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
         // then email the customer a confirmation.
         const invoice = event.data.object as Stripe.Invoice
         await emitInvoiceForStripePayment(supabase, invoice)
-        await sendPaymentSuccess(supabase, invoice)
+        await sendPaymentSuccess(supabase, stripe, invoice)
         break
       }
       case 'invoice.payment_failed': {
@@ -160,7 +160,7 @@ async function releasePhoneNumber(supabase: SupabaseClient, subscription: Stripe
   }
 }
 
-async function sendPaymentSuccess(supabase: SupabaseClient, invoice: Stripe.Invoice) {
+async function sendPaymentSuccess(supabase: SupabaseClient, stripe: Stripe, invoice: Stripe.Invoice) {
   if (!invoice.customer_email) return
 
   // Pull the SmartBill invoice we just emitted (if any) for the email.
@@ -185,7 +185,13 @@ async function sendPaymentSuccess(supabase: SupabaseClient, invoice: Stripe.Invo
     pricing?: { price_details?: { price?: string } }
   } | undefined
   const priceId = line?.price?.id ?? line?.pricing?.price_details?.price
-  const plan = planFromPriceId(priceId)
+  let plan: Plan | null = null
+  try {
+    plan = await resolvePlanFromPrice(stripe, priceId)
+  } catch (err) {
+    // The receipt still goes out, only without the plan name.
+    console.warn('Stripe webhook: could not resolve the plan for the payment email:', err instanceof Error ? err.message : err)
+  }
 
   await sendEmail({
     to: invoice.customer_email,
@@ -205,8 +211,29 @@ function customerIdOf(subscription: Stripe.Subscription): string {
     : subscription.customer.id
 }
 
+/**
+ * The plan a subscription pays for, read from its current price: the
+ * env-configured price ids first (no API call), then the price itself
+ * (metadata / lookup key of a price the app created for a store plan). The
+ * ntv_plan the checkout stamped on the subscription comes last: Stripe never
+ * rewrites it when the price changes (a Customer Portal plan switch, a
+ * Dashboard edit), so trusting it first would keep the old plan's allowance
+ * while invoicing the new one. Null for a price nobody tagged, which resets
+ * the organization to the trial as before.
+ */
+async function planOfSubscription(stripe: Stripe, subscription: Stripe.Subscription): Promise<Plan | null> {
+  const priceId = subscription.items.data[0]?.price.id
+  const mapped = planFromPriceId(priceId)
+  if (mapped) return mapped
+  const fromPrice = await resolvePlanFromPrice(stripe, priceId)
+  if (fromPrice) return fromPrice
+  const tagged = subscription.metadata?.ntv_plan
+  return isPlan(tagged) ? tagged : null
+}
+
 async function applySubscription(
   supabase: SupabaseClient,
+  stripe: Stripe,
   subscription: Stripe.Subscription,
   fallbackOrgId?: string
 ) {
@@ -219,9 +246,8 @@ async function applySubscription(
 
   const customerId = customerIdOf(subscription)
   const orgId = subscription.metadata?.org_id ?? fallbackOrgId
-  const priceId = subscription.items.data[0]?.price.id
   const active = subscription.status === 'active' || subscription.status === 'trialing'
-  const plan: Plan = active ? planFromPriceId(priceId) ?? 'trial' : 'trial'
+  const plan: Plan = active ? (await planOfSubscription(stripe, subscription)) ?? 'trial' : 'trial'
 
   await updateOrg(supabase, orgId, customerId, {
     plan,

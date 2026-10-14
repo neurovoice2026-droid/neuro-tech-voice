@@ -21,6 +21,7 @@ import { platformName } from '@/lib/commerce/platforms'
 import type { ConnectionDto } from '@/lib/commerce/types'
 import { cn } from '@/lib/utils'
 import { formatCount } from './format'
+import { STORE_PATHS } from './labels'
 import { ConnectionStatusChip } from './StatusChips'
 
 interface StoreSettingsPageProps {
@@ -66,12 +67,12 @@ function DeleteStoreDialog({ connection, open, onOpenChange, onDeleted }: { conn
     setPending(true)
     try {
       await deleteConnection(connection.id, typed.trim())
-      toast.success('Datele magazinului au fost șterse', { description: 'Conexiunea, comenzile, clienții, produsele și automatizările au fost eliminate.' })
+      toast.success('Store data deleted', { description: 'The connection, orders, customers, products and automations were removed.' })
       setTyped('')
       onOpenChange(false)
       onDeleted()
     } catch (err) {
-      toast.error('Datele magazinului nu au fost șterse', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+      toast.error('The store data was not deleted', { description: commerceErrorMessage(err, 'Try again.') })
     } finally {
       setPending(false)
     }
@@ -84,15 +85,15 @@ function DeleteStoreDialog({ connection, open, onOpenChange, onDeleted }: { conn
           <span aria-hidden="true" className="mb-2 grid size-10 place-items-center rounded-full bg-destructive-soft text-destructive">
             <Trash2 className="size-[18px]" />
           </span>
-          <DialogTitle>Ștergi datele magazinului?</DialogTitle>
+          <DialogTitle>Delete the store data?</DialogTitle>
           <DialogDescription>
-            Șterge conexiunea cu {platformName(connection.platform)}, toate comenzile, clienții și produsele sincronizate, automatizările și istoricul lor. Apelurile rămân în pagina Apeluri. Nu se poate anula.
+            Deletes the {platformName(connection.platform)} connection, every synced order, customer and product, the automations and their history. Calls stay on the Calls page. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <Field
           htmlFor={`${id}-confirm`}
-          label={<span>Scrie <span className="font-semibold break-all">{expected}</span> ca să confirmi</span>}
-          hint="Domeniul magazinului, exact cum apare mai sus."
+          label={<span>Type <span className="font-semibold break-all">{expected}</span> to confirm</span>}
+          hint="The store domain, exactly as shown above."
         >
           <Input
             id={`${id}-confirm`}
@@ -107,10 +108,10 @@ function DeleteStoreDialog({ connection, open, onOpenChange, onDeleted }: { conn
         </Field>
         <DialogFooter>
           <Button variant="ghost" onClick={() => close(false)} disabled={pending}>
-            Renunță
+            Cancel
           </Button>
-          <Button variant="destructive-solid" onClick={() => void handleDelete()} disabled={!confirmed} loading={pending} loadingText="Se șterge…">
-            Șterge datele magazinului
+          <Button variant="destructive-solid" onClick={() => void handleDelete()} disabled={!confirmed} loading={pending} loadingText="Deleting…">
+            Delete store data
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -124,24 +125,24 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Magazin" title="Setări magazin" description="Tipul de activitate al contului și datele magazinului." />
+      <PageHeader eyebrow="Store" title="Store settings" description="The account's business type and the store's data." />
 
       <div className="max-w-[768px]">
-        <SettingsSection id="store-connection" title="Magazin" description="Conexiunea curentă și datele sincronizate.">
+        <SettingsSection id="store-connection" title="Store" description="The current connection and the synced data.">
           {isLoading ? (
             <Card className="py-0">
-              <OrbLoader size={32} label="Se încarcă…" className="min-h-[120px]" />
+              <OrbLoader size={32} label="Loading…" className="min-h-[120px]" />
             </Card>
           ) : error && connections.length === 0 ? (
             <Card className="gap-0 py-0">
-              <CommerceCardError message="Conexiunea nu a putut fi citită." detail={error} onRetry={refetch} />
+              <CommerceCardError message="The connection could not be read." detail={error} onRetry={refetch} />
             </Card>
           ) : connections.length === 0 ? (
             <Card className="gap-0 py-0">
               <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-[13px] leading-[19px] text-muted-foreground">Niciun magazin conectat.</p>
-                <Link href="/magazin/conexiuni" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-                  Conectează magazinul
+                <p className="text-[13px] leading-[19px] text-muted-foreground">No store connected.</p>
+                <Link href={STORE_PATHS.connections} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                  Connect store
                   <ArrowRight aria-hidden="true" />
                 </Link>
               </div>
@@ -161,12 +162,12 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
                           <ConnectionStatusChip status={connection.status} />
                         </p>
                         <p className="mt-0.5 text-[13px] leading-[19px] text-muted-foreground tabular-nums">
-                          {platformName(connection.platform)} · {formatCount(connection.counts.orders)} comenzi · {formatCount(connection.counts.customers)} clienți · {formatCount(connection.counts.products)} produse
+                          {platformName(connection.platform)} · {formatCount(connection.counts.orders)} orders · {formatCount(connection.counts.customers)} customers · {formatCount(connection.counts.products)} products
                         </p>
                       </div>
                     </div>
-                    <Link href="/magazin/conexiuni" className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'self-start sm:self-auto')}>
-                      Gestionează
+                    <Link href={STORE_PATHS.connections} className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'self-start sm:self-auto')}>
+                      Manage
                       <ArrowRight aria-hidden="true" />
                     </Link>
                   </li>
@@ -176,20 +177,20 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
           )}
         </SettingsSection>
 
-        <SettingsSection id="store-business-type" title="Tip de activitate" description="Alegerea făcută la configurarea contului.">
+        <SettingsSection id="store-business-type" title="Business type" description="The choice made when the account was set up.">
           <Card className="gap-0 py-0">
             <div className="p-5">
               <div className="flex flex-wrap items-center gap-3">
-                <StatusChip tone="neutral">Magazin online</StatusChip>
-                <p className="text-[13px] leading-[19px] text-muted-foreground">Panoul include secțiunea Magazin și automatizările pentru comenzi.</p>
+                <StatusChip tone="neutral">Online store</StatusChip>
+                <p className="text-[13px] leading-[19px] text-muted-foreground">The dashboard includes the Store section and the order automations.</p>
               </div>
               <Alert className="mt-4" role="note">
                 <Info aria-hidden="true" />
-                <AlertTitle>Tipul de activitate nu se mai poate schimba după lansare</AlertTitle>
+                <AlertTitle>The business type cannot be changed after launch</AlertTitle>
                 <AlertDescription>
                   <p>
-                    Secțiunea Magazin, datele sincronizate și automatizările depind de el. Dacă activitatea ta s-a schimbat, scrie-ne și
-                    pregătim trecerea împreună, fără să pierzi apelurile și agentul.
+                    The Store section, the synced data and the automations depend on it. If your business has changed, write to us and
+                    we will prepare the switch together, without losing your calls or your agent.
                   </p>
                   {support.email ? (
                     <a href={`mailto:${support.email}`} className="mt-2 inline-flex items-center gap-1.5">
@@ -202,7 +203,7 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
                       {support.phone}
                     </a>
                   ) : (
-                    <p className="mt-2">Contactează echipa de suport din contul tău.</p>
+                    <p className="mt-2">Contact support from your account.</p>
                   )}
                 </AlertDescription>
               </Alert>
@@ -210,13 +211,13 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
           </Card>
         </SettingsSection>
 
-        <SettingsSection id="store-danger" title="Zona periculoasă" titleClassName="text-destructive" description="Acțiuni permanente asupra datelor magazinului.">
+        <SettingsSection id="store-danger" title="Danger zone" titleClassName="text-destructive" description="Permanent actions on the store's data.">
           <div className="rounded-2xl bg-card p-5 shadow-[0_0_0_1px_rgb(179_38_30/0.18)]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
               <div className="min-w-0">
-                <p className="text-[15px] leading-[22px] font-medium text-foreground">Șterge datele magazinului</p>
+                <p className="text-[15px] leading-[22px] font-medium text-foreground">Delete store data</p>
                 <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">
-                  Elimină conexiunea, comenzile, clienții, produsele sincronizate și automatizările cu istoricul lor. Contul, agentul și apelurile rămân.
+                  Removes the connection, the synced orders, customers and products, and the automations with their history. The account, the agent and the calls stay.
                 </p>
               </div>
               <Button
@@ -224,10 +225,10 @@ export function StoreSettingsPage({ support }: StoreSettingsPageProps) {
                 className="self-start sm:shrink-0"
                 disabled={isLoading || connections.length === 0}
                 onClick={() => setDeleting(connections[0] ?? null)}
-                title={connections.length === 0 ? 'Nu există date de șters' : undefined}
+                title={connections.length === 0 ? 'There is no data to delete' : undefined}
               >
                 <Trash2 aria-hidden="true" />
-                Șterge datele magazinului
+                Delete store data
               </Button>
             </div>
           </div>

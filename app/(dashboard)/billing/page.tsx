@@ -15,21 +15,14 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionHeading } from '@/components/shared/SectionHeading'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { useOrganization } from '@/hooks/useOrganization'
-import { PLANS } from '@/types'
-import type { Plan, BillingInterval } from '@/types'
+import { PLANS, isPlan, planFamilyOf, plansForBusinessType } from '@/types'
+import type { Plan, BillingInterval, PlanFamily } from '@/types'
 
-// Self-serve upgrade path (custom is sales-led, trial is the entry tier).
-const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
-  trial: 'starter',
-  starter: 'pro',
-  pro: 'business',
-}
+/** The plan the picker recommends ("Our pick"), per family. */
+const RECOMMENDED: Record<PlanFamily, Plan> = { services: 'pro', ecommerce: 'store_growth' }
 
-/** The plan the picker recommends ("Our pick"). */
-const RECOMMENDED: Plan = 'pro'
-
-/** Plans shown as cards; `custom` is the wide sales-led tile after them. */
-const CARD_PLANS: Plan[] = ['trial', 'starter', 'pro', 'business']
+/** Subject of the sales-led tile's email, per family. */
+const SALES_SUBJECT: Record<PlanFamily, string> = { services: 'Custom plan inquiry', ecommerce: 'Store Enterprise inquiry' }
 
 const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
 
@@ -54,7 +47,7 @@ export default function BillingPage() {
       })
       const data = await res.json()
       if (res.ok && data.url) {
-        window.location.href = data.url
+        window.location.assign(data.url)
         return
       }
       toast.error(data.error ?? 'Could not start checkout')
@@ -70,7 +63,7 @@ export default function BillingPage() {
       const res = await fetch('/api/billing/portal', { method: 'POST' })
       const data = await res.json()
       if (res.ok && data.url) {
-        window.location.href = data.url
+        window.location.assign(data.url)
         return
       }
       toast.error(data.error ?? 'Could not open billing portal')
@@ -99,19 +92,32 @@ export default function BillingPage() {
     )
   }
 
-  const currentPlan = (org.plan ?? 'trial') as Plan
+  // A plan the catalogue does not know (a bad row) displays as the trial rather than breaking the page.
+  const currentPlan: Plan = isPlan(org.plan) ? org.plan : 'trial'
   const planCfg = PLANS[currentPlan]
   const minutesUsed = org.minutes_used ?? 0
   const minutesLimit = org.minutes_limit ?? planCfg.minutes_limit
   const usagePct = minutesLimit > 0 ? Math.min(100, Math.round((minutesUsed / minutesLimit) * 100)) : 0
   const usageTone = usagePct >= 100 ? 'danger' : usagePct >= 80 ? 'warning' : 'default'
   const hasBilling = !!org.stripe_customer_id
-  const nextTier: Plan | null = UPGRADE_NEXT[currentPlan] ?? null
   const busy = pending !== null
   const isTrial = currentPlan === 'trial'
 
-  const custom = PLANS.custom
-  const customIsCurrent = currentPlan === 'custom'
+  // An organization buys from its own family: an online store sees the store
+  // plans, everyone else the service plans (the server enforces the same rule).
+  const family = planFamilyOf(org.business_type)
+  const familyPlans = plansForBusinessType(org.business_type)
+  const selfServe = familyPlans.filter((p) => !PLANS[p].contact_sales)
+  /** Plans shown as cards; the family's sales-led tier is the wide tile after them. */
+  const cardPlans: Plan[] = ['trial', ...selfServe]
+  // Each family ends in one sales-led tier (Custom, Store Enterprise).
+  const salesPlan: Plan = familyPlans.find((p) => PLANS[p].contact_sales) ?? familyPlans[familyPlans.length - 1]
+  const sales = PLANS[salesPlan]
+  const salesIsCurrent = currentPlan === salesPlan
+  // Self-serve upgrade path: the next self-serve plan of the family. None from
+  // the top tier, the sales-led tier, or a plan of the other family (billing-data drift).
+  const currentIndex = selfServe.indexOf(currentPlan)
+  const nextTier: Plan | null = isTrial ? selfServe[0] ?? null : currentIndex >= 0 ? selfServe[currentIndex + 1] ?? null : null
 
   return (
     <PageContainer className="space-y-10">
@@ -221,7 +227,7 @@ export default function BillingPage() {
                 className="rounded-2xl focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-ring"
               >
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {CARD_PLANS.map((planId) => {
+                  {cardPlans.map((planId) => {
                     const cfg = PLANS[planId]
                     const isCurrent = planId === currentPlan
                     const isPaid = planId !== 'trial'
@@ -239,7 +245,7 @@ export default function BillingPage() {
                           <h3 className="text-[15px] leading-[22px] font-medium">{cfg.name}</h3>
                           {isCurrent ? (
                             <Badge variant="secondary">Current plan</Badge>
-                          ) : planId === RECOMMENDED ? (
+                          ) : planId === RECOMMENDED[family] ? (
                             <Badge>Our pick</Badge>
                           ) : null}
                         </div>
@@ -296,18 +302,18 @@ export default function BillingPage() {
                     )
                   })}
 
-                  {/* Custom: sales-led, full width */}
+                  {/* The family's sales-led tier (Custom / Store Enterprise): full width */}
                   <div
-                    data-current={customIsCurrent || undefined}
+                    data-current={salesIsCurrent || undefined}
                     className="flex flex-col gap-4 rounded-2xl bg-secondary p-5 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
                       <div className="flex min-h-6 flex-wrap items-center gap-2">
-                        <h3 className="text-[15px] leading-[22px] font-medium">{custom.name}</h3>
-                        {customIsCurrent && <Badge variant="secondary">Current plan</Badge>}
+                        <h3 className="text-[15px] leading-[22px] font-medium">{sales.name}</h3>
+                        {salesIsCurrent && <Badge variant="secondary">Current plan</Badge>}
                       </div>
                       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                        {custom.features.slice(0, 3).map((f) => (
+                        {sales.features.slice(0, 3).map((f) => (
                           <li key={f} className="flex items-center gap-1.5 text-[13px] leading-[19px] text-muted-foreground">
                             <Check className="size-3.5 shrink-0" aria-hidden="true" />
                             {f}
@@ -318,13 +324,13 @@ export default function BillingPage() {
                     <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
                       <p className="flex items-baseline gap-1">
                         <span className="text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">
-                          {money(custom.price_monthly)}+
+                          {money(sales.price_monthly)}+
                         </span>
                         <span className="text-[13px] text-muted-foreground">/mo</span>
                       </p>
-                      {!customIsCurrent && (
+                      {!salesIsCurrent && (
                         <a
-                          href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
+                          href={`mailto:sales@neuro-tech-voice.com?subject=${encodeURIComponent(SALES_SUBJECT[family])}`}
                           className={buttonVariants({ variant: 'outline' })}
                         >
                           Contact sales

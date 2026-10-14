@@ -32,6 +32,9 @@ import { POST as stepPost } from '@/app/api/commerce/onboarding/step/route'
 import { POST as agentPost } from '@/app/api/commerce/onboarding/agent/route'
 import { GET as promptGet } from '@/app/api/commerce/agent-prompt/route'
 
+/** The merchant-facing refusal every store onboarding route gives a non-store organization. */
+const NOT_A_STORE = 'This setup is only available to online stores.'
+
 const userHandler: Handler = (c) => {
   if (c.table === 'organizations' && c.op === 'select') return { data: { id: ORG, ...state.org }, error: null }
   if (c.table === 'organizations' && c.op === 'update') {
@@ -60,9 +63,15 @@ const json = (handler: (r: Request) => Promise<Response>, url: string, body: unk
 const adminOrgUpdates = () => state.admin!.calls.filter((c: FakeCall) => c.table === 'organizations' && c.op === 'update')
 const userOrgUpdates = () => state.user!.calls.filter((c: FakeCall) => c.table === 'organizations' && c.op === 'update')
 
+interface ErrorBody {
+  error: string
+  code: string
+  details?: { reason?: string } | Array<{ path: string; message: string }>
+}
+
 const storeBody = {
-  display_name: 'Magazinul Exemplu',
-  website: 'magazinul-exemplu.ro',
+  display_name: 'Example Store',
+  website: 'example-store.com',
   country: 'ro',
   timezone: 'Europe/Bucharest',
   language: 'ro',
@@ -94,14 +103,14 @@ describe('POST /api/commerce/onboarding/store', () => {
     expect(filterOf(updates[0], 'id')).toBe(ORG)
     const payload = updates[0].payload as Record<string, unknown>
     expect(payload).toMatchObject({
-      name: 'Magazinul Exemplu',
-      website: 'https://magazinul-exemplu.ro',
+      name: 'Example Store',
+      website: 'https://example-store.com',
       timezone: 'Europe/Bucharest',
       onboarding_step: 2,
     })
     expect(payload.commerce_profile).toMatchObject({
-      display_name: 'Magazinul Exemplu',
-      website: 'https://magazinul-exemplu.ro',
+      display_name: 'Example Store',
+      website: 'https://example-store.com',
       country: 'RO',
       currency: 'RON',
       language: 'ro',
@@ -111,7 +120,7 @@ describe('POST /api/commerce/onboarding/store', () => {
     })
     // The guarded column never goes through the tenant client.
     expect(userOrgUpdates()).toHaveLength(0)
-    expect(ensureAgent).toHaveBeenCalledWith(ORG, expect.stringContaining('Magazinul Exemplu'))
+    expect(ensureAgent).toHaveBeenCalledWith(ORG, expect.stringContaining('Example Store'))
   })
 
   it('stores an empty website as null', async () => {
@@ -121,24 +130,27 @@ describe('POST /api/commerce/onboarding/store', () => {
     expect((payload.commerce_profile as Record<string, unknown>).website).toBe('')
   })
 
-  it('rejects an unknown time zone, a bad currency and a too-short name (400, nothing written)', async () => {
-    for (const body of [
-      { ...storeBody, timezone: 'Europe/Nowhere' },
-      { ...storeBody, currency: 'lei2' },
-      { ...storeBody, display_name: 'M' },
-      { ...storeBody, country: 'ROU' },
-    ]) {
-      expect((await json(storePost, 'http://localhost/api/commerce/onboarding/store', body)).status).toBe(400)
+  it('rejects an unknown time zone, a bad currency, a too-short name and a long country code (400, English reasons, nothing written)', async () => {
+    const cases: Array<[body: Record<string, unknown>, message: string]> = [
+      [{ ...storeBody, timezone: 'Europe/Nowhere' }, 'Unknown time zone'],
+      [{ ...storeBody, currency: 'lei2' }, 'The currency must be a three-letter ISO code'],
+      [{ ...storeBody, display_name: 'M' }, 'The store name needs at least 2 characters'],
+      [{ ...storeBody, country: 'ROU' }, 'The country must be a two-letter ISO code'],
+    ]
+    for (const [body, message] of cases) {
+      const res = await json(storePost, 'http://localhost/api/commerce/onboarding/store', body)
+      expect(res.status).toBe(400)
+      expect(JSON.stringify(await res.json())).toContain(message)
     }
     expect(adminOrgUpdates()).toHaveLength(0)
     expect(ensureAgent).not.toHaveBeenCalled()
   })
 
-  it('refuses a services organization (409 not_ecommerce)', async () => {
+  it('refuses a services organization (409 not_ecommerce) with an English message', async () => {
     state.org.business_type = 'services'
     const res = await json(storePost, 'http://localhost/api/commerce/onboarding/store', storeBody)
     expect(res.status).toBe(409)
-    expect(await res.json()).toMatchObject({ code: 'precondition_failed', details: { reason: 'not_ecommerce' } })
+    expect(await res.json()).toMatchObject({ code: 'precondition_failed', error: NOT_A_STORE, details: { reason: 'not_ecommerce' } })
     expect(adminOrgUpdates()).toHaveLength(0)
   })
 })
@@ -161,30 +173,32 @@ describe('POST /api/commerce/onboarding/step', () => {
     expect(userOrgUpdates()).toHaveLength(0)
   })
 
-  it('refuses a services organization and a completed onboarding', async () => {
+  it('refuses a services organization and a completed onboarding, in English', async () => {
     state.org.business_type = 'services'
-    expect((await json(stepPost, 'http://localhost/api/commerce/onboarding/step', { step: 2 })).status).toBe(409)
+    const notStore = await json(stepPost, 'http://localhost/api/commerce/onboarding/step', { step: 2 })
+    expect(notStore.status).toBe(409)
+    expect(await notStore.json()).toMatchObject({ error: NOT_A_STORE, details: { reason: 'not_ecommerce' } })
     state.org.business_type = 'ecommerce'
     state.org.onboarding_completed = true
     const res = await json(stepPost, 'http://localhost/api/commerce/onboarding/step', { step: 2 })
     expect(res.status).toBe(409)
-    expect(await res.json()).toMatchObject({ details: { reason: 'onboarding_completed' } })
+    expect(await res.json()).toMatchObject({ error: 'Setup is already complete.', details: { reason: 'onboarding_completed' } })
     expect(userOrgUpdates()).toHaveLength(0)
   })
 })
 
 describe('POST /api/commerce/onboarding/agent', () => {
-  const body = { name: 'Maria', language: 'ro', tone: 'friendly', transfer_number: '', return_policy_url: 'https://magazin.ro/retur' }
+  const body = { name: 'Maria', language: 'ro', tone: 'friendly', transfer_number: '', return_policy_url: 'https://example-store.com/returns' }
 
-  it('generates the Romanian baseline when the prompt is blank, saves the agent and the profile, stays on step 5', async () => {
-    state.org.commerce_profile = { display_name: 'Magazinul Exemplu', tone: 'formal', transfer_number: '+40712345678' }
+  it('generates the baseline in the call language (Romanian here) when the prompt is blank, saves the agent and the profile, stays on step 5', async () => {
+    state.org.commerce_profile = { display_name: 'Example Store', tone: 'formal', transfer_number: '+40712345678' }
     const res = await json(agentPost, 'http://localhost/api/commerce/onboarding/agent', { ...body, system_prompt: '  ' })
     expect(res.status).toBe(200)
     const out = (await res.json()) as { agent_id: string; system_prompt: string; first_message: string }
     expect(out.agent_id).toBe(AGENT)
     expect(out.system_prompt).toContain('Maria')
-    expect(out.system_prompt).toContain('Magazinul Exemplu')
-    expect(out.system_prompt).toContain('https://magazin.ro/retur')
+    expect(out.system_prompt).toContain('Example Store')
+    expect(out.system_prompt).toContain('https://example-store.com/returns')
     // The transfer number was cleared in this request, so the prompt says transfers are not possible.
     expect(out.system_prompt).toContain('Nu poți transfera apeluri')
     expect(out.first_message).toContain('Maria')
@@ -197,10 +211,10 @@ describe('POST /api/commerce/onboarding/agent', () => {
     const orgUpdate = adminOrgUpdates()[0]
     expect(orgUpdate.payload).toMatchObject({ onboarding_step: 5 })
     expect((orgUpdate.payload as { commerce_profile: Record<string, unknown> }).commerce_profile).toMatchObject({
-      display_name: 'Magazinul Exemplu',
+      display_name: 'Example Store',
       tone: 'friendly',
       transfer_number: null,
-      return_policy_url: 'https://magazin.ro/retur',
+      return_policy_url: 'https://example-store.com/returns',
     })
     expect(ensureAgent).toHaveBeenCalledWith(ORG, 'Maria')
   })
@@ -219,7 +233,7 @@ describe('POST /api/commerce/onboarding/agent', () => {
   it('rejects a national transfer number, a non-http return URL, an unknown tone and platform variables', async () => {
     for (const bad of [
       { ...body, transfer_number: '0712345678' },
-      { ...body, return_policy_url: 'ftp://magazin.ro/retur' },
+      { ...body, return_policy_url: 'ftp://example-store.com/returns' },
       { ...body, tone: 'casual' },
       { ...body, system_prompt: 'Spune {{secret__ntv_call_token}}' },
       { ...body, name: 'Maria {{ntv_call_id}}' },
@@ -230,40 +244,56 @@ describe('POST /api/commerce/onboarding/agent', () => {
     expect(adminOrgUpdates()).toHaveLength(0)
   })
 
+  it('explains a bad transfer number and return URL in English', async () => {
+    const transfer = (await (await json(agentPost, 'http://localhost/api/commerce/onboarding/agent', { ...body, transfer_number: '0712345678' })).json()) as ErrorBody
+    expect(JSON.stringify(transfer)).toContain('Use the international format, e.g. +40712345678')
+    const url = (await (await json(agentPost, 'http://localhost/api/commerce/onboarding/agent', { ...body, return_policy_url: 'ftp://example-store.com/returns' })).json()) as ErrorBody
+    expect(JSON.stringify(url)).toContain('The address must start with https://')
+  })
+
   it('refuses a services organization', async () => {
     state.org.business_type = 'services'
-    expect((await json(agentPost, 'http://localhost/api/commerce/onboarding/agent', body)).status).toBe(409)
+    const res = await json(agentPost, 'http://localhost/api/commerce/onboarding/agent', body)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ error: NOT_A_STORE, details: { reason: 'not_ecommerce' } })
     expect(ensureAgent).not.toHaveBeenCalled()
   })
 })
 
 describe('GET /api/commerce/agent-prompt', () => {
   it('builds the baseline from the saved profile and the agent name', async () => {
-    state.org.commerce_profile = { display_name: 'Magazinul Exemplu', tone: 'formal', transfer_number: '+40712345678', return_policy_url: null }
+    state.org.commerce_profile = { display_name: 'Example Store', tone: 'formal', transfer_number: '+40712345678', return_policy_url: null }
     state.agent = { id: AGENT, name: 'Ana' }
     const res = await promptGet(new Request('http://localhost/api/commerce/agent-prompt'))
     expect(res.status).toBe(200)
     const out = (await res.json()) as { system_prompt: string; first_message: string }
-    expect(out.system_prompt).toContain('Ești Ana, asistentul vocal AI al magazinului online Magazinul Exemplu')
+    // The agent speaks the store's language (Romanian in this profile); only the UI around it is English.
+    expect(out.system_prompt).toContain('Ești Ana, asistentul vocal AI al magazinului online Example Store')
     expect(out.system_prompt).toContain('Transfer:')
     expect(out.first_message).toMatch(/^Bună ziua, sunt Ana/)
     expect(state.user!.calls.filter((c: FakeCall) => c.op !== 'select')).toHaveLength(0)
   })
 
   it('takes what the editor currently holds from the query, an empty value clearing the field', async () => {
-    state.org.commerce_profile = { display_name: 'Magazinul Exemplu', tone: 'formal', transfer_number: '+40712345678' }
-    const url = 'http://localhost/api/commerce/agent-prompt?agent_name=Maria&tone=friendly&transfer_number=&return_policy_url=https%3A%2F%2Fmagazin.ro%2Fretur'
+    state.org.commerce_profile = { display_name: 'Example Store', tone: 'formal', transfer_number: '+40712345678' }
+    const url = 'http://localhost/api/commerce/agent-prompt?agent_name=Maria&tone=friendly&transfer_number=&return_policy_url=https%3A%2F%2Fexample-store.com%2Freturns'
     const out = (await (await promptGet(new Request(url))).json()) as { system_prompt: string; first_message: string }
     expect(out.system_prompt).toContain('Ești Maria')
     expect(out.system_prompt).toContain('Nu poți transfera apeluri')
-    expect(out.system_prompt).toContain('https://magazin.ro/retur')
+    expect(out.system_prompt).toContain('https://example-store.com/returns')
     expect(out.first_message).toContain('Bună ziua! Sunt Maria')
   })
 
-  it('rejects an invalid override (400) and a services organization (409)', async () => {
+  it('rejects an invalid override (400, English reason) and a services organization (409)', async () => {
     expect((await promptGet(new Request('http://localhost/api/commerce/agent-prompt?tone=casual'))).status).toBe(400)
-    expect((await promptGet(new Request('http://localhost/api/commerce/agent-prompt?transfer_number=0712'))).status).toBe(400)
+    const bad = await promptGet(new Request('http://localhost/api/commerce/agent-prompt?transfer_number=0712'))
+    expect(bad.status).toBe(400)
+    const badBody = (await bad.json()) as ErrorBody
+    expect(badBody.error).toBe('Some fields are invalid.')
+    expect(JSON.stringify(badBody.details)).toContain('Use the international format, e.g. +40712345678')
     state.org.business_type = 'services'
-    expect((await promptGet(new Request('http://localhost/api/commerce/agent-prompt'))).status).toBe(409)
+    const notStore = await promptGet(new Request('http://localhost/api/commerce/agent-prompt'))
+    expect(notStore.status).toBe(409)
+    expect(await notStore.json()).toMatchObject({ error: NOT_A_STORE, details: { reason: 'not_ecommerce' } })
   })
 })

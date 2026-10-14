@@ -15,6 +15,12 @@ export const PLAN_CONCURRENCY: Record<Plan, number> = {
   pro: 4,
   business: 6,
   custom: 10,
+  // Store plans: the capacity of the service plan with the nearest price
+  // (lib/pages/entitlements.ts STORE_PLAN_EQUIVALENT); ELEVENLABS_CONCURRENCY_STORE_* overrides.
+  store_starter: 2,
+  store_growth: 4,
+  store_scale: 6,
+  store_enterprise: 10,
 }
 
 export const DEFAULT_DAILY_CALL_LIMIT = 500

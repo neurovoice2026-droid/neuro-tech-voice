@@ -1,4 +1,4 @@
-// The store platforms as the UI presents them (client-safe: names, Romanian
+// The store platforms as the UI presents them (client-safe: names, merchant
 // copy, what each connector reads, the fields of its connect form). The
 // server-side truth about what a connection can do is its stored
 // capabilities (lib/commerce/adapters/*): this catalog only describes.
@@ -21,7 +21,7 @@ export interface PlatformDescriptor {
   name: string
   /** One line under the card title. */
   tagline: string
-  /** How the connection works, in plain Romanian. */
+  /** How the connection works, in plain English. */
   howItWorks: string
   /** What the connector reads from the store. */
   reads: string[]
@@ -39,114 +39,114 @@ export const PLATFORM_CATALOG: Record<CommercePlatform, PlatformDescriptor> = {
   woocommerce: {
     id: 'woocommerce',
     name: 'WooCommerce (WordPress)',
-    tagline: 'Chei REST API; comenzi, clienți și produse în timp real prin webhook-uri.',
+    tagline: 'REST API keys; orders, customers and products in real time through webhooks.',
     howItWorks:
-      'Creezi o pereche de chei REST API cu drepturi de citire/scriere în WooCommerce. Platforma citește comenzile, clienții și produsele și înregistrează webhook-uri semnate pentru comenzi noi și actualizări.',
-    reads: ['Comenzi (metodă de plată, status, total, produse, telefonul de contact)', 'Clienți (nume, telefon, e-mail)', 'Produse (nume, SKU, preț, stoc)'],
-    limits: ['Coșurile abandonate nu există în API-ul standard WooCommerce: automatizarea apare doar dacă instalezi plugin-ul companion documentat.'],
+      'You create a REST API key pair with read/write permissions in WooCommerce. The platform reads orders, customers and products and registers signed webhooks for new orders and updates.',
+    reads: ['Orders (payment method, status, total, items, contact phone)', 'Customers (name, phone, email)', 'Products (name, SKU, price, stock)'],
+    limits: ['Abandoned carts are not part of the standard WooCommerce API: the automation appears only if you install the documented companion plugin.'],
     connectMode: 'credentials',
     fields: [
-      { key: 'store_url', label: 'Adresa magazinului', type: 'url', placeholder: 'https://magazinul-tau.ro', required: true, help: 'Doar HTTPS.' },
+      { key: 'store_url', label: 'Store URL', type: 'url', placeholder: 'https://your-store.com', required: true, help: 'HTTPS only.' },
       { key: 'consumer_key', label: 'Consumer key', type: 'secret', placeholder: 'ck_…', required: true },
       { key: 'consumer_secret', label: 'Consumer secret', type: 'secret', placeholder: 'cs_…', required: true },
     ],
     instructions: [
-      'În WordPress: WooCommerce → Setări → Avansat → REST API → Adaugă cheie.',
-      'Descriere: „Neuro Tech Voice”, Permisiuni: Citire/Scriere (necesar pentru webhook-uri).',
-      'Copiază Consumer key și Consumer secret aici. Nu le vei mai putea vedea după salvare.',
+      'In WordPress: WooCommerce → Settings → Advanced → REST API → Add key.',
+      'Description: “Neuro Tech Voice”, Permissions: Read/Write (required for webhooks).',
+      'Copy the Consumer key and Consumer secret here. You will not be able to see them again after saving.',
     ],
     docsUrl: 'https://woocommerce.com/document/woocommerce-rest-api/',
   },
   shopify: {
     id: 'shopify',
     name: 'Shopify',
-    tagline: 'Instalare prin OAuth; comenzi, clienți, produse și checkout-uri abandonate prin webhook-uri.',
+    tagline: 'Installed through OAuth; orders, customers, products and abandoned checkouts through webhooks.',
     howItWorks:
-      'Ești trimis în Shopify ca să aprobi aplicația (permisiuni de citire). Platforma primește un token offline, criptat, și înregistrează webhook-uri pentru comenzi, clienți, produse și checkout-uri.',
-    reads: ['Comenzi (gateway de plată, status financiar și de livrare, total, produse, telefon)', 'Clienți (nume, telefon, e-mail, acord marketing)', 'Produse (nume, SKU, preț, stoc)', 'Checkout-uri abandonate (dacă aplicația are acces la datele de contact)'],
-    limits: ['Telefonul și adresa clienților necesită aprobarea Shopify pentru „protected customer data” pe aplicație; fără ea, apelurile automate nu pot fi activate.'],
+      'You are sent to Shopify to approve the app (read permissions). The platform receives an encrypted offline token and registers webhooks for orders, customers, products and checkouts.',
+    reads: ['Orders (payment gateway, financial and fulfillment status, total, items, phone)', 'Customers (name, phone, email, marketing consent)', 'Products (name, SKU, price, stock)', 'Abandoned checkouts (if the app has access to contact details)'],
+    limits: ['Customer phone numbers and addresses require Shopify’s “protected customer data” approval for the app; without it, automated calls cannot be enabled.'],
     connectMode: 'oauth',
-    fields: [{ key: 'shop_domain', label: 'Domeniul magazinului', type: 'text', placeholder: 'magazinul-tau.myshopify.com', required: true }],
-    instructions: ['Introdu domeniul myshopify.com al magazinului și apasă „Continuă în Shopify”.', 'Aprobă permisiunile cerute; vei fi adus înapoi aici automat.'],
+    fields: [{ key: 'shop_domain', label: 'Store domain', type: 'text', placeholder: 'your-store.myshopify.com', required: true }],
+    instructions: ['Enter the store’s myshopify.com domain and press “Continue in Shopify”.', 'Approve the requested permissions; you will be brought back here automatically.'],
     docsUrl: 'https://shopify.dev/docs/apps/build/authentication-authorization',
   },
   magento: {
     id: 'magento',
     name: 'Magento / Adobe Commerce',
-    tagline: 'Chei de integrare; sincronizare periodică a comenzilor, clienților și produselor.',
+    tagline: 'Integration keys; periodic sync of orders, customers and products.',
     howItWorks:
-      'Creezi o Integrare în adminul Magento și copiezi cele patru chei (Consumer Key, Consumer Secret, Access Token, Access Token Secret). Platforma citește comenzile, clienții și produsele prin REST și le reîmprospătează periodic (polling).',
-    reads: ['Comenzi (metodă de plată, status, total, produse, telefon)', 'Clienți (nume, telefon, e-mail)', 'Produse (nume, SKU, preț, stoc)'],
-    limits: ['Magento Open Source nu are webhook-uri standard: datele ajung cu o întârziere de câteva minute (interval de sincronizare afișat).', 'Coșurile abandonate nu sunt disponibile fără un modul dedicat.'],
+      'You create an Integration in the Magento admin and copy its four keys (Consumer Key, Consumer Secret, Access Token, Access Token Secret). The platform reads orders, customers and products through REST and refreshes them periodically (polling).',
+    reads: ['Orders (payment method, status, total, items, phone)', 'Customers (name, phone, email)', 'Products (name, SKU, price, stock)'],
+    limits: ['Magento Open Source has no standard webhooks: data arrives with a delay of a few minutes (the sync interval is shown).', 'Abandoned carts are not available without a dedicated module.'],
     connectMode: 'credentials',
     fields: [
-      { key: 'store_url', label: 'Adresa magazinului', type: 'url', placeholder: 'https://magazinul-tau.ro', required: true },
-      { key: 'access_token', label: 'Access token (Integrare)', type: 'secret', required: true },
+      { key: 'store_url', label: 'Store URL', type: 'url', placeholder: 'https://your-store.com', required: true },
+      { key: 'access_token', label: 'Access token (Integration)', type: 'secret', required: true },
       {
         key: 'consumer_key',
         label: 'Consumer key',
         type: 'secret',
         required: false,
-        help: 'Magento 2.4.4+ nu acceptă token-ul singur (Bearer) decât dacă e activat explicit; completează Consumer key, Consumer secret și Access token secret împreună pentru semnarea OAuth.',
+        help: 'Magento 2.4.4+ does not accept the token alone (Bearer) unless that is explicitly enabled; fill in Consumer key, Consumer secret and Access token secret together for OAuth signing.',
       },
       { key: 'consumer_secret', label: 'Consumer secret', type: 'secret', required: false },
       { key: 'access_token_secret', label: 'Access token secret', type: 'secret', required: false },
     ],
     instructions: [
       'Admin → System → Extensions → Integrations → Add New Integration.',
-      'Resurse: Sales → Operations → Orders (view), Customers → All Customers (view), Catalog → Products (view), Stores → Settings → Configuration (view).',
-      'Activează integrarea și copiază Consumer Key, Consumer Secret, Access Token și Access Token Secret.',
-      'Doar dacă magazinul are activat „enable_integration_as_bearer”, Access Token singur este suficient.',
+      'Resources: Sales → Operations → Orders (view), Customers → All Customers (view), Catalog → Products (view), Stores → Settings → Configuration (view).',
+      'Activate the integration and copy the Consumer Key, Consumer Secret, Access Token and Access Token Secret.',
+      'Only if the store has “enable_integration_as_bearer” turned on is the Access Token alone enough.',
     ],
     docsUrl: 'https://developer.adobe.com/commerce/webapi/get-started/authentication/gs-authentication-token/',
   },
   prestashop: {
     id: 'prestashop',
     name: 'PrestaShop',
-    tagline: 'Cheie Webservice; sincronizare periodică a comenzilor, clienților și produselor.',
+    tagline: 'Webservice key; periodic sync of orders, customers and products.',
     howItWorks:
-      'Activezi Webservice-ul PrestaShop și creezi o cheie cu drepturi de citire. Platforma citește comenzile, clienții, adresele și produsele și le reîmprospătează periodic (polling).',
-    reads: ['Comenzi (modul de plată, stare, total, produse)', 'Clienți și adrese (nume, telefon, e-mail)', 'Produse (nume, referință, preț, stoc)'],
-    limits: ['PrestaShop nu are webhook-uri standard: datele ajung cu o întârziere de câteva minute.', 'Coșurile abandonate nu sunt disponibile fără un modul dedicat.'],
+      'You enable the PrestaShop Webservice and create a key with read permissions. The platform reads orders, customers, addresses and products and refreshes them periodically (polling).',
+    reads: ['Orders (payment module, state, total, items)', 'Customers and addresses (name, phone, email)', 'Products (name, reference, price, stock)'],
+    limits: ['PrestaShop has no standard webhooks: data arrives with a delay of a few minutes.', 'Abandoned carts are not available without a dedicated module.'],
     connectMode: 'credentials',
     fields: [
-      { key: 'store_url', label: 'Adresa magazinului', type: 'url', placeholder: 'https://magazinul-tau.ro', required: true },
-      { key: 'webservice_key', label: 'Cheie Webservice', type: 'secret', required: true },
+      { key: 'store_url', label: 'Store URL', type: 'url', placeholder: 'https://your-store.com', required: true },
+      { key: 'webservice_key', label: 'Webservice key', type: 'secret', required: true },
     ],
     instructions: [
-      'Admin → Parametri avansați → Webservice → activează Webservice-ul.',
-      'Adaugă o cheie cu drepturi GET pe: orders, customers, addresses, products, order_details, order_states, configurations.',
-      'Copiază cheia aici.',
+      'Admin → Advanced Parameters → Webservice → enable the Webservice.',
+      'Add a key with GET permissions on: orders, customers, addresses, products, order_details, order_states, configurations.',
+      'Copy the key here.',
     ],
     docsUrl: 'https://devdocs.prestashop-project.org/8/webservice/',
   },
   custom: {
     id: 'custom',
-    name: 'Magazin personalizat (API)',
-    tagline: 'Conector JSON REST documentat, cu test de conexiune și webhook semnat.',
+    name: 'Custom store (API)',
+    tagline: 'Documented JSON REST connector, with a connection test and signed webhooks.',
     howItWorks:
-      'Expui pe magazinul tău trei endpoint-uri JSON (comenzi, clienți, produse) conform contractului documentat și, opțional, trimiți webhook-uri semnate HMAC-SHA256. Platforma le citește cu autentificarea aleasă.',
-    reads: ['Comenzi, clienți și produse în formatul documentat (docs/commerce-integrations.md)'],
-    limits: ['Nu există descoperire automată: endpoint-urile trebuie să respecte contractul.', 'Coșurile abandonate apar doar dacă implementezi evenimentul cart.updated cu telefonul clientului.'],
+      'You expose three JSON endpoints on your store (orders, customers, products) following the documented contract and, optionally, send HMAC-SHA256 signed webhooks. The platform reads them with the authentication you choose.',
+    reads: ['Orders, customers and products in the documented format (docs/commerce-integrations.md)'],
+    limits: ['There is no automatic discovery: the endpoints must follow the contract.', 'Abandoned carts appear only if you implement the cart.updated event with the customer phone number.'],
     connectMode: 'credentials',
     fields: [
-      { key: 'store_url', label: 'Adresa de bază a API-ului', type: 'url', placeholder: 'https://api.magazinul-tau.ro/ntv', required: true },
+      { key: 'store_url', label: 'API base URL', type: 'url', placeholder: 'https://api.your-store.com/ntv', required: true },
       {
         key: 'auth_scheme',
-        label: 'Autentificare',
+        label: 'Authentication',
         type: 'select',
         required: true,
         options: [
           { value: 'bearer', label: 'Bearer token' },
-          { value: 'api_key_header', label: 'Cheie în header' },
-          { value: 'basic', label: 'Basic (utilizator:parolă)' },
+          { value: 'api_key_header', label: 'API key in a header' },
+          { value: 'basic', label: 'Basic (user:password)' },
         ],
       },
-      { key: 'auth_header_name', label: 'Numele header-ului (pentru cheie în header)', type: 'text', placeholder: 'X-API-Key', required: false },
-      { key: 'auth_token', label: 'Token / cheie / utilizator:parolă', type: 'secret', required: true },
-      { key: 'webhook_secret', label: 'Secret webhook (opțional)', type: 'secret', required: false, help: 'Dacă magazinul trimite webhook-uri, semnează-le HMAC-SHA256 cu acest secret.' },
+      { key: 'auth_header_name', label: 'Header name (for an API key in a header)', type: 'text', placeholder: 'X-API-Key', required: false },
+      { key: 'auth_token', label: 'Token / key / user:password', type: 'secret', required: true },
+      { key: 'webhook_secret', label: 'Webhook secret (optional)', type: 'secret', required: false, help: 'If the store sends webhooks, sign them with HMAC-SHA256 using this secret.' },
     ],
-    instructions: ['Implementează endpoint-urile din documentație (GET /orders, /customers, /products cu paginare prin cursor).', 'Testul de conexiune apelează GET /health și prima pagină din /orders.'],
+    instructions: ['Implement the endpoints from the documentation (GET /orders, /customers, /products with cursor pagination).', 'The connection test calls GET /health and the first page of /orders.'],
     docsUrl: 'https://github.com/neurovoice2026-droid/neuro-tech-voice/blob/main/docs/commerce-integrations.md#3-custom-connector-contract-version-1',
   },
 }
@@ -154,5 +154,5 @@ export const PLATFORM_CATALOG: Record<CommercePlatform, PlatformDescriptor> = {
 export const PLATFORM_ORDER: readonly CommercePlatform[] = ['woocommerce', 'shopify', 'magento', 'prestashop', 'custom']
 
 export function platformName(platform: string | null | undefined): string {
-  return platform && Object.hasOwn(PLATFORM_CATALOG, platform) ? PLATFORM_CATALOG[platform as CommercePlatform].name : 'Magazin'
+  return platform && Object.hasOwn(PLATFORM_CATALOG, platform) ? PLATFORM_CATALOG[platform as CommercePlatform].name : 'Store'
 }

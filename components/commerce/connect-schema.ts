@@ -8,6 +8,9 @@ import type { ConnectField } from '@/lib/commerce/platforms'
 
 export type ConnectValues = Record<string, string>
 
+/** The message under the Shopify domain field when the value is not a myshopify.com host. */
+export const SHOP_DOMAIN_ERROR = 'Enter the store domain in the form your-store.myshopify.com'
+
 function isHttpsUrl(value: string): boolean {
   if (!URL.canParse(value)) return false
   const url = new URL(value)
@@ -31,12 +34,12 @@ export function connectSchema(fields: ReadonlyArray<ConnectField>): z.ZodType<Co
   const shape: Record<string, z.ZodType<string>> = {}
   for (const field of fields) {
     let schema = z.string().trim()
-    if (field.required) schema = schema.min(1, `${field.label} este obligatoriu`)
+    if (field.required) schema = schema.min(1, `${field.label} is required`)
     if (field.type === 'url') {
-      schema = schema.refine((v) => v === '' || isHttpsUrl(v), 'Adresa trebuie să înceapă cu https:// și să fie un domeniu valid')
+      schema = schema.refine((v) => v === '' || isHttpsUrl(v), 'The address must start with https:// and be a valid domain')
     }
     if (field.key === 'shop_domain') {
-      schema = schema.refine((v) => v === '' || normalizeShopDomain(v) !== null, 'Introdu domeniul magazinului, de forma magazinul-tau.myshopify.com')
+      schema = schema.refine((v) => v === '' || normalizeShopDomain(v) !== null, SHOP_DOMAIN_ERROR)
     }
     shape[field.key] = schema
   }
@@ -44,7 +47,7 @@ export function connectSchema(fields: ReadonlyArray<ConnectField>): z.ZodType<Co
   const object = z.object(shape).superRefine((values, ctx) => {
     // The custom connector's header name only matters for the header scheme (and is then required).
     if (keys.has('auth_scheme') && keys.has('auth_header_name') && values.auth_scheme === 'api_key_header' && !values.auth_header_name) {
-      ctx.addIssue({ code: 'custom', path: ['auth_header_name'], message: 'Numele header-ului este obligatoriu pentru autentificarea cu cheie în header' })
+      ctx.addIssue({ code: 'custom', path: ['auth_header_name'], message: 'The header name is required for API-key-in-header authentication' })
     }
   })
   return object as unknown as z.ZodType<ConnectValues, ConnectValues>

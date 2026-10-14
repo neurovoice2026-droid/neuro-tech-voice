@@ -71,7 +71,7 @@ describe('key rotation', () => {
     const db = commerceDb({ commerce_connections: [row] })
     const res = await testConnection(asClient(db), row as never, log)
     expect(res.ok).toBe(false)
-    expect(res.message).toContain('reconectează')
+    expect(res.message).toContain('reconnect the store')
     expect(db.tables.commerce_connections[0]).toMatchObject({ status: 'error', error_code: 'credentials_unreadable' })
     expect(JSON.stringify(db.tables.commerce_connections[0])).not.toContain('ck_live_1')
     // Housekeeping leaves it alone (reported once, without content) and the platform-level cases keep their mapping.
@@ -113,7 +113,7 @@ describe('disconnect', () => {
     expect(final).toMatchObject({ status: 'disconnected', encrypted_credentials: null, credential_key_version: null })
     expect(db.tables.commerce_automations[0].enabled).toBe(false)
     expect(db.tables.commerce_sync_jobs[0].status).toBe('cancelled')
-    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'cancelled', eligibility_reason: 'Magazinul a fost deconectat' })
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'cancelled', eligibility_reason: 'Store disconnected' })
     expect(db.tables.commerce_audit_log.some((a) => a.action === 'connection.disconnected')).toBe(true)
   })
 })

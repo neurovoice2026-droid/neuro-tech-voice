@@ -98,8 +98,12 @@ Design decisions already taken (do not re-open):
 - Stripe without manual setup: `lib/stripe/store-prices.ts`
   `ensurePlanPriceId(plan, interval)` uses the env id when set, else finds or
   creates the price by `lookup_key` `ntv_<plan>_<interval>` with metadata
-  `ntv_plan`; the billing webhook resolves a subscription's plan by price map,
-  then subscription metadata `ntv_plan`, then `resolvePlanFromPrice`.
+  `ntv_plan` (creates carry Stripe idempotency keys `ntv_product_<plan>` and
+  `ntv_price_<plan>_<interval>`, so racing cold lambdas share one product and
+  one price); the billing webhook resolves a subscription's plan by price map,
+  then `resolvePlanFromPrice` (the price's own metadata / lookup key), and only
+  then the subscription metadata `ntv_plan`, which Stripe never rewrites on a
+  plan switch.
 - Migration `supabase/migrations/026_store_plans.sql` widens
   `organizations_plan_check`. It must be applied to Supabase BEFORE the code
   that writes store plans is deployed (the webhook writes `store_*`).
@@ -119,21 +123,43 @@ Design decisions already taken (do not re-open):
 - Entitlements: store plans mirror the service plan with the nearest price
   (Store Starter = Starter-level entitlements; recordings from Store Growth).
 
-Execution state at the time of writing: workflow run `wf_a8eb3f28-018`
-(script `~/.claude/projects/-home-user-neuro-tech-voice/<session>/workflows/scripts/store-plans-and-english-wf_a8eb3f28-018.js`,
-journal `.../subagents/workflows/wf_a8eb3f28-018/journal.jsonl`). The six
-implementers (plans-backend, pricing-marketing, l10n-onboarding,
-l10n-dashboard, l10n-core, l10n-adapters) finished; the first validator
-(tsc, eslint, vitest, build) was running; still to run: three adversarial
-reviews (billing, english, routes), fixers, final validator. If that run is
-still resumable, continue it with
-`Workflow({ scriptPath, resumeFromRunId: 'wf_a8eb3f28-018' })` (finished
-agents replay from cache). If the container is new, the working tree
-snapshot lives in the commit `wip(commerce): store plans and English copy`
-on `claude/amazing-shannon-ognheq`: check it out, run the four checks, then
-launch a fresh review workflow over the same scope (billing correctness,
-English completeness with a diacritics grep over merchant-facing areas,
-`/magazin` leftovers, Step 0 intent chain) and fix what it confirms.
+Execution state (updated): the implementation workflow `wf_a8eb3f28-018`
+finished (six implementers, first validator green: tsc, eslint, 232 files /
+2476 tests, build; three reviews with 20 findings, all fixed or justified).
+Its final validator did not run (credit limit). Migration 026 IS APPLIED in
+production (CHECK verified: nine plan ids). The fixes sit uncommitted on top
+of the WIP commit `22e164c` on `claude/amazing-shannon-ognheq`. A final
+validation workflow (`wf_6e95c7d5-e3e`: full checks, money-path verifier,
+copy/route verifier, fixer, revalidation) was launched to close the task. If
+the session is lost before it finishes, rerun the same four checks and a
+money-path review by hand, then continue with step 4 below.
+
+## Added 2026-10-15: prepaid extra-minute packs (owner request)
+
+"After the included minutes are used up, the customer must be able to buy
+extra minutes." Decisions (do not re-open): hard cap on every plan (capacity
+= included left + purchased balance; unknown plans fail open;
+VOICE_TRIAL_MINUTES_ENFORCED=false disables the cap); packs of 100 / 500 /
+1,000 / 2,500 minutes priced at the plan's extra-minute rate
+(PLANS[plan].overage_per_min: 0.25 / 0.25 / 0.22 / 0.18 for services,
+0.25 / 0.22 / 0.20 / 0.18 for stores) with volume discounts 0 / 4 / 8 / 12%;
+only paid plans can buy; purchased minutes never expire and are used after
+the included ones; minutes_used resets on each Stripe renewal
+(invoice.paid subscription_cycle / subscription_create, idempotent per
+period start); optional auto top-up (threshold 10..1000 minutes, default 50;
+off-session invoice on the subscription's payment method; one attempt per
+10 minutes; failure disables it and e-mails the owner); 80% and
+out-of-minutes e-mails; dashboard banner; store automations defer up to 24 h
+when out of minutes. Also fixes: in-place plan switch (no second
+subscription), store price validation against PLANS, onboarding notice when a
+paid price cannot be resolved, plan display names, atomic one-time business
+type, /magazin -> /store redirects, no empty catch in the intent cookie
+reader. Migration `027_minute_packs.sql` (new columns, minute_purchases,
+credit_minute_purchase, start_usage_period, claim_auto_topup, updated
+record_call_usage) must be applied to Supabase BEFORE deploying, because
+the code selects the new columns. Workflow run: `wf_0867dbb2-576`; WIP
+snapshots on `claude/amazing-shannon-ognheq` (22e164c, 96a2859) are to be
+squashed with the result onto `7d0cca6` into one commit for `main`.
 
 ## Remaining steps for this task (in order)
 
@@ -142,9 +168,8 @@ English completeness with a diacritics grep over merchant-facing areas,
 2. Review the money path by hand: `app/api/billing/checkout/route.ts`,
    `app/api/billing/webhook/route.ts`, `app/api/onboarding/complete/route.ts`,
    `lib/stripe/store-prices.ts`, `lib/stripe/client.ts`.
-3. Apply `supabase/migrations/026_store_plans.sql` with the Supabase MCP
-   (`apply_migration`, name `026_store_plans`), then confirm with
-   `execute_sql` that the CHECK lists all nine plan ids.
+3. Migration 026 is already applied (verified); nothing to do unless the
+   project was reset.
 4. Squash the WIP snapshot into one commit on top of `1e62bd5`
    (`git reset --soft 1e62bd5`, then commit with a descriptive message and
    the trailers), push to `main` and to `claude/amazing-shannon-ognheq`

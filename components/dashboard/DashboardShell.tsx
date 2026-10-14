@@ -66,30 +66,30 @@ const NAV_GROUPS: NavGroup[] = [
 
 /** The store section of an e-commerce organization (migration 024), after the first group. */
 const COMMERCE_NAV_GROUP: NavGroup = {
-  label: 'Magazin',
+  label: 'Store',
   items: [
-    { href: '/magazin', label: 'Prezentare', icon: Store },
-    { href: '/magazin/conexiuni', label: 'Conexiuni', icon: Cable },
-    { href: '/magazin/comenzi', label: 'Comenzi', icon: Package },
-    { href: '/magazin/clienti', label: 'Clienți', icon: Users },
-    { href: '/magazin/produse', label: 'Produse', icon: Tag },
-    { href: '/magazin/automatizari', label: 'Automatizări', icon: Workflow },
-    { href: '/magazin/nu-suna', label: 'Lista „Nu suna”', icon: PhoneOff },
-    { href: '/magazin/setari', label: 'Setări magazin', icon: SlidersHorizontal },
+    { href: '/store', label: 'Overview', icon: Store },
+    { href: '/store/connections', label: 'Connections', icon: Cable },
+    { href: '/store/orders', label: 'Orders', icon: Package },
+    { href: '/store/customers', label: 'Customers', icon: Users },
+    { href: '/store/products', label: 'Products', icon: Tag },
+    { href: '/store/automations', label: 'Automations', icon: Workflow },
+    { href: '/store/do-not-call', label: 'Do-not-call list', icon: PhoneOff },
+    { href: '/store/settings', label: 'Store settings', icon: SlidersHorizontal },
   ],
 }
 
-/** Service organizations see exactly the groups above; e-commerce ones get the Magazin group too. */
+/** Service organizations see exactly the groups above; e-commerce ones get the Store group too. */
 function navGroupsFor(org: Organization): NavGroup[] {
   if (org.business_type !== 'ecommerce') return NAV_GROUPS
   return [NAV_GROUPS[0], COMMERCE_NAV_GROUP, ...NAV_GROUPS.slice(1)]
 }
 
 /** Section roots: active on their own path only, so their sub-pages do not light them up too. */
-const EXACT_MATCH_PAGES = ['/dashboard', '/magazin']
+const EXACT_MATCH_PAGES = ['/dashboard', '/store']
 
 /** Pages whose content sits in a left-aligned 768 px column inside the default PageContainer. */
-const NARROW_PAGES = ['/billing', '/settings', '/magazin/setari']
+const NARROW_PAGES = ['/billing', '/settings', '/store/settings']
 
 interface DashboardShellProps {
   children: React.ReactNode

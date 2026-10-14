@@ -1,30 +1,58 @@
 // Pure pieces of the store onboarding UI that run in node: the Shopify domain
-// normalizer, the Romanian copy helpers, the store's hydration and the top
-// bar's step list (the service flow's default must stay exactly as it was).
+// normalizer, the English copy helpers, the store's hydration and plan
+// default, and the top bar's step list (the service flow's default must stay
+// exactly as it was).
 
 import { describe, expect, it, vi } from 'vitest'
 import { normalizeShopDomain, oauthReturnFrom, shopifyStartUrl } from '@/components/onboarding/commerce/shopify'
-import { automationRules, checklistStepFor, formatDays, formatMinutes, oauthErrorMessage } from '@/components/onboarding/commerce/copy'
-import { CommerceRequestError, TIMEOUT_MESSAGE, commerceErrorMessage, isAbort, requestJson } from '@/components/onboarding/commerce/api'
+import {
+  CAPABILITY_LABELS,
+  CONNECTION_STATUS,
+  CONSENT_TEXT,
+  COUNTRIES,
+  CURRENCIES,
+  OAUTH_ERRORS,
+  SYNC_STATUS,
+  automationRules,
+  checklistStepFor,
+  formatDate,
+  formatDays,
+  formatMinutes,
+  oauthErrorMessage,
+} from '@/components/onboarding/commerce/copy'
+import {
+  CONNECTION_STATUSES,
+  CONNECTION_STATUS_LABEL,
+  CONNECTION_STATUS_TONE,
+  OAUTH_ERRORS as DASHBOARD_OAUTH_ERRORS,
+  SYNC_STATUS_LABEL,
+} from '@/components/commerce/labels'
+import { CONSENT_TEXT as RECORDED_CONSENT_TEXT } from '@/lib/commerce/automations/config'
+import { CommerceRequestError, TIMEOUT_MESSAGE, commerceErrorMessage, isAbort, readCommerceError, requestJson } from '@/components/onboarding/commerce/api'
 import { connectionBusy, isLiveConnection } from '@/components/onboarding/commerce/hooks'
-import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
+import { DEFAULT_STORE_PLAN, useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
 import { COMMERCE_ONBOARDING_STEPS } from '@/lib/commerce/business-type'
+import { ONBOARDING_STEPS } from '@/components/onboarding/StepIndicator'
+import { PLANS, STORE_PLANS, planAllowedFor, plansForBusinessType } from '@/types'
 import type { AutomationConfig, ConnectionDto, ConnectionStatus } from '@/lib/commerce/types'
+
+/** Romanian diacritics and Romanian stems the old copy used (none shared with English): none may survive in merchant-facing text. */
+const ROMANIAN = /[ăâîșşțţ]|\b(magazin|sincroniz|conexiun|automatiz|reîncearc)/i
 
 describe('normalizeShopDomain', () => {
   it('accepts a bare shop name, a full domain and a URL, lower-cased and trimmed', () => {
-    expect(normalizeShopDomain('  Magazinul-Tau ')).toBe('magazinul-tau.myshopify.com')
-    expect(normalizeShopDomain('magazinul-tau.myshopify.com')).toBe('magazinul-tau.myshopify.com')
-    expect(normalizeShopDomain('https://Magazinul-Tau.myshopify.com/admin')).toBe('magazinul-tau.myshopify.com')
+    expect(normalizeShopDomain('  My-Store ')).toBe('my-store.myshopify.com')
+    expect(normalizeShopDomain('my-store.myshopify.com')).toBe('my-store.myshopify.com')
+    expect(normalizeShopDomain('https://My-Store.myshopify.com/admin')).toBe('my-store.myshopify.com')
   })
   it('refuses anything that is not a myshopify.com domain', () => {
     expect(normalizeShopDomain('')).toBeNull()
-    expect(normalizeShopDomain('magazin.ro')).toBeNull()
-    expect(normalizeShopDomain('evil.com/magazin.myshopify.com')).toBeNull()
+    expect(normalizeShopDomain('my-store.com')).toBeNull()
+    expect(normalizeShopDomain('evil.com/my-store.myshopify.com')).toBeNull()
     expect(normalizeShopDomain('-bad.myshopify.com')).toBeNull()
   })
   it('builds the start URL with the onboarding return target', () => {
-    expect(shopifyStartUrl('magazin.myshopify.com')).toBe('/api/commerce/oauth/shopify/start?shop=magazin.myshopify.com&return_to=onboarding')
+    expect(shopifyStartUrl('my-store.myshopify.com')).toBe('/api/commerce/oauth/shopify/start?shop=my-store.myshopify.com&return_to=onboarding')
   })
   it('reads the install result from the return URL under both spellings of the failure code', () => {
     expect(oauthReturnFrom(new URLSearchParams('commerce=connected'))).toEqual({ kind: 'connected' })
@@ -47,13 +75,14 @@ describe('requestJson', () => {
     })
   }
 
-  it('gives up after the time limit with a Romanian error the callers show (not a silent abort)', async () => {
+  it('gives up after the time limit with an English error the callers show (not a silent abort)', async () => {
     vi.stubGlobal('fetch', stalledFetch())
     const err = await requestJson('/api/commerce/onboarding/state', { fallback: 'x', timeoutMs: 10 }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(CommerceRequestError)
     expect((err as CommerceRequestError).code).toBe('timeout')
     expect(isAbort(err)).toBe(false)
     expect(commerceErrorMessage(err, 'fallback')).toBe(TIMEOUT_MESSAGE)
+    expect(TIMEOUT_MESSAGE).toBe('The server did not respond in time. Please try again.')
   })
 
   it("the caller's own abort still surfaces as an AbortError, which the hooks ignore", async () => {
@@ -69,14 +98,22 @@ describe('requestJson', () => {
   it('reads the server message, code and precondition reason from a failed response', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ error: 'Bifează mai întâi', code: 'precondition_failed', details: { reason: 'no_consent' } }), { status: 409 })),
+      vi.fn(async () => new Response(JSON.stringify({ error: 'Confirm the statement first', code: 'precondition_failed', details: { reason: 'no_consent' } }), { status: 409 })),
     )
     const err = (await requestJson('/api/commerce/automations/cod_confirmation', { method: 'PUT', body: {}, fallback: 'x' }).catch((e: unknown) => e)) as CommerceRequestError
     expect(err).toBeInstanceOf(CommerceRequestError)
     expect(err.status).toBe(409)
     expect(err.code).toBe('precondition_failed')
     expect(err.reason).toBe('no_consent')
-    expect(err.message).toBe('Bifează mai întâi')
+    expect(err.message).toBe('Confirm the statement first')
+  })
+
+  it('falls back to an English line per status when the server sends no message, and to the caller’s otherwise', async () => {
+    const without = (status: number) => readCommerceError(new Response('<html>', { status }), 'Caller fallback.')
+    expect((await without(401)).message).toBe('Your session has expired. Sign in again.')
+    expect((await without(429)).message).toBe('Too many requests. Wait a moment and try again.')
+    expect((await without(500)).message).toBe('Caller fallback.')
+    expect(commerceErrorMessage(new TypeError('Failed to fetch'), 'x')).toBe('Network error. Check your connection and try again.')
   })
 })
 
@@ -100,14 +137,16 @@ describe('connection liveness', () => {
 })
 
 describe('checklistStepFor', () => {
-  it('maps the pages that are steps of the flow, and nothing else, to a step', () => {
-    expect(checklistStepFor('/magazin/conexiuni')).toBe(3)
-    expect(checklistStepFor('/magazin/automatizari?type=cod_confirmation')).toBe(4)
+  it('maps the /store pages that are steps of the flow, and nothing else, to a step', () => {
+    expect(checklistStepFor('/store/connections')).toBe(3)
+    expect(checklistStepFor('/store/automations?type=cod_confirmation')).toBe(4)
     expect(checklistStepFor('/agent')).toBe(5)
     expect(checklistStepFor('/agent?tab=voice')).toBe(5)
     expect(checklistStepFor('/agentx')).toBeNull()
     expect(checklistStepFor('/phone')).toBeNull()
-    expect(checklistStepFor('/magazin/setari')).toBeNull()
+    expect(checklistStepFor('/store/settings')).toBeNull()
+    // The old Romanian paths are gone: a stale link from them is not a step any more.
+    expect(checklistStepFor('/magazin/conexiuni')).toBeNull()
     expect(checklistStepFor(null)).toBeNull()
   })
 })
@@ -125,25 +164,50 @@ describe('copy helpers', () => {
     follow_up_status: 'fulfilled',
     min_order_total: 150,
   }
-  it('formats delays and days in Romanian', () => {
+  it('formats delays, days and dates in English', () => {
     expect(formatMinutes(30)).toBe('30 min')
     expect(formatMinutes(90)).toBe('1 h 30 min')
     expect(formatMinutes(120)).toBe('2 h')
-    expect(formatDays(['mon', 'sat', 'sun'])).toBe('Lu, Sâ, Du')
-    expect(formatDays([])).toBe('nicio zi')
+    expect(formatDays(['mon', 'sat', 'sun'])).toBe('Mon, Sat, Sun')
+    expect(formatDays([])).toBe('no days')
+    expect(formatDate('2026-10-14T13:05:00Z')).toMatch(/^Oct 14, 2026/)
+    expect(formatDate('not a date')).toBeNull()
   })
   it('describes each automation from its config', () => {
-    expect(automationRules('cod_confirmation', config).trigger).toContain('cod')
-    expect(automationRules('abandoned_cart', config).trigger).toContain('150')
-    expect(automationRules('abandoned_cart', config).trigger).toContain('1 h 30 min')
-    expect(automationRules('order_follow_up', config).trigger).toContain('livrată')
+    expect(automationRules('cod_confirmation', config).trigger).toBe('New cash-on-delivery order (cod)')
+    expect(automationRules('abandoned_cart', config).trigger).toBe('Abandoned cart worth at least 150, after 1 h 30 min')
+    expect(automationRules('order_follow_up', config).trigger).toBe('Order moves to the “fulfilled” status')
     for (const type of ['cod_confirmation', 'abandoned_cart', 'order_follow_up'] as const) {
-      expect(automationRules(type, config).contact).toContain('„Nu suna”')
+      expect(automationRules(type, config).contact).toContain('do-not-call list')
     }
   })
   it('maps known OAuth error codes and never echoes an unknown one at length', () => {
-    expect(oauthErrorMessage('access_denied')).toContain('refuzată')
-    expect(oauthErrorMessage('x'.repeat(100))).toBe(`Conectarea cu Shopify nu a reușit (cod: ${'x'.repeat(40)}).`)
+    expect(oauthErrorMessage('access_denied')).toBe('The app install was declined in Shopify. You can try again whenever you are ready.')
+    expect(oauthErrorMessage('x'.repeat(100))).toBe(`The Shopify connection failed (code: ${'x'.repeat(40)}).`)
+  })
+  it('keeps every merchant-facing table in English', () => {
+    const lines = [
+      ...COUNTRIES.map((c) => c.label),
+      ...CURRENCIES.map((c) => c.label),
+      ...Object.values(CONNECTION_STATUS).map((s) => s.label),
+      ...Object.values(SYNC_STATUS),
+      ...CAPABILITY_LABELS.map((c) => c.label),
+      ...Object.values(OAUTH_ERRORS),
+      CONSENT_TEXT,
+    ]
+    for (const line of lines) expect(line, line).not.toMatch(ROMANIAN)
+    expect(CONSENT_TEXT).toMatch(/^I confirm that I have a lawful basis/)
+  })
+  it('reads statuses, the Shopify install errors and the consent from the dashboard, so a row never changes wording after the launch', () => {
+    expect(Object.keys(CONNECTION_STATUS).sort()).toEqual([...CONNECTION_STATUSES].sort())
+    for (const status of CONNECTION_STATUSES) {
+      expect(CONNECTION_STATUS[status]).toEqual({ label: CONNECTION_STATUS_LABEL[status], tone: CONNECTION_STATUS_TONE[status] })
+    }
+    expect(CONNECTION_STATUS.degraded.label).toBe('Connected with issues')
+    expect(SYNC_STATUS).toBe(SYNC_STATUS_LABEL)
+    expect(OAUTH_ERRORS).toBe(DASHBOARD_OAUTH_ERRORS)
+    // The checkbox shows the very text recorded under CONSENT_VERSION (a diverging copy would record a consent the merchant never saw).
+    expect(CONSENT_TEXT).toBe(RECORDED_CONSENT_TEXT)
   })
 })
 
@@ -151,8 +215,8 @@ describe('useCommerceOnboardingStore', () => {
   const connection = {
     id: 'c1',
     platform: 'woocommerce',
-    store_url: 'https://magazin.ro',
-    store_domain: 'magazin.ro',
+    store_url: 'https://my-store.com',
+    store_domain: 'my-store.com',
     display_name: null,
     status: 'active',
     capabilities: { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: false, customer_phone: true, polling_minutes: null, notes: [] },
@@ -175,16 +239,16 @@ describe('useCommerceOnboardingStore', () => {
     store.hydrate({
       business_type: 'ecommerce',
       onboarding_step: 3,
-      profile: { display_name: 'Magazinul Exemplu', currency: 'not-a-code', tone: 'formal' },
+      profile: { display_name: 'Example Store', currency: 'not-a-code', tone: 'formal' },
       connection,
       automations: [],
       agent: null,
       has_phone_number: true,
-      checklist: [{ key: 'connection', label: 'Magazin conectat', ok: true, href: null }],
+      checklist: [{ key: 'connection', label: 'Store connected', ok: true, href: null }],
     })
     const s = useCommerceOnboardingStore.getState()
     expect(s.hydrated).toBe(true)
-    expect(s.profile.display_name).toBe('Magazinul Exemplu')
+    expect(s.profile.display_name).toBe('Example Store')
     expect(s.profile.tone).toBe('formal')
     // A bad field falls back to its default instead of breaking the whole profile.
     expect(s.profile.currency).toBe('RON')
@@ -193,6 +257,21 @@ describe('useCommerceOnboardingStore', () => {
     expect(s.checklist).toHaveLength(1)
     // The server never sets the client's current step through hydrate (the wrapper does).
     expect(s.currentStep).toBe(1)
+  })
+
+  it('starts on the store family’s entry plan, which an online store may hold, and keeps it across a reset', () => {
+    const store = useCommerceOnboardingStore.getState()
+    store.setPlan('store_scale')
+    store.reset()
+    expect(useCommerceOnboardingStore.getState().plan).toBe(DEFAULT_STORE_PLAN)
+    expect(DEFAULT_STORE_PLAN).toBe('store_starter')
+    expect(STORE_PLANS[0]).toBe(DEFAULT_STORE_PLAN)
+    expect(planAllowedFor(DEFAULT_STORE_PLAN, 'ecommerce')).toBe(true)
+    expect(PLANS[DEFAULT_STORE_PLAN].price_monthly).toBe(100)
+    // The launch step offers exactly this family: the self-serve tiers plus one contact-sales tier.
+    const offered = plansForBusinessType('ecommerce')
+    expect(offered.filter((p) => PLANS[p].contact_sales)).toEqual(['store_enterprise'])
+    expect(offered.filter((p) => !PLANS[p].contact_sales)).toEqual(['store_starter', 'store_growth', 'store_scale'])
   })
 
   it('never holds a secret: the state shape has no credential field', () => {
@@ -227,14 +306,19 @@ describe('useCommerceOnboardingStore', () => {
 })
 
 describe('step lists', () => {
-  it('the store flow has the six labelled steps the top bar and headers read', () => {
+  it('the store flow has the six English steps the top bar and headers read', () => {
     expect(COMMERCE_ONBOARDING_STEPS.map((s) => s.label)).toEqual([
-      'Despre magazin',
-      'Conectează magazinul',
-      'Acces și sincronizare',
-      'Automatizări',
-      'Agentul tău',
-      'Lansare',
+      'About your store',
+      'Connect your store',
+      'Access & sync',
+      'Automations',
+      'Your agent',
+      'Launch',
     ])
+    expect(COMMERCE_ONBOARDING_STEPS.map((s) => s.num)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('the service flow keeps its four steps untouched', () => {
+    expect(ONBOARDING_STEPS.map((s) => s.label)).toEqual(['Company', 'Agent', 'Voice', 'Launch'])
   })
 })

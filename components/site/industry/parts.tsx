@@ -37,6 +37,10 @@ const PLAN_LABEL: Record<Plan, string> = {
   pro: "Pro",
   business: "Business",
   custom: "Enterprise",
+  store_starter: "Store Starter",
+  store_growth: "Store Growth",
+  store_scale: "Store Scale",
+  store_enterprise: "Store Enterprise",
 };
 
 /**

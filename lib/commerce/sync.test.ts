@@ -115,7 +115,7 @@ describe('sync jobs', () => {
 
   it('retries transient failures with backoff and fails for bad credentials, marking the connection', async () => {
     const timeout = fakeAdapter()
-    timeout.syncPage = vi.fn(async () => { throw new ConnectionError('timeout', 'Magazinul nu a răspuns.', true) })
+    timeout.syncPage = vi.fn(async () => { throw new ConnectionError('timeout', 'The store did not respond.', true) })
     adapterState.adapter = timeout
     const db = commerceDb({ organizations: [orgRow()], commerce_connections: [connectionRow()], commerce_sync_jobs: [job()] })
     const [claimed] = await claimSyncJobs(asClient(db), 'w1', 3)
@@ -125,13 +125,13 @@ describe('sync jobs', () => {
     expect(db.tables.commerce_connections[0]).toMatchObject({ status: 'degraded', error_code: 'timeout' })
 
     const unauthorized = fakeAdapter()
-    unauthorized.syncPage = vi.fn(async () => { throw new ConnectionError('unauthorized', 'Cheia a fost respinsă.', false) })
+    unauthorized.syncPage = vi.fn(async () => { throw new ConnectionError('unauthorized', 'The key was rejected.', false) })
     adapterState.adapter = unauthorized
     const db2 = commerceDb({ organizations: [orgRow()], commerce_connections: [connectionRow()], commerce_sync_jobs: [job()] })
     const [c2] = await claimSyncJobs(asClient(db2), 'w1', 3)
     expect((await runSyncJob(asClient(db2), c2, log, { owner: 'w1', sliceMs: 60_000 })).status).toBe('failed')
     expect(db2.tables.commerce_sync_jobs[0]).toMatchObject({ status: 'failed', error_code: 'unauthorized' })
-    expect(db2.tables.commerce_connections[0]).toMatchObject({ status: 'error', error_message: 'Cheia a fost respinsă.' })
+    expect(db2.tables.commerce_connections[0]).toMatchObject({ status: 'error', error_message: 'The key was rejected.' })
     expect(JSON.stringify(db2.tables.commerce_connections[0].error_message)).not.toMatch(/ck_|cs_/)
   })
 

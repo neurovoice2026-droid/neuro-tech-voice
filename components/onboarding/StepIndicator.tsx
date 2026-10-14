@@ -25,9 +25,9 @@ interface StepIndicatorProps {
   currentStep: number
   /** The step list to render; the service onboarding's four steps by default. */
   steps?: readonly OnboardingStepDef[]
-  /** Accessible name of the list (translated by flows that are not in English). */
+  /** Accessible name of the list. */
   ariaLabel?: string
-  /** Screen-reader suffix of a completed step ("(done)"; translated by flows that are not in English). */
+  /** Screen-reader suffix of a completed step. */
   doneLabel?: string
   className?: string
 }
@@ -119,7 +119,7 @@ interface StepHeaderProps {
   eyebrow?: React.ReactNode
   /** The step list the eyebrow's label comes from; the service onboarding's steps by default. */
   steps?: readonly OnboardingStepDef[]
-  /** The word before the number in the default eyebrow ("Step" → "Step 2 · Agent"; "Pasul" for the store flow). */
+  /** The word before the number in the default eyebrow ("Step" → "Step 2 · Agent"). */
   stepWord?: string
   /** Ref to the title, for callers that move focus to it (it is always focusable with tabIndex -1). */
   headingRef?: React.Ref<HTMLHeadingElement>

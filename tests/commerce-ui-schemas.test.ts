@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SHOP_DOMAIN_ERROR,
   clearSecrets,
   connectSchema,
   initialConnectValues,
@@ -9,6 +10,7 @@ import {
 import {
   ABANDONED_CART_MIN_DELAY,
   AUTOMATION_LIMITS,
+  GENERIC_FIELD_ERROR,
   automationFormSchema,
   bodyFromValues,
   formFieldForIssuePath,
@@ -28,44 +30,53 @@ describe('connect form schema (from PLATFORM_CATALOG)', () => {
 
   it('requires every required field and an https store url', () => {
     const schema = connectSchema(woo)
-    const bad = schema.safeParse({ store_url: 'http://shop.ro', consumer_key: '', consumer_secret: 'cs_1' })
+    const bad = schema.safeParse({ store_url: 'http://shop.example.com', consumer_key: '', consumer_secret: 'cs_1' })
     expect(bad.success).toBe(false)
     if (!bad.success) {
       const paths = bad.error.issues.map((i) => i.path.join('.'))
       expect(paths).toContain('store_url')
       expect(paths).toContain('consumer_key')
+      // The messages are the merchant's: English, built from the catalog's field label.
+      const messages = bad.error.issues.map((i) => i.message)
+      expect(messages).toContain('The address must start with https:// and be a valid domain')
+      expect(messages.some((m) => m.endsWith(' is required'))).toBe(true)
+      for (const message of messages) expect(message).not.toMatch(/[ăâîșşțţ]/)
     }
-    const ok = schema.safeParse({ store_url: 'https://shop.ro', consumer_key: 'ck_1', consumer_secret: 'cs_1' })
+    const ok = schema.safeParse({ store_url: 'https://shop.example.com', consumer_key: 'ck_1', consumer_secret: 'cs_1' })
     expect(ok.success).toBe(true)
   })
 
   it('splits the store url from the secrets and never keeps a secret after clearing', () => {
-    const values = { store_url: ' https://shop.ro ', consumer_key: 'ck_1', consumer_secret: 'cs_1' }
-    expect(splitConnectValues(woo, values)).toEqual({ store_url: 'https://shop.ro', secrets: { consumer_key: 'ck_1', consumer_secret: 'cs_1' } })
-    expect(clearSecrets(woo, values)).toEqual({ store_url: ' https://shop.ro ', consumer_key: '', consumer_secret: '' })
+    const values = { store_url: ' https://shop.example.com ', consumer_key: 'ck_1', consumer_secret: 'cs_1' }
+    expect(splitConnectValues(woo, values)).toEqual({ store_url: 'https://shop.example.com', secrets: { consumer_key: 'ck_1', consumer_secret: 'cs_1' } })
+    expect(clearSecrets(woo, values)).toEqual({ store_url: ' https://shop.example.com ', consumer_key: '', consumer_secret: '' })
     // A reconnect prefill never carries a secret, whatever the caller passes.
-    expect(initialConnectValues(woo, { store_url: 'https://shop.ro', consumer_key: 'leak' })).toEqual({ store_url: 'https://shop.ro', consumer_key: '', consumer_secret: '' })
+    expect(initialConnectValues(woo, { store_url: 'https://shop.example.com', consumer_key: 'leak' })).toEqual({ store_url: 'https://shop.example.com', consumer_key: '', consumer_secret: '' })
   })
 
   it('custom connector: the header name is required only for the header scheme', () => {
     const fields = PLATFORM_CATALOG.custom.fields
     const schema = connectSchema(fields)
-    const base = { store_url: 'https://api.shop.ro/ntv', auth_token: 't', webhook_secret: '', auth_header_name: '' }
+    const base = { store_url: 'https://api.shop.example.com/ntv', auth_token: 't', webhook_secret: '', auth_header_name: '' }
     expect(schema.safeParse({ ...base, auth_scheme: 'bearer' }).success).toBe(true)
     const header = schema.safeParse({ ...base, auth_scheme: 'api_key_header' })
     expect(header.success).toBe(false)
+    if (!header.success) expect(header.error.issues[0]?.message).toBe('The header name is required for API-key-in-header authentication')
     expect(schema.safeParse({ ...base, auth_scheme: 'api_key_header', auth_header_name: 'X-API-Key' }).success).toBe(true)
     expect(initialConnectValues(fields).auth_scheme).toBe('bearer')
   })
 
   it('normalises a Shopify domain as merchants paste it', () => {
-    expect(normalizeShopDomain('Magazin-Tau.myshopify.com')).toBe('magazin-tau.myshopify.com')
-    expect(normalizeShopDomain('https://magazin-tau.myshopify.com/admin')).toBe('magazin-tau.myshopify.com')
-    expect(normalizeShopDomain('magazin-tau.ro')).toBeNull()
+    expect(normalizeShopDomain('My-Store.myshopify.com')).toBe('my-store.myshopify.com')
+    expect(normalizeShopDomain('https://my-store.myshopify.com/admin')).toBe('my-store.myshopify.com')
+    expect(normalizeShopDomain('my-store.com')).toBeNull()
     expect(normalizeShopDomain('')).toBeNull()
     const schema = connectSchema(PLATFORM_CATALOG.shopify.fields)
     expect(schema.safeParse({ shop_domain: 'x.myshopify.com' }).success).toBe(true)
-    expect(schema.safeParse({ shop_domain: 'x.ro' }).success).toBe(false)
+    const wrong = schema.safeParse({ shop_domain: 'x.com' })
+    expect(wrong.success).toBe(false)
+    if (!wrong.success) expect(wrong.error.issues[0]?.message).toBe(SHOP_DOMAIN_ERROR)
+    expect(SHOP_DOMAIN_ERROR).toBe('Enter the store domain in the form your-store.myshopify.com')
   })
 })
 
@@ -127,20 +138,33 @@ describe('automation form schema', () => {
     expect(followUp.config.follow_up_status).toBe('fulfilled')
   })
 
-  it('rejects an empty window, a bad phone number, a non-https url and unknown variables', () => {
+  it('rejects an empty window, a bad phone number, a non-https url and unknown variables, in English', () => {
     const schema = automationFormSchema('cod_confirmation')
     const base = formValuesFrom(automation)
-    const issues = (values: Partial<typeof base>) => {
+    const parse = (values: Partial<typeof base>) => {
       const result = schema.safeParse({ ...base, ...values })
-      return result.success ? [] : result.error.issues.map((i) => i.path.join('.'))
+      return result.success ? [] : result.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }))
     }
+    const issues = (values: Partial<typeof base>) => parse(values).map((i) => i.path)
     expect(issues({ window_end: '09:00' })).toContain('window_end')
+    expect(parse({ window_end: '09:00' }).find((i) => i.path === 'window_end')?.message).toBe('The start time must be before the end time')
     expect(issues({ transfer_number: '0712 345 678' })).toContain('transfer_number')
     expect(issues({ transfer_number: '+40712345678' })).not.toContain('transfer_number')
-    expect(issues({ return_policy_url: 'http://shop.ro/retur' })).toContain('return_policy_url')
-    expect(issues({ template: 'Bună ziua, comanda {{order_id}} este gata de livrare.' })).toContain('template')
+    expect(issues({ return_policy_url: 'http://shop.example.com/returns' })).toContain('return_policy_url')
+    // The script itself stays in the language of the calls; only the validation message is English.
+    const unknownVariable = parse({ template: 'Bună ziua, comanda {{order_id}} este gata de livrare.' })
+    expect(unknownVariable.map((i) => i.path)).toContain('template')
+    expect(unknownVariable.find((i) => i.path === 'template')?.message).toBe('The variable {{order_id}} does not exist; use the ones listed in the help box')
     expect(issues({ days: [] })).toContain('days')
+    expect(parse({ days: [] }).find((i) => i.path === 'days')?.message).toBe('Choose at least one day')
     expect(issues({ delay_minutes: Number.NaN })).toContain('delay_minutes')
+    expect(parse({ cod_payment_methods: [] }).find((i) => i.path === 'cod_payment_methods')?.message).toBe('Add at least one payment method that means cash on delivery')
+    for (const { message } of [...parse({ window_end: '09:00' }), ...parse({ days: [] }), ...parse({ delay_minutes: Number.NaN })]) {
+      expect(message).not.toMatch(/[ăâîșşțţ]/)
+    }
+    const tooSoon = automationFormSchema('abandoned_cart').safeParse({ ...formValuesFrom({ ...automation, type: 'abandoned_cart' }), delay_minutes: 5 })
+    expect(tooSoon.success).toBe(false)
+    if (!tooSoon.success) expect(tooSoon.error.issues[0]?.message).toBe(`Abandoned carts are called after at least ${ABANDONED_CART_MIN_DELAY} minutes`)
   })
 
   it('lists the variables of a template', () => {
@@ -222,7 +246,7 @@ describe('automation form ↔ PUT body contract', () => {
     const details = [
       { path: 'config.retry_minutes', message: 'Too small: expected number to be >=15' },
       { path: 'config.retry_minutes', message: 'duplicate for the same field' },
-      { path: 'config.call_window', message: 'Ora de început trebuie să fie înaintea orei de sfârșit' },
+      { path: 'config.call_window', message: 'The call window must end after it starts' },
       { path: 'connection_id', message: 'Invalid UUID' },
       { path: 'script.template', message: '   ' },
       'garbage',
@@ -230,9 +254,10 @@ describe('automation form ↔ PUT body contract', () => {
     ]
     expect(serverFieldErrors(details)).toEqual([
       { field: 'retry_minutes', message: 'Too small: expected number to be >=15' },
-      { field: 'window_end', message: 'Ora de început trebuie să fie înaintea orei de sfârșit' },
-      { field: 'template', message: 'Valoarea nu este acceptată' },
+      { field: 'window_end', message: 'The call window must end after it starts' },
+      { field: 'template', message: GENERIC_FIELD_ERROR },
     ])
+    expect(GENERIC_FIELD_ERROR).toBe('This value is not accepted')
     expect(serverFieldErrors(undefined)).toEqual([])
     expect(serverFieldErrors({ reason: 'no_consent' })).toEqual([])
   })

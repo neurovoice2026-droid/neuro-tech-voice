@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { updateSession } from '@/lib/supabase/middleware'
+import { businessIntentCookie, businessTypeFromIntent } from '@/lib/auth/business-intent'
 
 const PROTECTED_PATHS = [
   '/dashboard',
@@ -9,7 +10,7 @@ const PROTECTED_PATHS = [
   '/phone',
   '/integrations',
   '/billing',
-  '/magazin',
+  '/store',
 ]
 
 // Machine-to-machine endpoints: each authenticates itself (provider
@@ -53,7 +54,16 @@ export async function proxy(request: NextRequest) {
     if (isAuthPage) {
       const dashboardUrl = request.nextUrl.clone()
       dashboardUrl.pathname = '/dashboard'
-      return NextResponse.redirect(dashboardUrl)
+      const response = NextResponse.redirect(dashboardUrl)
+      // A signed-in owner who follows a store plan's "Start free"
+      // (/register?intent=store) never reaches the register page, which is
+      // what writes the intent cookie for Step 0 of the onboarding; written
+      // here instead, the onboarding still pre-selects "Online store".
+      const intent = businessTypeFromIntent(request.nextUrl.searchParams.get('intent'))
+      if (intent) {
+        response.headers.append('Set-Cookie', businessIntentCookie(intent, request.nextUrl.protocol === 'https:'))
+      }
+      return response
     }
 
     // Check onboarding completion for protected routes (except /onboarding itself)

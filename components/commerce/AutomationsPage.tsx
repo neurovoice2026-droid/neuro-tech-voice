@@ -26,19 +26,22 @@ import { isConfigured } from './AutomationCard'
 import { AutomationForm } from './AutomationForm'
 import { AutomationRuns } from './AutomationRuns'
 import { formatCount } from './format'
-import { AUTOMATION_TYPE_DESCRIPTION, AUTOMATION_TYPE_LABEL } from './labels'
+import { AUTOMATION_TYPE_DESCRIPTION, AUTOMATION_TYPE_LABEL, STORE_PATHS, automationHref } from './labels'
+
+/** The query parameter that selects the template (`/store/automations?type=`). */
+const TAB_PARAM = 'type'
 
 function readTab(raw: string | null): AutomationType {
   return raw && (AUTOMATION_TYPES as readonly string[]).includes(raw) ? (raw as AutomationType) : 'cod_confirmation'
 }
 
 const STATS: Array<{ key: keyof AutomationDto['stats']; label: string }> = [
-  { key: 'eligible', label: 'Eligibile' },
-  { key: 'scheduled', label: 'Programate' },
-  { key: 'calling', label: 'În apel' },
-  { key: 'completed', label: 'Finalizate' },
-  { key: 'suppressed', label: 'Suprimate' },
-  { key: 'failed', label: 'Eșuate' },
+  { key: 'eligible', label: 'Eligible' },
+  { key: 'scheduled', label: 'Scheduled' },
+  { key: 'calling', label: 'Calling' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'suppressed', label: 'Suppressed' },
+  { key: 'failed', label: 'Failed' },
 ]
 
 function AutomationPanel({ automation, connection, onChanged }: { automation: AutomationDto; connection: ConnectionDto; onChanged: (a: AutomationDto) => void }) {
@@ -54,19 +57,20 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
     try {
       const next = await saveAutomation(automation.type, { connection_id: connection.id, enabled })
       onChanged(next)
-      toast.success(next.enabled ? 'Automatizarea este activă' : 'Automatizarea este în pauză')
+      toast.success(next.enabled ? 'Automation turned on' : 'Automation turned off')
     } catch (err) {
       const blocked = enableBlocked(err)
       if (blocked) {
-        toast.warning('Automatizarea nu poate fi activată încă', {
+        toast.warning('The automation cannot be enabled yet', {
           description: blocked.message,
           duration: 10_000,
-          ...(blocked.href && blocked.action && blocked.href !== '/magazin/automatizari'
+          // No action when it points at this very page.
+          ...(blocked.href && blocked.action && blocked.href !== STORE_PATHS.automations
             ? { action: { label: blocked.action, onClick: () => router.push(blocked.href!) } }
             : {}),
         })
       } else {
-        toast.error('Starea automatizării nu a putut fi schimbată', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+        toast.error('The automation state could not be changed', { description: commerceErrorMessage(err, 'Try again.') })
       }
     } finally {
       setToggling(false)
@@ -74,8 +78,8 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
   }
 
   let blockedHint: string | null = null
-  if (!configured) blockedHint = 'Salvează configurația de mai jos înainte de activare.'
-  else if (!consentGiven && !automation.enabled) blockedHint = 'Confirmă acordul clienților (mai jos) înainte de activare.'
+  if (!configured) blockedHint = 'Save the configuration below before enabling.'
+  else if (!consentGiven && !automation.enabled) blockedHint = 'Confirm customer consent (below) before enabling.'
 
   return (
     <div className="space-y-8">
@@ -85,13 +89,13 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[15px] leading-[22px] font-medium text-foreground">{AUTOMATION_TYPE_LABEL[automation.type]}</h2>
               {!automation.available ? (
-                <StatusChip tone="muted" icon={<Ban aria-hidden="true" />}>Indisponibil</StatusChip>
+                <StatusChip tone="muted" icon={<Ban aria-hidden="true" />}>Unavailable</StatusChip>
               ) : !configured ? (
-                <StatusChip tone="muted" dot>Neconfigurat</StatusChip>
+                <StatusChip tone="muted" dot>Not set up</StatusChip>
               ) : automation.enabled ? (
-                <StatusChip tone="success" dot>Activă</StatusChip>
+                <StatusChip tone="success" dot>On</StatusChip>
               ) : (
-                <StatusChip tone="muted" dot>În pauză</StatusChip>
+                <StatusChip tone="muted" dot>Off</StatusChip>
               )}
             </div>
             <p className="mt-1 max-w-[62ch] text-[13px] leading-[19px] text-muted-foreground">{AUTOMATION_TYPE_DESCRIPTION[automation.type]}</p>
@@ -100,10 +104,10 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
           {automation.available && (
             <div className="flex items-center gap-3 self-start rounded-full bg-white py-1.5 pr-2 pl-3 shadow-pill">
               <span className="grid size-5 shrink-0 place-items-center" aria-hidden={!toggling}>
-                {toggling && <OrbInline state="working" label="Se salvează" />}
+                {toggling && <OrbInline state="working" label="Saving" />}
               </span>
               <label htmlFor={switchId} className="text-[13px] font-medium text-foreground select-none">
-                {automation.enabled ? 'Activă' : 'În pauză'}
+                {automation.enabled ? 'On' : 'Off'}
               </label>
               <Switch id={switchId} checked={automation.enabled} onCheckedChange={(v) => void toggle(v)} disabled={toggling || !canToggle} />
             </div>
@@ -113,11 +117,11 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
           <div className="px-5 pb-5">
             <Alert>
               <Ban aria-hidden="true" />
-              <AlertTitle>Indisponibilă pe această platformă</AlertTitle>
-              <AlertDescription>{automation.unavailable_reason ?? 'Platforma magazinului nu oferă datele necesare acestei automatizări.'}</AlertDescription>
+              <AlertTitle>Unavailable on this platform</AlertTitle>
+              <AlertDescription>{automation.unavailable_reason ?? 'The store platform does not provide the data this automation needs.'}</AlertDescription>
               <AlertAction>
-                <Link href="/magazin/conexiuni" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-                  Vezi capabilitățile conexiunii
+                <Link href={STORE_PATHS.connections} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+                  View connection capabilities
                 </Link>
               </AlertAction>
             </Alert>
@@ -143,7 +147,7 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
       {automation.available && configured ? (
         <AutomationRuns automation={automation} />
       ) : automation.available ? (
-        <EmptyState icon={Workflow} title="Istoricul apare după configurare" description="Salvează configurația și activează automatizarea ca să vezi apelurile ei aici." />
+        <EmptyState icon={Workflow} title="History appears after setup" description="Save the configuration and enable the automation to see its calls here." />
       ) : null}
     </div>
   )
@@ -152,14 +156,14 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
 export function AutomationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const tab = readTab(searchParams.get('tip'))
+  const tab = readTab(searchParams.get(TAB_PARAM))
   const { connection, isLoading: connectionLoading, error: connectionError, refetch: refetchConnection } = useCurrentConnection()
   const { automations, isLoading, error, refetch, replaceAutomation } = useCommerceAutomations(connection?.id ?? null)
 
   const selectTab = useCallback(
     (value: string) => {
       // The tab lives in the URL so a reload (or a link from the overview) lands on the same template.
-      router.replace(`/magazin/automatizari?tip=${readTab(value)}`, { scroll: false })
+      router.replace(automationHref(readTab(value)), { scroll: false })
     },
     [router],
   )
@@ -168,22 +172,22 @@ export function AutomationsPage() {
   if (connectionLoading || (connection && isLoading)) {
     body = (
       <Card className="py-0">
-        <OrbLoader label="Se încarcă automatizările…" className="min-h-[360px]" />
+        <OrbLoader label="Loading automations…" className="min-h-[360px]" />
       </Card>
     )
   } else if (!connection) {
     body = connectionError ? (
       <Card className="gap-0 py-0">
-        <CommerceCardError message="Conexiunea magazinului nu a putut fi citită." detail={connectionError} onRetry={refetchConnection} className="py-8" />
+        <CommerceCardError message="The store connection could not be read." detail={connectionError} onRetry={refetchConnection} className="py-8" />
       </Card>
     ) : (
       <EmptyState
         icon={Store}
-        title="Conectează magazinul mai întâi"
-        description="Automatizările folosesc comenzile și clienții sincronizați; apar după conectarea platformei."
+        title="Connect your store first"
+        description="Automations work on synced orders and customers; they appear once the platform is connected."
         action={
-          <Link href="/magazin/conexiuni" className={buttonVariants({ size: 'sm' })}>
-            Conectează magazinul
+          <Link href={STORE_PATHS.connections} className={buttonVariants({ size: 'sm' })}>
+            Connect store
             <ArrowRight aria-hidden="true" />
           </Link>
         }
@@ -192,27 +196,27 @@ export function AutomationsPage() {
   } else if (error && automations.length === 0) {
     body = (
       <Card className="gap-0 py-0">
-        <CommerceCardError message="Automatizările nu au putut fi încărcate." detail={error} onRetry={refetch} className="py-8" />
+        <CommerceCardError message="Automations could not be loaded." detail={error} onRetry={refetch} className="py-8" />
       </Card>
     )
   } else {
     body = (
       <Tabs value={tab} onValueChange={(v) => selectTab(String(v))} className="gap-6">
-        <TabsList variant="line" aria-label="Automatizări">
+        <TabsList variant="line" aria-label="Automations">
           {AUTOMATION_TYPES.map((type) => {
             const automation = automations.find((a) => a.type === type)
             return (
               <TabsTrigger key={type} value={type} className={cn(automation && !automation.available && 'text-muted-foreground')}>
                 {AUTOMATION_TYPE_LABEL[type]}
                 {automation?.enabled && <span aria-hidden="true" className="size-1.5 rounded-full bg-success-dot" />}
-                {automation?.enabled && <span className="sr-only">(activă)</span>}
+                {automation?.enabled && <span className="sr-only">(enabled)</span>}
               </TabsTrigger>
             )
           })}
         </TabsList>
         {error && (
           <Card className="gap-0 py-0">
-            <CommerceCardError role="status" message="Automatizările nu au putut fi reîmprospătate." detail={error} onRetry={refetch} />
+            <CommerceCardError role="status" message="Automations could not be refreshed." detail={error} onRetry={refetch} />
           </Card>
         )}
         {AUTOMATION_TYPES.map((type) => {
@@ -222,7 +226,7 @@ export function AutomationsPage() {
               {automation ? (
                 <AutomationPanel automation={automation} connection={connection} onChanged={replaceAutomation} />
               ) : (
-                <EmptyState icon={Workflow} title="Șablonul nu a fost returnat" description="Reîncarcă pagina; dacă persistă, contactează echipa de suport." />
+                <EmptyState icon={Workflow} title="The template was not returned" description="Reload the page; if it keeps happening, contact support." />
               )}
             </TabsContent>
           )
@@ -234,9 +238,9 @@ export function AutomationsPage() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Magazin"
-        title="Automatizări"
-        description="Apelurile pe care agentul le dă singur: când sună, cât de des, ce spune și cui nu sună."
+        eyebrow="Store"
+        title="Automations"
+        description="The calls the agent places on its own: when it calls, how often, what it says and whom it never calls."
       />
       {body}
     </PageContainer>

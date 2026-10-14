@@ -13,7 +13,7 @@ import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
 import { OrbLoader } from '@/components/shared/OrbLoader'
 import type { Organization } from '@/types'
 import { StepEnterProvider, type StepDirection } from '../StepIndicator'
-import { commerceErrorMessage, persistStep } from './api'
+import { PROGRESS_NOT_SAVED, commerceErrorMessage, persistStep } from './api'
 import { useCommerceOnboardingState } from './hooks'
 import { CommerceNavigationContext, type CommerceNavigation } from './navigation'
 import { ErrorBlock } from './shared'
@@ -50,7 +50,9 @@ export function CommerceOnboardingWrapper({ initialStep, organization }: Commerc
       // install leaves no connection behind, and without this the access step would have no
       // form to retry from (and the fallback below would move away from the result).
       useCommerceOnboardingStore.getState().setPlatform('shopify')
-      void persistStep(3).catch(() => {})
+      // The position is a resume hint only: a failed persist changes where a reload lands,
+      // nothing else, and the result shown on the access step matters more than reporting it.
+      void persistStep(3).catch(() => undefined)
       // The query string carried a one-time result: drop it so a reload does not replay it.
       router.replace('/onboarding', { scroll: false })
     }
@@ -79,8 +81,8 @@ export function CommerceOnboardingWrapper({ initialStep, organization }: Commerc
       useCommerceOnboardingStore.getState().setStep(step)
       if (opts?.persist === false) return
       persistStep(step).catch((err: unknown) => {
-        toast.error(commerceErrorMessage(err, 'Progresul nu a putut fi salvat.'), {
-          description: 'Poți continua; la o reîncărcare vei relua de la ultimul pas salvat.',
+        toast.error(commerceErrorMessage(err, PROGRESS_NOT_SAVED), {
+          description: 'You can keep going; a reload resumes from the last saved step.',
         })
       })
     },
@@ -117,13 +119,13 @@ export function CommerceOnboardingWrapper({ initialStep, organization }: Commerc
   if (!loaded) {
     return error ? (
       <ErrorBlock
-        title="Configurarea nu a putut fi încărcată"
+        title="Your setup could not be loaded"
         message={error}
         onRetry={refetch}
         className="mx-auto max-w-[560px]"
       />
     ) : (
-      <OrbLoader state="breathing" label="Se încarcă configurarea magazinului…" className="min-h-[60vh]" />
+      <OrbLoader state="breathing" label="Loading your store setup…" className="min-h-[60vh]" />
     )
   }
 

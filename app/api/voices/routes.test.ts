@@ -6,9 +6,18 @@ import { memoryDb, type MemoryDb } from '@/tests/helpers/memory-db'
 
 const ORG = '11111111-1111-4111-8111-111111111111'
 const USER = '55555555-5555-4555-8555-555555555555'
-const state = vi.hoisted(() => ({ db: null as unknown as MemoryDb, plan: 'pro' as string | null, rateDenied: new Set<string>() }))
+const state = vi.hoisted(() => ({
+  db: null as unknown as MemoryDb,
+  plan: 'pro' as string | null,
+  businessType: null as 'services' | 'ecommerce' | null,
+  rateDenied: new Set<string>(),
+}))
 vi.mock('@/lib/api/auth', () => ({
-  requireOrg: async () => ({ supabase: state.db, user: { id: USER }, org: { id: ORG, name: 'Acme', timezone: null, plan: state.plan } }),
+  requireOrg: async () => ({
+    supabase: state.db,
+    user: { id: USER },
+    org: { id: ORG, name: 'Acme', timezone: null, plan: state.plan, business_type: state.businessType },
+  }),
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => state.db }))
 vi.mock('@/lib/security/rate-limit', () => ({
@@ -53,6 +62,7 @@ const DESCRIPTION = 'A warm, calm and friendly receptionist voice.'
 beforeEach(() => {
   state.db = memoryDb({ provider_voices: [], agents: [{ id: 'a1', org_id: ORG, language: 'ro', created_at: '1' }] })
   state.plan = 'pro'
+  state.businessType = null
   state.rateDenied.clear()
   resetVoiceQuotaCache()
   api.getVoiceQuota.mockReset().mockResolvedValue({})
@@ -96,6 +106,24 @@ describe('GET /api/voices/limits', () => {
     body = await (await limitsRoute(new Request('http://app.test/api/voices/limits'))).json()
     expect(body.custom_voices.allowed).toBe(false)
   })
+
+  it('points an online store at a store plan it can buy, on the trial and on Store Starter alike', async () => {
+    state.businessType = 'ecommerce'
+    state.plan = 'trial'
+    let body = await (await limitsRoute(new Request('http://app.test/api/voices/limits'))).json()
+    expect(body.custom_voices).toMatchObject({ allowed: false, required_plan: 'store_growth' })
+    state.plan = 'store_starter'
+    body = await (await limitsRoute(new Request('http://app.test/api/voices/limits'))).json()
+    expect(body.custom_voices).toMatchObject({ allowed: false, required_plan: 'store_growth' })
+    state.plan = 'store_growth'
+    body = await (await limitsRoute(new Request('http://app.test/api/voices/limits'))).json()
+    expect(body.custom_voices).toMatchObject({ allowed: true, required_plan: 'store_growth' })
+    // A services organization (chosen or legacy null) keeps the service family.
+    state.businessType = 'services'
+    state.plan = 'trial'
+    body = await (await limitsRoute(new Request('http://app.test/api/voices/limits'))).json()
+    expect(body.custom_voices.required_plan).toBe('pro')
+  })
 })
 
 describe('POST /api/voices/design', () => {
@@ -113,6 +141,12 @@ describe('POST /api/voices/design', () => {
     const plan = await designRoute(post({ description: DESCRIPTION }))
     expect(plan.status).toBe(403)
     expect(await plan.json()).toMatchObject({ details: { reason: 'plan', required_plan: 'pro' } })
+    // The same trial at an online store is pointed at the store plan, never at Pro (which its checkout refuses).
+    state.businessType = 'ecommerce'
+    const storePlan = await designRoute(post({ description: DESCRIPTION }))
+    expect(storePlan.status).toBe(403)
+    expect(await storePlan.json()).toMatchObject({ error: 'Custom voices are available on the Store Growth plan and above.', details: { reason: 'plan', required_plan: 'store_growth' } })
+    state.businessType = null
     state.plan = 'pro'
     state.db.tables.provider_voices.push(
       { id: 'c1', provider: 'elevenlabs', voice_id: 'Clone0000000000001', owner_org_id: ORG, source: 'cloned', status: 'ready' },
@@ -141,6 +175,11 @@ describe('POST /api/voices/design/save', () => {
     expect((await saveRoute(post({ generated_voice_id: 'gen_aaa111', name: 'n', voice_id: 'Other' }))).status).toBe(400)
     state.plan = 'starter'
     expect((await saveRoute(post({ generated_voice_id: 'gen_aaa111', name: 'n' }))).status).toBe(403)
+    state.businessType = 'ecommerce'
+    state.plan = 'store_starter'
+    const store = await saveRoute(post({ generated_voice_id: 'gen_aaa111', name: 'n' }))
+    expect(store.status).toBe(403)
+    expect(await store.json()).toMatchObject({ details: { reason: 'plan', required_plan: 'store_growth' } })
   })
 })
 
@@ -161,6 +200,12 @@ describe('POST /api/voices/clone gates', () => {
   it('refuses plans without custom voices and orgs at the cap before any provider call', async () => {
     state.plan = 'starter'
     expect((await cloneRoute(cloneReq())).status).toBe(403)
+    state.businessType = 'ecommerce'
+    state.plan = 'trial'
+    const store = await cloneRoute(cloneReq())
+    expect(store.status).toBe(403)
+    expect(await store.json()).toMatchObject({ details: { reason: 'plan', required_plan: 'store_growth' } })
+    state.businessType = null
     state.plan = 'pro'
     state.db.tables.provider_voices.push(
       { id: 'c1', provider: 'elevenlabs', voice_id: 'Clone0000000000001', owner_org_id: ORG, source: 'cloned', status: 'ready' },

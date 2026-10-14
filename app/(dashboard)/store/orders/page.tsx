@@ -1,5 +1,5 @@
 import { OrdersPage } from '@/components/commerce/OrdersPage'
 
-export default function MagazinComenziPage() {
+export default function StoreOrdersPage() {
   return <OrdersPage />
 }

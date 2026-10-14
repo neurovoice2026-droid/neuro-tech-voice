@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useState, type CSSProperties, type HTMLAttrib
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PillLink } from "@/components/site/product/primitives";
-import { HOME_PRICING, perkText, type CardId, type Perk } from "@/lib/pages/home/pricing";
+import { HOME_PRICING, perkText } from "@/lib/pages/home/pricing";
 import {
   HOME_ENTERPRISE,
   HOME_PLANS,
@@ -51,25 +51,26 @@ import { WEIGHT } from "./type";
  * Below lg the cards are a sideways rail with a row of jump chips above it;
  * at lg a bento with Pro in the middle spanning two rows; from xl five
  * columns whose rows line up (subgrid), Enterprise as a band beneath.
+ *
+ * Every card carries two attributes: `data-card`, the card's own id, which
+ * the jump chips and the estimator look cards up by; and `data-plan`, the
+ * light it wears (pricing.css). On these cards the two are the same; the
+ * store cards (pricing-store-cards.tsx) wear a service plan's light under
+ * their own id, and share the pieces exported from here.
  * ------------------------------------------------------------------ */
 
 const P = HOME_PRICING;
 
 type Band = { from: number; to: number; first: boolean; last: boolean };
 
-/**
- * A span that rolls in (`.home-pricing-in`) when it mounts after the
- * reader's first change — which is when a key change (Yearly, a new plan)
- * remounts it — and never merely because `changed` flipped under it.
- */
 /** Each card's pools as elements, worked out once: the same recipes the card paints as its ground. */
-const PLAN_BLOBS = Object.fromEntries(
+export const PLAN_BLOBS = Object.fromEntries(
   Object.entries(PLAN_LIGHTS).map(([id, light]) => [id, meshBlobs(light.ground)]),
 ) as Record<PlanId, CSSProperties[]>;
-const ENTERPRISE_BLOBS = meshBlobs(ENTERPRISE_LIGHT.ground);
+export const ENTERPRISE_BLOBS = meshBlobs(ENTERPRISE_LIGHT.ground);
 
 /** The flowing copy of a card's mesh (pricing.css "The mesh in motion"). */
-function Mesh({ blobs }: { blobs: CSSProperties[] }) {
+export function Mesh({ blobs }: { blobs: CSSProperties[] }) {
   return (
     <span aria-hidden className="home-plan-mesh">
       {blobs.map((style, n) => (
@@ -79,6 +80,27 @@ function Mesh({ blobs }: { blobs: CSSProperties[] }) {
   );
 }
 
+/**
+ * The meshes flow only on the cards that are on screen: `data-live` is
+ * toggled straight on each `.home-plan` in the rail, so no render.
+ */
+export function useLiveMeshes(railRef: RefObject<HTMLOListElement | null>) {
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) e.target.toggleAttribute("data-live", e.isIntersecting);
+    });
+    rail.querySelectorAll(".home-plan").forEach((li) => io.observe(li));
+    return () => io.disconnect();
+  }, [railRef]);
+}
+
+/**
+ * A span that rolls in (`.home-pricing-in`) when it mounts after the
+ * reader's first change — which is when a key change (Yearly, a new plan)
+ * remounts it — and never merely because `changed` flipped under it.
+ */
 export function RollIn({ animate, className, ...rest }: { animate: boolean } & HTMLAttributes<HTMLSpanElement>) {
   const [on] = useState(animate);
   return <span className={cn(className, on && "home-pricing-in")} {...rest} />;
@@ -90,8 +112,8 @@ function splitMoney(n: number) {
   return { dollars, cents: c === "00" ? null : c };
 }
 
-function Fee({ plan, annual, changed }: { plan: HomePlan; annual: boolean; changed: boolean }) {
-  const fee = planFee(plan, annual);
+/** A card's fee a month, in the display face, with what it is said as. */
+export function Fee({ fee, pick, annual, changed }: { fee: number; pick: boolean; annual: boolean; changed: boolean }) {
   const { dollars, cents: c } = splitMoney(fee);
   return (
     <p className="flex items-baseline gap-1 whitespace-nowrap">
@@ -99,10 +121,7 @@ function Fee({ plan, annual, changed }: { plan: HomePlan; annual: boolean; chang
         key={annual ? "yearly" : "monthly"}
         animate={changed}
         aria-hidden
-        className={cn(
-          "home-plan-fee pp-display tracking-[-0.025em] tabular-nums",
-          plan.featured && "home-plan-fee-pick",
-        )}
+        className={cn("home-plan-fee pp-display tracking-[-0.025em] tabular-nums", pick && "home-plan-fee-pick")}
         style={{ fontWeight: WEIGHT.num }}
       >
         {dollars}
@@ -119,25 +138,15 @@ function Fee({ plan, annual, changed }: { plan: HomePlan; annual: boolean; chang
   );
 }
 
-function PerkList({
-  head,
-  items,
-  annual,
-  wide = false,
-}: {
-  head: string;
-  items: Perk[];
-  annual: boolean;
-  wide?: boolean;
-}) {
+export function PerkList({ head, items, wide = false }: { head: string; items: readonly string[]; wide?: boolean }) {
   return (
     <div className="home-plan-perks">
       <p className="text-[13px] leading-[18px] text-(--plan-dim)">{head}</p>
       <ul className={cn("mt-3 grid gap-2.5", wide && "xl:grid-cols-2 xl:gap-x-8")}>
-        {items.map((perk, k) => (
+        {items.map((text, k) => (
           <li key={k} className="flex gap-2.5 text-[14px] leading-5 text-(--plan-text)">
             <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-(--plan-tick)" strokeWidth={2.25} />
-            <span>{perkText(perk, annual)}</span>
+            <span>{text}</span>
           </li>
         ))}
       </ul>
@@ -171,6 +180,7 @@ const PlanCard = memo(function PlanCard({
   return (
     <li
       id={`plan-${plan.id}`}
+      data-card={plan.id}
       data-plan={plan.id}
       data-tone="light"
       data-pick={pick || undefined}
@@ -208,7 +218,7 @@ const PlanCard = memo(function PlanCard({
       </div>
 
       <div className="home-plan-price mt-4">
-        <Fee plan={plan} annual={annual} changed={changed} />
+        <Fee fee={planFee(plan, annual)} pick={pick} annual={annual} changed={changed} />
         <p className="mt-1 text-[15px] leading-[22px] font-medium text-(--plan-accent)">
           <RollIn key={annual ? "yearly" : "monthly"} animate={changed} className="block">
             {P.plan.perDay(money(perDay(plan, annual)))}
@@ -249,7 +259,7 @@ const PlanCard = memo(function PlanCard({
       </div>
 
       <div className="mt-5 border-t border-(--plan-rule) pt-4">
-        <PerkList head={perks.head} items={perks.items} annual={annual} />
+        <PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} />
       </div>
     </li>
   );
@@ -261,6 +271,7 @@ const EnterpriseCard = memo(function EnterpriseCard({ annual }: { annual: boolea
   return (
     <li
       id={`plan-${e.id}`}
+      data-card={e.id}
       data-plan={e.id}
       data-tone="light"
       data-i={5}
@@ -287,7 +298,7 @@ const EnterpriseCard = memo(function EnterpriseCard({ annual }: { annual: boolea
         <p className="mt-2 text-[14px] leading-5 text-(--plan-dim)">{P.enterprise.line}</p>
       </div>
       <div className="home-plan-enterprise-perks">
-        <PerkList head={perks.head} items={perks.items} annual={annual} wide />
+        <PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} wide />
       </div>
       <div className="home-plan-enterprise-cta">
         <PillLink href={e.cta.href} variant="primary" className={cn("h-11 w-full justify-center", RING_LIGHT)}>
@@ -313,16 +324,7 @@ export function PlanCards({
   bands: { id: PlanId; from: number; to: number }[];
   railRef: RefObject<HTMLOListElement | null>;
 }) {
-  // The meshes flow only on the cards that are on screen.
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) e.target.toggleAttribute("data-live", e.isIntersecting);
-    });
-    rail.querySelectorAll(".home-plan").forEach((li) => io.observe(li));
-    return () => io.disconnect();
-  }, [railRef]);
+  useLiveMeshes(railRef);
 
   // One object per band for as long as the bands hold, so memo(PlanCard) lets
   // a slider step re-render only the card whose tab changes.
@@ -351,29 +353,42 @@ export function PlanCards({
   );
 }
 
+/** One chip of the jump row: a card's id, its name, its fee if it has one, and the light its swatch wears. */
+export type JumpChip = { id: string; name: string; price?: string; light: string };
+
+/** The service plans' chips: the listed plans with their fees, then Enterprise. */
+export function serviceJumpChips(annual: boolean): JumpChip[] {
+  return [
+    ...HOME_PLANS.map((p) => ({ id: p.id, name: p.name, price: wholeMoney(planFee(p, annual)), light: p.id })),
+    { id: HOME_ENTERPRISE.id, name: HOME_ENTERPRISE.name, light: HOME_ENTERPRISE.id },
+  ];
+}
+
 /**
  * The jump chips above the rail, below lg: a swatch of each card's mesh,
  * its name and its fee. A tap brings the card to the middle of the rail
  * and moves focus to its name; the chip of the card nearest the middle of
  * the rail is ringed (at either end of the scroll, the end card). Worked
  * out when a card crosses 60% visible and once when a scroll ends, never
- * per scroll frame.
+ * per scroll frame. Mounted afresh with each rail it serves (`key`), so
+ * it observes the cards that are there.
  */
 export function PlanJump({
-  annual,
+  chips,
   railRef,
   reduce,
 }: {
-  annual: boolean;
+  chips: readonly JumpChip[];
   railRef: RefObject<HTMLOListElement | null>;
   reduce: boolean;
 }) {
-  const [inView, setInView] = useState<CardId>("starter");
+  const [inView, setInView] = useState(chips[0]?.id ?? "");
 
   useEffect(() => {
     const rail = railRef.current;
     if (!rail) return;
     const cards = [...rail.querySelectorAll<HTMLElement>(".home-plan")];
+    if (cards.length === 0) return;
     const pick = () => {
       if (rail.scrollWidth <= rail.clientWidth) return;
       let best = cards[0];
@@ -388,7 +403,7 @@ export function PlanJump({
           if (d < gap) [gap, best] = [d, c];
         }
       }
-      setInView(best.dataset.plan as CardId);
+      setInView(best.dataset.card ?? "");
     };
     const io = new IntersectionObserver(pick, { root: rail, threshold: 0.6 });
     cards.forEach((li) => io.observe(li));
@@ -399,19 +414,14 @@ export function PlanJump({
     };
   }, [railRef]);
 
-  const go = (id: CardId) => {
+  const go = (id: string) => {
     const rail = railRef.current;
-    const li = rail?.querySelector<HTMLElement>(`[data-plan="${id}"]`);
+    const li = rail?.querySelector<HTMLElement>(`[data-card="${id}"]`);
     if (!rail || !li) return;
     setInView(id);
     centreInRail(rail, li, reduce);
     li.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
   };
-
-  const chips: { id: CardId; name: string; price?: string }[] = [
-    ...HOME_PLANS.map((p) => ({ id: p.id, name: p.name, price: wholeMoney(planFee(p, annual)) })),
-    { id: HOME_ENTERPRISE.id, name: HOME_ENTERPRISE.name },
-  ];
 
   return (
     <div
@@ -431,7 +441,7 @@ export function PlanJump({
             inView === chip.id && "shadow-[0_0_0_1.5px_var(--home-ink)]",
           )}
         >
-          <span aria-hidden data-plan={chip.id} className="home-plan-light home-plan-swatch size-8 rounded-full" />
+          <span aria-hidden data-plan={chip.light} className="home-plan-light home-plan-swatch size-8 rounded-full" />
           {chip.name}
           {chip.price && <span className="font-normal text-pp-muted tabular-nums">{chip.price}</span>}
         </button>

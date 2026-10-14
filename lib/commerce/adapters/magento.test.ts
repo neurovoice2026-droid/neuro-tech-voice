@@ -494,7 +494,7 @@ describe('validateConnection', () => {
     const signed = adapterWith({ ...healthyRoutes, 'GET /rest/V1/orders': () => unauthorized('Magento_Sales::actions_view') })
     const s = await failure(signed.adapter.validateConnection({ storeUrl: STORE, secrets: OAUTH_SECRETS }, fakeLogger().log))
     expect(s.code).toBe('unauthorized')
-    expect(s.publicMessage).toMatch(/semnătura OAuth/)
+    expect(s.publicMessage).toMatch(/OAuth signature/)
     expect(s.publicMessage).not.toMatch(/standalone Bearer/)
     expectNoSecret({ message: s.message, publicMessage: s.publicMessage })
     // A 403 on the store configs alone is tolerated (orders decide); a 403 on orders is forbidden.

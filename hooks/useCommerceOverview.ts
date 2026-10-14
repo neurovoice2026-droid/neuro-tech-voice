@@ -9,7 +9,7 @@ const REFRESH_MS = 60_000
 /** GET /api/commerce/overview, refreshed every minute (queue counts and problems move). */
 export function useCommerceOverview() {
   const query = useCommerceQuery<CommerceOverviewDto>('/api/commerce/overview', {
-    fallback: 'Prezentarea magazinului nu a putut fi încărcată.',
+    fallback: 'The store overview could not be loaded.',
     refreshMs: REFRESH_MS,
   })
   const { setData } = query

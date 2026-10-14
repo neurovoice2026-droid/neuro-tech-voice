@@ -180,7 +180,7 @@ describe('validateConnection', () => {
     })
     const store = await adapter.validateConnection({ storeUrl: SHOP, secrets: { access_token: TOKEN } }, captureLogger().log)
     expect(store.capabilities).toMatchObject({ orders: true, customer_phone: false, abandoned_carts: false, webhooks: true })
-    expect(store.capabilities.notes.some((n) => /protejate/.test(n))).toBe(true)
+    expect(store.capabilities.notes.some((n) => /protected customer data/i.test(n))).toBe(true)
   })
 
   it('reports customer_phone false when every protected field is null on every recent order', async () => {
@@ -207,12 +207,12 @@ describe('validateConnection', () => {
     const readable = await run([{ id: 'gid://shopify/Customer/1', defaultPhoneNumber: { phoneNumber: '+40722000111' }, defaultEmailAddress: null, defaultAddress: null }])
     expect(ops).toEqual(['ShopifyValidateShop', 'ShopifyProbeOrders', 'ShopifyProbeCustomers'])
     expect(readable.capabilities).toMatchObject({ customer_phone: true, abandoned_carts: true })
-    expect(readable.capabilities.notes.some((n) => /nu are încă/.test(n))).toBe(false)
+    expect(readable.capabilities.notes.some((n) => /no orders or customers yet/.test(n))).toBe(false)
     const redacted = await run([{ id: 'gid://shopify/Customer/1', defaultPhoneNumber: null, defaultEmailAddress: null, defaultAddress: { phone: null, address1: null } }])
     expect(redacted.capabilities).toMatchObject({ customer_phone: false, abandoned_carts: false })
     const empty = await run([])
     expect(empty.capabilities.customer_phone).toBe(true)
-    expect(empty.capabilities.notes.some((n) => /nu are încă/.test(n))).toBe(true)
+    expect(empty.capabilities.notes.some((n) => /no orders or customers yet/.test(n))).toBe(true)
   })
 
   it('does not request the deprecated Shop.billingAddress field', async () => {
@@ -605,7 +605,7 @@ describe('registerWebhooks / unregisterWebhooks', () => {
     await expect(unconfigured.registerWebhooks(connection(), captureLogger().log)).rejects.toMatchObject({ code: 'not_configured' })
   })
 
-  it('reports a refused subscription with a Romanian message and no secret', async () => {
+  it('reports a refused subscription with an English message and no secret', async () => {
     const { adapter } = fakeShopify((op) => {
       if (op === 'ShopifyWebhookSubscriptions') return gql({ webhookSubscriptions: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } })
       return gql({ webhookSubscriptionCreate: { webhookSubscription: null, userErrors: [{ field: ['topic'], message: 'Topic is not allowed for this app' }] } })
@@ -617,7 +617,7 @@ describe('registerWebhooks / unregisterWebhooks', () => {
     } catch (err) {
       thrown = err
     }
-    expect(thrown).toMatchObject({ code: 'invalid_response', publicMessage: expect.stringMatching(/webhook/) })
+    expect(thrown).toMatchObject({ code: 'invalid_response', publicMessage: expect.stringMatching(/^Shopify refused the webhook registration\./) })
     expectNoSecret((thrown as Error).message, JSON.stringify(lines))
   })
 

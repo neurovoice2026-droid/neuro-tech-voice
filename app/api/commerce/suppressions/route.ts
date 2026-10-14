@@ -33,9 +33,9 @@ export async function POST(request: Request) {
     await enforceRateLimit(RATE_LIMITS.commerceAutomationWrite, ctx.org.id)
     const { data: existing, error } = await ctx.db.from('commerce_customers').select(CUSTOMER_COLUMNS).eq('id', body.customer_id).eq('org_id', ctx.org.id).maybeSingle()
     if (error) throw new Error(`commerce_customers read failed: ${error.message}`)
-    if (!existing) throw new RequestError('not_found', 'Clientul nu există.', 404)
+    if (!existing) throw new RequestError('not_found', 'This customer does not exist.', 404)
     const current = existing as CustomerRow
-    const row = (await markDoNotCall(ctx.db, { orgId: ctx.org.id, connectionId: current.connection_id, customerId: current.id, phoneE164: current.phone_e164, reason: body.reason ?? 'Adăugat de operator', source: 'operator' })) ?? current
+    const row = (await markDoNotCall(ctx.db, { orgId: ctx.org.id, connectionId: current.connection_id, customerId: current.id, phoneE164: current.phone_e164, reason: body.reason ?? 'Added by operator', source: 'operator' })) ?? current
     const cancelled = await cancelRunsForSuppressedContact({ db: ctx.db, orgId: ctx.org.id, connectionId: current.connection_id, timezone: ctx.org.timezone ?? 'UTC', log: ctx.log }, { customerId: current.id, phone: current.phone_e164 })
     await writeAudit(ctx.db, { orgId: ctx.org.id, actor: 'user', actorUserId: ctx.user.id, action: 'suppression.added', connectionId: current.connection_id, metadata: { source: 'operator', customer: current.id, cancelled_runs: cancelled } }, ctx.log)
     return noStore({ customer: customerDto(row) })

@@ -21,21 +21,21 @@ export async function buildOverview(db: SupabaseClient, org: { id: string; plan:
   if (recent.error) throw new Error(`commerce_automation_runs read failed: ${recent.error.message}`)
   const problems: CommerceOverviewDto['problems'] = []
   const push = (code: CommerceProblemCode, message: string, href: string | null) => problems.push({ code, message, href })
-  if (!commerceCryptoConfigured()) push('encryption_not_configured', 'Criptarea datelor de acces nu este configurată pe platformă: conectarea magazinelor este oprită.', null)
-  if (!connection) push('no_connection', 'Niciun magazin conectat încă.', '/magazin/conexiuni')
+  if (!commerceCryptoConfigured()) push('encryption_not_configured', 'Credential encryption is not configured on the platform: connecting stores is disabled.', null)
+  if (!connection) push('no_connection', 'No store connected yet.', '/store/connections')
   else {
-    if (connection.status === 'error') push('credentials_expired', connection.error_message ?? 'Accesul la magazin a expirat: reconectează magazinul.', '/magazin/conexiuni')
-    else if (connection.status === 'degraded') push('sync_error', connection.error_message ?? 'Ultima sincronizare a eșuat; se reîncearcă automat.', '/magazin/conexiuni')
-    else if (connection.status === 'disconnected') push('no_connection', 'Magazinul este deconectat.', '/magazin/conexiuni')
+    if (connection.status === 'error') push('credentials_expired', connection.error_message ?? 'Store access has expired: reconnect the store.', '/store/connections')
+    else if (connection.status === 'degraded') push('sync_error', connection.error_message ?? 'The last sync failed; retrying automatically.', '/store/connections')
+    else if (connection.status === 'disconnected') push('no_connection', 'The store is disconnected.', '/store/connections')
     const wh = readWebhookConfig(connection.webhook_config)
-    if (wh.last_error && (!wh.last_delivery_at || Date.parse(wh.last_error_at ?? '') > Date.parse(wh.last_delivery_at))) push('webhook_failure', wh.last_error, '/magazin/conexiuni')
+    if (wh.last_error && (!wh.last_delivery_at || Date.parse(wh.last_error_at ?? '') > Date.parse(wh.last_delivery_at))) push('webhook_failure', wh.last_error, '/store/connections')
   }
   const anyEnabled = automations.some((a) => a.enabled)
-  if (!gate.agentActive) push('agent_inactive', 'Agentul este oprit: apelurile automate nu pornesc.', '/agent')
-  if (!gate.hasOutboundNumber) push('no_phone_number', 'Nu ai un număr activ care poate suna: apelurile automate nu pornesc.', '/phone')
-  if (connection && !automations.some((a) => a.consent_confirmed_at) ) push('no_consent', 'Nicio automatizare nu are consimțământul confirmat.', '/magazin/automatizari')
+  if (!gate.agentActive) push('agent_inactive', 'The agent is paused: automated calls will not start.', '/agent')
+  if (!gate.hasOutboundNumber) push('no_phone_number', 'No active phone number can place calls: automated calls will not start.', '/phone')
+  if (connection && !automations.some((a) => a.consent_confirmed_at) ) push('no_consent', 'No automation has confirmed customer consent.', '/store/automations')
   const allowance = callAllowance(usage.data ? { plan: (usage.data.plan as string | null) ?? org.plan, minutes_used: usage.data.minutes_used as number | null, minutes_limit: usage.data.minutes_limit as number | null } : null)
-  if (!allowance.allowed) push('minutes_exhausted', 'Minutele incluse în plan s-au epuizat: apelurile automate nu pornesc.', '/billing')
+  if (!allowance.allowed) push('minutes_exhausted', 'The included plan minutes are used up: automated calls will not start.', '/billing')
   void anyEnabled
   return {
     connection: connection ? await connectionDto(db, connection) : null,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ShopifyReturnKey } from '@/lib/commerce/shopify-state'
 import type { CommerceCapabilities, CommercePlatform, ConnectionDto, SyncResource } from '@/lib/commerce/types'
 import { commerceRequest, useCommerceQuery } from './useCommerceApi'
 
@@ -12,7 +13,7 @@ function connectionPath(id: string, suffix = ''): string {
 
 /** The organization's store connections (one today; the list stays a list for the day there are more). */
 export function useCommerceConnections() {
-  const query = useCommerceQuery<{ items: ConnectionDto[] }>(LIST_PATH, { fallback: 'Conexiunile nu au putut fi încărcate.' })
+  const query = useCommerceQuery<{ items: ConnectionDto[] }>(LIST_PATH, { fallback: 'Connections could not be loaded.' })
   const { setData } = query
 
   const replaceConnection = useCallback(
@@ -67,7 +68,7 @@ export async function createConnection(body: CreateConnectionBody): Promise<Conn
   const res = await commerceRequest<{ connection: ConnectionDto }>(LIST_PATH, {
     method: 'POST',
     json: body,
-    fallback: 'Magazinul nu a putut fi conectat.',
+    fallback: 'The store could not be connected.',
     timeoutMs: STORE_CHECK_TIMEOUT_MS,
   })
   return res.connection
@@ -76,25 +77,25 @@ export async function createConnection(body: CreateConnectionBody): Promise<Conn
 export async function fetchConnection(id: string, signal?: AbortSignal): Promise<ConnectionDto> {
   const res = await commerceRequest<{ connection: ConnectionDto }>(connectionPath(id), {
     signal,
-    fallback: 'Conexiunea nu a putut fi citită.',
+    fallback: 'The connection could not be read.',
   })
   return res.connection
 }
 
 export async function testConnection(id: string): Promise<{ ok: boolean; message: string; capabilities: CommerceCapabilities }> {
-  return commerceRequest(connectionPath(id, '/test'), { method: 'POST', json: {}, fallback: 'Testul conexiunii a eșuat.', timeoutMs: STORE_CHECK_TIMEOUT_MS })
+  return commerceRequest(connectionPath(id, '/test'), { method: 'POST', json: {}, fallback: 'The connection test failed.', timeoutMs: STORE_CHECK_TIMEOUT_MS })
 }
 
 /** 202 queued; a 409 means a sync is already running (the caller reads `err.status`). */
 export async function syncConnection(id: string, resource: SyncResource | 'all' = 'all'): Promise<{ queued: boolean }> {
-  return commerceRequest(connectionPath(id, '/sync'), { method: 'POST', json: { resource }, fallback: 'Sincronizarea nu a putut fi pornită.' })
+  return commerceRequest(connectionPath(id, '/sync'), { method: 'POST', json: { resource }, fallback: 'The sync could not be started.' })
 }
 
 export async function disconnectConnection(id: string): Promise<ConnectionDto> {
   const res = await commerceRequest<{ connection: ConnectionDto }>(connectionPath(id, '/disconnect'), {
     method: 'POST',
     json: {},
-    fallback: 'Magazinul nu a putut fi deconectat.',
+    fallback: 'The store could not be disconnected.',
   })
   return res.connection
 }
@@ -103,12 +104,12 @@ export async function deleteConnection(id: string, confirm: string): Promise<voi
   await commerceRequest<{ deleted: boolean }>(connectionPath(id), {
     method: 'DELETE',
     json: { confirm },
-    fallback: 'Datele magazinului nu au putut fi șterse.',
+    fallback: 'The store data could not be deleted.',
   })
 }
 
 /** Where the browser goes to install the Shopify app (full-page navigation, never a fetch). */
-export function shopifyStartUrl(shopDomain: string, returnTo: 'onboarding' | 'magazin' = 'magazin'): string {
+export function shopifyStartUrl(shopDomain: string, returnTo: ShopifyReturnKey = 'store'): string {
   return `/api/commerce/oauth/shopify/start?shop=${encodeURIComponent(shopDomain)}&return_to=${returnTo}`
 }
 

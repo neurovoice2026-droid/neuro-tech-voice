@@ -147,21 +147,21 @@ const LIST_MAX_BYTES = 8 * 1024 * 1024
 /** The only signature method Magento 2.4 accepts (Magento\Framework\Oauth\Oauth::getSupportedSignatureMethods). */
 const OAUTH_SIGNATURE_METHOD = 'HMAC-SHA256'
 
-/** Merchant-facing notes (Romanian) stored in capabilities.notes. */
+/** Merchant-facing notes (English) stored in capabilities.notes. */
 export const NOTE_NO_WEBHOOKS =
-  'Magento Open Source nu are webhook-uri standard (Adobe I/O Events și Webhooks necesită Adobe Commerce 2.4.4+ cu App Builder): datele ajung prin sincronizare periodică, la 15 minute.'
-export const NOTE_NO_CARTS = 'Coșurile abandonate nu sunt expuse de API-ul REST standard Magento: automatizarea nu este disponibilă fără un modul dedicat.'
-export const NOTE_NO_PRODUCTS = 'Token-ul nu are acces la catalog (Catalog → Products): produsele nu se sincronizează.'
-export const NOTE_NO_CUSTOMERS = 'Token-ul nu are acces la clienți (Customers → All Customers): clienții nu se sincronizează; telefonul de contact vine din comenzi.'
-export const NOTE_NO_STORE_CONFIG = 'Token-ul nu poate citi configurația magazinului (Stores → Settings → Configuration): moneda, fusul orar și numele magazinului nu au fost detectate.'
-export const NOTE_NO_LIST_STOCK = 'Lista standard de produse Magento nu include stocul: stocul se actualizează doar la citirea individuală a unui produs.'
+  'Magento Open Source has no standard webhooks (Adobe I/O Events and Webhooks require Adobe Commerce 2.4.4+ with App Builder): data arrives through periodic sync, every 15 minutes.'
+export const NOTE_NO_CARTS = 'Abandoned carts are not exposed by the standard Magento REST API: the automation is not available without a dedicated module.'
+export const NOTE_NO_PRODUCTS = 'The token has no access to the catalog (Catalog → Products): products are not synced.'
+export const NOTE_NO_CUSTOMERS = 'The token has no access to customers (Customers → All Customers): customers are not synced; the contact phone number comes from orders.'
+export const NOTE_NO_STORE_CONFIG = 'The token cannot read the store configuration (Stores → Settings → Configuration): the currency, time zone and store name were not detected.'
+export const NOTE_NO_LIST_STOCK = 'The standard Magento product list does not include stock: stock is only updated when a product is read individually.'
 
 /** Merchant-facing explanation of a 401, per credential kind (Magento answers 401 for every cause). */
 const UNAUTHORIZED_MESSAGE = {
   bearer:
-    'Magazinul a refuzat accesul (401). Verifică Access Token-ul, că integrarea este activă și că are bifată resursa Sales → Operations → Orders. Pe Magento 2.4.4+ token-ul singur nu este acceptat implicit: activează Stores → Configuration → Services → OAuth → Consumer Settings → „Allow OAuth Access Tokens to be used as standalone Bearer tokens” sau completează Consumer Key, Consumer Secret și Access Token Secret (semnare OAuth).',
+    'The store refused access (401). Check the Access Token, that the integration is active and that the Sales → Operations → Orders resource is selected. On Magento 2.4.4+ the token alone is not accepted by default: enable Stores → Configuration → Services → OAuth → Consumer Settings → "Allow OAuth Access Tokens to be used as standalone Bearer tokens" or fill in the Consumer Key, Consumer Secret and Access Token Secret (OAuth signing).',
   oauth:
-    'Magazinul a refuzat semnătura OAuth (401). Verifică Consumer Key, Consumer Secret, Access Token și Access Token Secret, că integrarea este activă, că are bifată resursa Sales → Operations → Orders și că ora serverului magazinului este corectă.',
+    'The store refused the OAuth signature (401). Check the Consumer Key, Consumer Secret, Access Token and Access Token Secret, that the integration is active, that the Sales → Operations → Orders resource is selected and that the store server\'s clock is correct.',
 } as const
 
 const credential = z.string().trim().regex(/^[A-Za-z0-9._~+/=-]{16,512}$/, 'Credential has an unexpected format')
@@ -217,10 +217,10 @@ export function canonicalStoreUrl(raw: string): { storeUrl: string; storeDomain:
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
   } catch (err) {
-    throw new ConnectionError('invalid_url', 'Adresa magazinului nu este validă.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
+    throw new ConnectionError('invalid_url', 'The store address is not valid.', false, `store url: ${err instanceof Error ? err.message : 'parse failed'}`)
   }
-  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'Adresa magazinului trebuie să înceapă cu https://.', false, 'store url: not https')
-  if (url.username || url.password) throw new ConnectionError('invalid_url', 'Adresa magazinului nu poate conține utilizator și parolă.', false, 'store url: credentials')
+  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'The store address must start with https://.', false, 'store url: not https')
+  if (url.username || url.password) throw new ConnectionError('invalid_url', 'The store address cannot contain a user name and password.', false, 'store url: credentials')
   let path = url.pathname.replace(/\/rest(\/.*)?$/i, '').replace(/\/+$/, '')
   if (path === '/') path = ''
   const host = url.hostname.toLowerCase()
@@ -296,7 +296,7 @@ function parseSecrets(secrets: ConnectionSecrets): MagentoSecrets {
   if (!parsed.success) {
     throw new ConnectionError(
       'unauthorized',
-      'Datele de acces Magento lipsesc sau au un format greșit: copiază Access Token-ul integrării (și, pentru semnare OAuth, Consumer Key, Consumer Secret și Access Token Secret împreună).',
+      'The Magento credentials are missing or malformed: paste the integration\'s Access Token (and, for OAuth signing, the Consumer Key, Consumer Secret and Access Token Secret together).',
       false,
       'magento secrets: invalid shape',
     )
@@ -346,23 +346,23 @@ function looksLikeHtml(res: MgResponse): boolean {
 function unsafeUrlFailure(err: UnsafeUrlError): ConnectionError {
   const reason = err.reason
   if (/private or reserved|resolves to a private|local hosts/.test(reason)) {
-    return new ConnectionError('ssrf_blocked', 'Adresa magazinului indică o rețea privată sau locală; este necesară o adresă publică.', false, `store url: ${reason}`)
+    return new ConnectionError('ssrf_blocked', 'The store address points to a private or local network; a public address is required.', false, `store url: ${reason}`)
   }
-  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'Domeniul magazinului nu poate fi rezolvat (DNS).', true, `store url: ${reason}`)
-  return new ConnectionError('invalid_url', 'Adresa magazinului nu este validă (doar https, fără port neobișnuit).', false, `store url: ${reason}`)
+  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'The store domain cannot be resolved (DNS).', true, `store url: ${reason}`)
+  return new ConnectionError('invalid_url', 'The store address is not valid (https only, no unusual port).', false, `store url: ${reason}`)
 }
 
 function transportFailure(err: StoreHttpError, operation: string): ConnectionError {
   switch (err.code) {
     case 'timeout':
-      return new ConnectionError('timeout', 'Magazinul nu a răspuns la timp.', true, `magento ${operation}: timeout`)
+      return new ConnectionError('timeout', 'The store did not respond in time.', true, `magento ${operation}: timeout`)
     case 'redirect':
-      return new ConnectionError('redirect', 'Magazinul redirecționează către altă adresă; folosește adresa finală (https, cu sau fără www).', false, `magento ${operation}: redirect ${err.status ?? ''}`.trim())
+      return new ConnectionError('redirect', 'The store redirects to another address; use the final address (https, with or without www).', false, `magento ${operation}: redirect ${err.status ?? ''}`.trim())
     case 'too_large':
-      return new ConnectionError('invalid_response', 'Răspunsul magazinului este prea mare.', false, `magento ${operation}: response too large`)
+      return new ConnectionError('invalid_response', 'The store response is too large.', false, `magento ${operation}: response too large`)
     case 'network':
     case 'http':
-      return new ConnectionError('unreachable', 'Magazinul nu a putut fi contactat.', true, `magento ${operation}: ${err.code}`)
+      return new ConnectionError('unreachable', 'The store could not be reached.', true, `magento ${operation}: ${err.code}`)
   }
 }
 
@@ -379,17 +379,17 @@ function httpFailure(res: MgResponse, operation: string, authKind: MgAuth['kind'
   const resources = errorResourcesOf(res.json)
   const detail = `magento ${operation}: HTTP ${res.status}${resources ? ` (${resources})` : ''}`
   if (res.status === 401) return new ConnectionError('unauthorized', UNAUTHORIZED_MESSAGE[authKind], false, detail)
-  if (res.status === 403) return new ConnectionError('forbidden', 'Integrarea nu are permisiunile necesare pentru această resursă: bifează în integrare Sales → Orders, Customers → All Customers, Catalog → Products și Stores → Configuration.', false, detail)
-  if (res.status === 429) return new ConnectionError('rate_limited', 'Magazinul limitează cererile; încearcă din nou în câteva minute.', true, detail)
-  if (res.status >= 500) return new ConnectionError('unreachable', 'Magazinul a răspuns cu o eroare de server; încearcă din nou.', true, detail)
+  if (res.status === 403) return new ConnectionError('forbidden', 'The integration lacks the required permissions for this resource: select Sales → Orders, Customers → All Customers, Catalog → Products and Stores → Configuration in the integration.', false, detail)
+  if (res.status === 429) return new ConnectionError('rate_limited', 'The store is rate limiting requests; try again in a few minutes.', true, detail)
+  if (res.status >= 500) return new ConnectionError('unreachable', 'The store answered with a server error; try again.', true, detail)
   if (res.status === 404 || looksLikeHtml(res)) {
-    return new ConnectionError('not_a_store', 'La această adresă nu răspunde API-ul REST Magento (/rest/V1). Verifică adresa magazinului.', false, detail)
+    return new ConnectionError('not_a_store', 'The Magento REST API (/rest/V1) does not answer at this address. Check the store address.', false, detail)
   }
-  return new ConnectionError('invalid_response', 'Magazinul a răspuns neașteptat.', false, detail)
+  return new ConnectionError('invalid_response', 'The store answered unexpectedly.', false, detail)
 }
 
 function invalidResponse(operation: string, what: string): ConnectionError {
-  return new ConnectionError('invalid_response', 'Răspunsul magazinului nu are formatul așteptat.', false, `magento ${operation}: ${what}`)
+  return new ConnectionError('invalid_response', 'The store response does not have the expected format.', false, `magento ${operation}: ${what}`)
 }
 
 function defaultNonce(): string {

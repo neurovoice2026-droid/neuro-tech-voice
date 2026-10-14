@@ -8,7 +8,7 @@ import { CommerceApiError, buildQuery, commerceRequest, useCommerceQuery } from 
 /** GET /api/commerce/automations?connection_id (always the three templates; unconfigured ones have no id). */
 export function useCommerceAutomations(connectionId: string | null) {
   const path = connectionId ? `/api/commerce/automations?${buildQuery({ connection_id: connectionId })}` : null
-  const query = useCommerceQuery<{ items: AutomationDto[] }>(path, { fallback: 'Automatizările nu au putut fi încărcate.' })
+  const query = useCommerceQuery<{ items: AutomationDto[] }>(path, { fallback: 'Automations could not be loaded.' })
   const { setData } = query
 
   const replaceAutomation = useCallback(
@@ -33,7 +33,7 @@ export async function saveAutomation(type: AutomationType, body: AutomationSaveB
   const res = await commerceRequest<{ automation: AutomationDto }>(`/api/commerce/automations/${encodeURIComponent(type)}`, {
     method: 'PUT',
     json: body,
-    fallback: 'Automatizarea nu a putut fi salvată.',
+    fallback: 'The automation could not be saved.',
   })
   return res.automation
 }
@@ -44,19 +44,19 @@ export interface EnableBlocked {
   action: string | null
 }
 
-/** The merchant-facing explanation of a 409 on enabling, or null when the error is something else. */
+/** A 409 on enabling, as the route worded it, with the page that fixes it when the reason is known; null for any other error. */
 export function enableBlocked(err: unknown): EnableBlocked | null {
   if (!(err instanceof CommerceApiError) || err.status !== 409) return null
   const reason = err.reason
-  if (reason && Object.hasOwn(ENABLE_BLOCKED_REASON, reason)) return ENABLE_BLOCKED_REASON[reason]
-  return { message: err.message, href: null, action: null }
+  const link = reason && Object.hasOwn(ENABLE_BLOCKED_REASON, reason) ? ENABLE_BLOCKED_REASON[reason] : { href: null, action: null }
+  return { message: err.message, ...link }
 }
 
 /** GET /api/commerce/script-preview: the saved script with sample values resolved. */
 export async function fetchScriptPreview(type: AutomationType, connectionId: string, signal?: AbortSignal): Promise<string> {
   const res = await commerceRequest<{ text: string }>(`/api/commerce/script-preview?${buildQuery({ type, connection_id: connectionId })}`, {
     signal,
-    fallback: 'Previzualizarea scriptului nu a putut fi generată.',
+    fallback: 'The script preview could not be generated.',
   })
   return res.text
 }

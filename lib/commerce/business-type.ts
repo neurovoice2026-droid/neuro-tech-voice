@@ -4,6 +4,14 @@
 
 import type { BusinessType } from '@/types'
 
+/**
+ * The cookie that carries what a visitor came to sign up for (a store plan's
+ * /register?intent=store) to Step 0 of the onboarding, which pre-selects it.
+ * Helpers in lib/auth/business-intent.ts. A suggestion only: the business
+ * type is written once, by the owner's own click.
+ */
+export const BUSINESS_INTENT_COOKIE = 'ntv_business_intent'
+
 export type OnboardingVariant = 'choose' | 'services' | 'ecommerce'
 
 export interface BusinessTypeFields {
@@ -14,7 +22,7 @@ export interface BusinessTypeFields {
 /**
  * 'choose'    the owner has not picked a business type (new sign-up after 024);
  * 'services'  the original onboarding and dashboard (also every legacy org);
- * 'ecommerce' the store onboarding and the Magazin section.
+ * 'ecommerce' the store onboarding and the Store section (/store).
  * A row from before migration 024 (no column at all) reads as 'services'.
  */
 export function onboardingVariant(org: BusinessTypeFields | null | undefined): OnboardingVariant {
@@ -35,12 +43,12 @@ export function isEcommerceOrg(org: BusinessTypeFields | null | undefined): bool
 
 /** Steps of the store onboarding, in order (onboarding_step for ecommerce orgs). */
 export const COMMERCE_ONBOARDING_STEPS = [
-  { num: 1, key: 'store', label: 'Despre magazin' },
-  { num: 2, key: 'platform', label: 'Conectează magazinul' },
-  { num: 3, key: 'access', label: 'Acces și sincronizare' },
-  { num: 4, key: 'automations', label: 'Automatizări' },
-  { num: 5, key: 'agent', label: 'Agentul tău' },
-  { num: 6, key: 'launch', label: 'Lansare' },
+  { num: 1, key: 'store', label: 'About your store' },
+  { num: 2, key: 'platform', label: 'Connect your store' },
+  { num: 3, key: 'access', label: 'Access & sync' },
+  { num: 4, key: 'automations', label: 'Automations' },
+  { num: 5, key: 'agent', label: 'Your agent' },
+  { num: 6, key: 'launch', label: 'Launch' },
 ] as const
 
 export type CommerceOnboardingStepKey = (typeof COMMERCE_ONBOARDING_STEPS)[number]['key']

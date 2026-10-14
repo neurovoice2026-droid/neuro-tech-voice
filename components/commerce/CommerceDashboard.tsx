@@ -51,8 +51,8 @@ export function CommerceDashboard({ org, agent, phoneNumber }: CommerceDashboard
 
         <section aria-labelledby="dashboard-store" className="mb-10">
           <SectionHeading
-            title={<span id="dashboard-store">Magazin</span>}
-            description="Conexiunea, coada de apeluri și automatizările magazinului."
+            title={<span id="dashboard-store">Store</span>}
+            description="The store's connection, call queue and automations."
           />
           <StoreOverview
             overview={overview}

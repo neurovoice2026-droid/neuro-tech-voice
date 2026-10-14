@@ -3,11 +3,35 @@ import crypto from 'crypto'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { RequestError } from '@/lib/api/http'
+import type { BusinessType } from '@/types'
 
 export interface OrgContext {
   supabase: SupabaseClient
   user: User
-  org: { id: string; name: string | null; timezone: string | null; plan: string | null; deletion_requested_at?: string | null }
+  org: {
+    id: string
+    name: string | null
+    timezone: string | null
+    plan: string | null
+    deletion_requested_at?: string | null
+    /** 'ecommerce' for an online store (it buys store plans), 'services' otherwise; null until chosen. */
+    business_type?: BusinessType | null
+  }
+}
+
+/**
+ * The organization columns every tenant route needs, newest migration first:
+ * a database still behind on a migration (024: business_type, 021:
+ * deletion_requested_at) answers "undefined column" and gets the next list.
+ */
+const ORG_SELECTS = [
+  'id, name, timezone, plan, deletion_requested_at, business_type',
+  'id, name, timezone, plan, deletion_requested_at',
+  'id, name, timezone, plan',
+] as const
+
+function isUndefinedColumn(error: { code?: string } | null): boolean {
+  return !!error && (error.code === '42703' || error.code === 'PGRST204')
 }
 
 /** 403 for every tenant API call of an organization whose deletion was requested (lib/account). */
@@ -24,14 +48,13 @@ export async function requireOrg(opts: { allowDeleting?: boolean } = {}): Promis
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new RequestError('unauthorized', 'Unauthorized', 401)
-  let { data: org, error } = await supabase
-    .from('organizations')
-    .select('id, name, timezone, plan, deletion_requested_at')
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (error && (error.code === '42703' || error.code === 'PGRST204')) {
-    // Migration 021 not applied yet: nothing can be in deletion.
-    ;({ data: org, error } = await supabase.from('organizations').select('id, name, timezone, plan').eq('user_id', user.id).maybeSingle())
+  let org: unknown = null
+  let error: { code?: string; message: string } | null = null
+  for (const columns of ORG_SELECTS) {
+    ;({ data: org, error } = await supabase.from('organizations').select(columns).eq('user_id', user.id).maybeSingle())
+    // A missing column means the column's migration is not applied: nothing can
+    // be in deletion, no business type was chosen. Any other error is final.
+    if (!isUndefinedColumn(error)) break
   }
   if (error) throw new RequestError('internal', 'Could not load your organization.', 500)
   if (!org) throw new RequestError('not_found', 'Organization not found', 404)

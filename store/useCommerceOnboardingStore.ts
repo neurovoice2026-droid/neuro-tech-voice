@@ -40,6 +40,9 @@ export interface CommerceOnboardingStateDto {
   checklist: CommerceChecklistItem[]
 }
 
+/** The plan the launch step starts on: the entry tier of the store family (plansForBusinessType('ecommerce')). */
+export const DEFAULT_STORE_PLAN: Plan = 'store_starter'
+
 // ─── State + actions ─────────────────────────────────────────────────────────
 
 interface CommerceOnboardingState {
@@ -54,6 +57,7 @@ interface CommerceOnboardingState {
   agent: CommerceOnboardingAgent | null
   hasPhoneNumber: boolean
   checklist: CommerceChecklistItem[]
+  /** The plan the launch posts to /api/onboarding/complete: the trial or a store plan. */
   plan: Plan
 
   hydrate: (dto: CommerceOnboardingStateDto) => void
@@ -83,7 +87,7 @@ const defaults: Data = {
   agent: null,
   hasPhoneNumber: false,
   checklist: [],
-  plan: 'starter',
+  plan: DEFAULT_STORE_PLAN,
 }
 
 export const useCommerceOnboardingStore = create<CommerceOnboardingState>((set) => ({

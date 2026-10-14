@@ -32,14 +32,14 @@ export async function POST(request: Request) {
     const ctx = await requireCommerceOrg(log)
     const body = await parseJsonBody(request, Body, 32 * 1024)
     const platform = body.platform as (typeof COMMERCE_PLATFORMS)[number]
-    if (platform === 'shopify') throw new RequestError('invalid_request', 'Shopify se conectează prin autorizare OAuth, nu prin chei.', 400)
+    if (platform === 'shopify') throw new RequestError('invalid_request', 'Shopify connects through OAuth authorization, not through keys.', 400)
     // Only the catalog's field keys are accepted (a stray key never reaches the encrypted blob).
     const allowed = new Set(PLATFORM_CATALOG[platform].fields.filter((f) => f.key !== 'store_url').map((f) => f.key))
     const secrets = Object.fromEntries(Object.entries(body.secrets).filter(([k, v]) => allowed.has(k) && v.trim() !== '').map(([k, v]) => [k, v.trim()]))
     for (const f of PLATFORM_CATALOG[platform].fields) {
-      if (f.required && f.key !== 'store_url' && !secrets[f.key]) throw new RequestError('invalid_request', `Completează câmpul „${f.label}”.`, 400, [{ path: f.key, message: 'required' }])
+      if (f.required && f.key !== 'store_url' && !secrets[f.key]) throw new RequestError('invalid_request', `Fill in the "${f.label}" field.`, 400, [{ path: f.key, message: 'required' }])
     }
-    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Prea multe încercări de conectare. Încearcă din nou în câteva minute.')
+    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Too many connection attempts. Try again in a few minutes.')
     const row = await connectStore(ctx.db, { orgId: ctx.org.id, userId: ctx.user.id, platform, storeUrl: body.store_url, displayName: body.display_name ?? null, secrets }, ctx.log)
     return noStore({ connection: await connectionDto(ctx.db, row) }, 201)
   })

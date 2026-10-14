@@ -1,11 +1,13 @@
-// Romanian labels of the e-commerce vertical, in one place so a run, an order
-// or a connection reads the same in the overview, the tables, the call sheet
-// and the toasts. Every map is typed as a total Record of its union (the
-// compiler refuses a missing key) and the test in tests/commerce-ui-labels
-// guards the copy itself (no empty label, diacritics intact).
+// Merchant-facing labels of the e-commerce vertical, in one place so a run,
+// an order or a connection reads the same in the overview, the tables, the
+// call sheet and the toasts. Every map is typed as a total Record of its
+// union (the compiler refuses a missing key) and the test in
+// tests/commerce-ui-labels guards the copy itself (no empty label, English
+// only, sentence case).
 //
 // Client-safe: types and strings only (the script variable names come from
-// lib/commerce/prompt.ts, which is pure and client-safe too).
+// lib/commerce/prompt.ts and the consent wording from
+// lib/commerce/automations/config.ts, both pure and client-safe).
 
 import type { StatusTone } from '@/components/shared/StatusChip'
 import { SCRIPT_VARIABLES as SCRIPT_VARIABLE_NAMES, type ScriptVariable } from '@/lib/commerce/prompt'
@@ -54,18 +56,36 @@ export const SUPPRESSION_SOURCES: readonly SuppressionSource[] = ['customer_opt_
 /** Runs a person may still cancel (POST /api/commerce/runs/[id]/cancel accepts only these). */
 export const CANCELLABLE_RUN_STATUSES: readonly RunStatus[] = ['eligible', 'scheduled', 'retry_waiting']
 
+// ─── Store section paths (one place, so a renamed route never leaves a dead link) ──
+
+export const STORE_PATHS = {
+  overview: '/store',
+  connections: '/store/connections',
+  orders: '/store/orders',
+  customers: '/store/customers',
+  products: '/store/products',
+  automations: '/store/automations',
+  doNotCall: '/store/do-not-call',
+  settings: '/store/settings',
+} as const
+
+/** The automations page opened on one template (`?type=` is read by AutomationsPage). */
+export function automationHref(type: AutomationType | string): string {
+  return `${STORE_PATHS.automations}?type=${encodeURIComponent(type)}`
+}
+
 // ─── Runs ─────────────────────────────────────────────────────────────────────
 
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
-  eligible: 'Eligibil',
-  scheduled: 'Programat',
-  calling: 'În apel',
-  completed: 'Finalizat',
-  suppressed: 'Suprimat',
-  skipped: 'Omis',
-  failed: 'Eșuat',
-  retry_waiting: 'Reîncercare',
-  cancelled: 'Anulat',
+  eligible: 'Eligible',
+  scheduled: 'Scheduled',
+  calling: 'Calling',
+  completed: 'Completed',
+  suppressed: 'Suppressed',
+  skipped: 'Skipped',
+  failed: 'Failed',
+  retry_waiting: 'Retrying',
+  cancelled: 'Canceled',
 }
 
 export const RUN_STATUS_TONE: Record<RunStatus, StatusTone> = {
@@ -81,13 +101,13 @@ export const RUN_STATUS_TONE: Record<RunStatus, StatusTone> = {
 }
 
 export const RUN_OUTCOME_LABEL: Record<RunOutcome, string> = {
-  confirmed: 'Confirmată',
-  not_confirmed: 'Neconfirmată',
-  callback_requested: 'Revenire cerută',
-  voicemail: 'Mesagerie vocală',
-  no_answer: 'Fără răspuns',
-  opted_out: 'Nu mai suna',
-  failed: 'Eșuat',
+  confirmed: 'Confirmed',
+  not_confirmed: 'Not confirmed',
+  callback_requested: 'Callback requested',
+  voicemail: 'Voicemail',
+  no_answer: 'No answer',
+  opted_out: 'Opted out',
+  failed: 'Failed',
 }
 
 export const RUN_OUTCOME_TONE: Record<RunOutcome, StatusTone> = {
@@ -103,12 +123,12 @@ export const RUN_OUTCOME_TONE: Record<RunOutcome, StatusTone> = {
 // ─── Connections ──────────────────────────────────────────────────────────────
 
 export const CONNECTION_STATUS_LABEL: Record<ConnectionStatus, string> = {
-  draft: 'Neconfigurat',
-  connecting: 'Se conectează',
-  active: 'Conectat',
-  degraded: 'Conectat cu probleme',
-  disconnected: 'Deconectat',
-  error: 'Eroare',
+  draft: 'Not set up',
+  connecting: 'Connecting',
+  active: 'Connected',
+  degraded: 'Connected with issues',
+  disconnected: 'Disconnected',
+  error: 'Error',
 }
 
 export const CONNECTION_STATUS_TONE: Record<ConnectionStatus, StatusTone> = {
@@ -121,80 +141,84 @@ export const CONNECTION_STATUS_TONE: Record<ConnectionStatus, StatusTone> = {
 }
 
 export const SYNC_STATUS_LABEL: Record<SyncJobStatus | 'idle', string> = {
-  idle: 'Nicio sincronizare în curs',
-  pending: 'Sincronizare în așteptare',
-  running: 'Sincronizare în curs',
-  succeeded: 'Sincronizare reușită',
-  failed: 'Sincronizare eșuată',
-  cancelled: 'Sincronizare anulată',
+  idle: 'No sync in progress',
+  pending: 'Sync queued',
+  running: 'Sync in progress',
+  succeeded: 'Sync succeeded',
+  failed: 'Sync failed',
+  cancelled: 'Sync canceled',
 }
 
 export const SYNC_KIND_LABEL: Record<SyncJobKind, string> = {
-  initial: 'inițială',
-  incremental: 'incrementală',
-  manual: 'manuală',
-  recovery: 'de recuperare',
+  initial: 'initial',
+  incremental: 'incremental',
+  manual: 'manual',
+  recovery: 'recovery',
 }
 
 export const SYNC_RESOURCE_LABEL: Record<SyncResource | 'all', string> = {
-  all: 'toate datele',
-  products: 'produse',
-  customers: 'clienți',
-  orders: 'comenzi',
-  carts: 'coșuri',
+  all: 'all data',
+  products: 'products',
+  customers: 'customers',
+  orders: 'orders',
+  carts: 'carts',
+}
+
+/**
+ * The failure codes the Shopify callback appends to its return URL
+ * (lib/commerce/shopify-state.ts OAUTH_ERROR_CODES), in the merchant's words.
+ * The onboarding step and the Connections page show the same line.
+ */
+export const OAUTH_ERRORS: Record<string, string> = {
+  access_denied: 'The app install was declined in Shopify. You can try again whenever you are ready.',
+  invalid_shop: 'The store domain is not a valid myshopify.com domain.',
+  state_mismatch: 'The install session expired. Start the connection again.',
+  hmac_invalid: 'The response from Shopify could not be verified. Start the connection again.',
+  not_configured: 'The Shopify app is not configured on this platform. Contact support.',
+  token_exchange_failed: 'Shopify did not issue an access token. Try again.',
+  unreachable: 'Shopify did not respond. Check the store domain and try again in a moment.',
+}
+
+/** The line for a callback code; an unknown code is shown shortened, never echoed at length. */
+export function oauthErrorMessage(code: string): string {
+  return OAUTH_ERRORS[code] ?? `The Shopify connection failed (code: ${code.slice(0, 40)}).`
 }
 
 // ─── Automations ──────────────────────────────────────────────────────────────
 
 export const AUTOMATION_TYPE_LABEL: Record<AutomationType, string> = {
-  cod_confirmation: 'Confirmare ramburs',
-  abandoned_cart: 'Coș abandonat',
-  order_follow_up: 'Urmărire comandă',
+  cod_confirmation: 'COD confirmation',
+  abandoned_cart: 'Abandoned cart',
+  order_follow_up: 'Order follow-up',
 }
 
 export const AUTOMATION_TYPE_DESCRIPTION: Record<AutomationType, string> = {
-  cod_confirmation: 'Sună clientul după o comandă cu plata la livrare și confirmă comanda înainte de expediere.',
-  abandoned_cart: 'Sună clientul care a lăsat un coș cu telefon de contact și îl ajută să finalizeze comanda.',
-  order_follow_up: 'Sună clientul după ce comanda ajunge la statusul ales și verifică dacă totul este în ordine.',
+  cod_confirmation: 'Calls the customer after a cash-on-delivery order and confirms it before it ships.',
+  abandoned_cart: 'Calls a customer who left a cart with a contact phone number and helps them complete the order.',
+  order_follow_up: 'Calls the customer once the order reaches the status you choose and checks that everything is in order.',
 }
 
-/** Why PUT /api/commerce/automations/[type] { enabled: true } answered 409, in the merchant's words. */
-export const ENABLE_BLOCKED_REASON: Record<string, { message: string; href: string | null; action: string | null }> = {
-  no_consent: {
-    message: 'Confirmă mai întâi acordul clienților pentru apeluri, în pagina Automatizări.',
-    href: '/magazin/automatizari',
-    action: 'Deschide automatizările',
-  },
-  unavailable: {
-    message: 'Platforma magazinului nu oferă datele necesare acestei automatizări.',
-    href: '/magazin/conexiuni',
-    action: 'Vezi conexiunea',
-  },
-  agent_inactive: {
-    message: 'Agentul este oprit. Pornește-l din pagina Agent înainte de a activa automatizarea.',
-    href: '/agent',
-    action: 'Deschide agentul',
-  },
-  no_phone_number: {
-    message: 'Magazinul nu are un număr de telefon activ pentru apeluri.',
-    href: '/phone',
-    action: 'Adaugă un număr',
-  },
-  encryption_not_configured: {
-    message: 'Platforma nu are configurată criptarea datelor magazinului. Contactează echipa de suport.',
-    href: null,
-    action: null,
-  },
-  connection_inactive: {
-    message: 'Conexiunea cu magazinul nu este activă. Reconectează magazinul mai întâi.',
-    href: '/magazin/conexiuni',
-    action: 'Vezi conexiunea',
-  },
+/**
+ * Where a refused enable sends the merchant, by the 409's details.reason of
+ * PUT /api/commerce/automations/[type]. The toast's text is the route's own
+ * message (one wording, in the onboarding and the dashboard alike); this map
+ * only adds the page that fixes it.
+ */
+export const ENABLE_BLOCKED_REASON: Record<string, { href: string | null; action: string | null }> = {
+  no_consent: { href: STORE_PATHS.automations, action: 'Open automations' },
+  unavailable: { href: STORE_PATHS.connections, action: 'View connection' },
+  agent_inactive: { href: '/agent', action: 'Open agent' },
+  no_phone_number: { href: '/phone', action: 'Add a number' },
+  encryption_not_configured: { href: null, action: null },
+  connection_inactive: { href: STORE_PATHS.connections, action: 'View connection' },
 }
 
-/** The consent the merchant confirms before any automation may call (exact wording, kept with the automation). */
-export const CONSENT_TEXT =
-  'Confirm că am temei legal și acordul clienților pentru a fi contactați telefonic de magazin, inclusiv prin asistent AI, și că voi respecta cererile de a nu mai fi sunați.'
+/**
+ * The consent the merchant confirms before any automation may call: the
+ * versioned wording the server records (CONSENT_VERSION), so the text shown
+ * is exactly the text stored with the confirmation.
+ */
+export { CONSENT_TEXT } from '@/lib/commerce/automations/config'
 
 /**
  * What each typed script variable resolves to, as the help box documents it.
@@ -203,14 +227,14 @@ export const CONSENT_TEXT =
  * here, or the form would reject the default script.
  */
 export const SCRIPT_VARIABLE_DESCRIPTION: Record<ScriptVariable, string> = {
-  store_name: 'Numele magazinului (din profil sau „Numele brandului” de mai jos).',
-  order_number: 'Numărul comenzii sau referința coșului.',
-  items_summary: 'Produsele din comandă, pe scurt („2 × Tricou alb, 1 × Șapcă”).',
-  order_total: 'Totalul comenzii, cu moneda.',
-  customer_name: 'Numele clientului, așa cum apare în comandă.',
-  delivery_city: 'Orașul de livrare din comandă (gol pentru un coș fără adresă).',
-  agent_name: 'Numele agentului, așa cum este setat în pagina Agent.',
-  call_reason: 'Motivul apelului: cod_confirmation, abandoned_cart sau order_follow_up.',
+  store_name: 'The store name (from the profile, or the "Brand name" field below).',
+  order_number: 'The order number or the cart reference.',
+  items_summary: 'The order items, in short ("2 × White T-shirt, 1 × Cap").',
+  order_total: 'The order total, with the currency.',
+  customer_name: 'The customer name as it appears on the order.',
+  delivery_city: 'The delivery city from the order (empty for a cart without an address).',
+  agent_name: 'The agent name, as set on the Agent page.',
+  call_reason: 'The reason for the call: cod_confirmation, abandoned_cart or order_follow_up.',
 }
 
 /** The variables a script template may use, in the server's order, with their descriptions. */
@@ -220,42 +244,42 @@ export const SCRIPT_VARIABLES: ReadonlyArray<{ name: ScriptVariable; description
 }))
 
 export const WEEKDAY_LABEL: Record<Weekday, string> = {
-  monday: 'Luni',
-  tuesday: 'Marți',
-  wednesday: 'Miercuri',
-  thursday: 'Joi',
-  friday: 'Vineri',
-  saturday: 'Sâmbătă',
-  sunday: 'Duminică',
+  monday: 'Monday',
+  tuesday: 'Tuesday',
+  wednesday: 'Wednesday',
+  thursday: 'Thursday',
+  friday: 'Friday',
+  saturday: 'Saturday',
+  sunday: 'Sunday',
 }
 
 export const WEEKDAY_SHORT: Record<Weekday, string> = {
-  monday: 'Lu',
-  tuesday: 'Ma',
-  wednesday: 'Mi',
-  thursday: 'Jo',
-  friday: 'Vi',
-  saturday: 'Sâ',
-  sunday: 'Du',
+  monday: 'Mon',
+  tuesday: 'Tue',
+  wednesday: 'Wed',
+  thursday: 'Thu',
+  friday: 'Fri',
+  saturday: 'Sat',
+  sunday: 'Sun',
 }
 
 export const TONE_LABEL: Record<'formal' | 'friendly', string> = {
   formal: 'Formal',
-  friendly: 'Prietenos',
+  friendly: 'Friendly',
 }
 
 // ─── Records ──────────────────────────────────────────────────────────────────
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
-  pending: 'În așteptare',
-  processing: 'În procesare',
-  on_hold: 'Suspendată',
-  completed: 'Finalizată',
-  cancelled: 'Anulată',
-  refunded: 'Rambursată',
-  failed: 'Eșuată',
-  draft: 'Ciornă',
-  unknown: 'Necunoscută',
+  pending: 'Pending',
+  processing: 'Processing',
+  on_hold: 'On hold',
+  completed: 'Completed',
+  cancelled: 'Canceled',
+  refunded: 'Refunded',
+  failed: 'Failed',
+  draft: 'Draft',
+  unknown: 'Unknown',
 }
 
 export const ORDER_STATUS_TONE: Record<OrderStatus, StatusTone> = {
@@ -271,42 +295,42 @@ export const ORDER_STATUS_TONE: Record<OrderStatus, StatusTone> = {
 }
 
 export const FINANCIAL_STATUS_LABEL: Record<FinancialStatus, string> = {
-  pending: 'Plată în așteptare',
-  authorized: 'Plată autorizată',
-  paid: 'Plătită',
-  partially_paid: 'Plătită parțial',
-  partially_refunded: 'Rambursată parțial',
-  refunded: 'Rambursată',
-  voided: 'Plată anulată',
-  unknown: 'Plată necunoscută',
+  pending: 'Payment pending',
+  authorized: 'Payment authorized',
+  paid: 'Paid',
+  partially_paid: 'Partially paid',
+  partially_refunded: 'Partially refunded',
+  refunded: 'Refunded',
+  voided: 'Payment voided',
+  unknown: 'Payment unknown',
 }
 
 export const FULFILLMENT_STATUS_LABEL: Record<FulfillmentStatus, string> = {
-  unfulfilled: 'Neexpediată',
-  partial: 'Expediată parțial',
-  fulfilled: 'Expediată',
-  cancelled: 'Expediere anulată',
-  unknown: 'Expediere necunoscută',
+  unfulfilled: 'Unfulfilled',
+  partial: 'Partially fulfilled',
+  fulfilled: 'Fulfilled',
+  cancelled: 'Fulfillment canceled',
+  unknown: 'Fulfillment unknown',
 }
 
 /** Order statuses an order follow-up may wait for (OrderStatus plus the shipped state). */
 export const FOLLOW_UP_STATUS_LABEL: Record<OrderStatus | 'fulfilled', string> = {
   ...ORDER_STATUS_LABEL,
-  fulfilled: 'Expediată',
+  fulfilled: 'Fulfilled',
 }
 
 export const PRODUCT_STATUS_LABEL: Record<ProductStatus, string> = {
-  active: 'Activ',
-  draft: 'Ciornă',
-  archived: 'Arhivat',
-  unknown: 'Necunoscut',
+  active: 'Active',
+  draft: 'Draft',
+  archived: 'Archived',
+  unknown: 'Unknown',
 }
 
 export const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
-  in_stock: 'În stoc',
-  out_of_stock: 'Stoc epuizat',
-  on_backorder: 'La comandă',
-  unknown: 'Stoc necunoscut',
+  in_stock: 'In stock',
+  out_of_stock: 'Out of stock',
+  on_backorder: 'On backorder',
+  unknown: 'Stock unknown',
 }
 
 export const STOCK_STATUS_TONE: Record<StockStatus, StatusTone> = {
@@ -317,9 +341,9 @@ export const STOCK_STATUS_TONE: Record<StockStatus, StatusTone> = {
 }
 
 export const SUPPRESSION_SOURCE_LABEL: Record<SuppressionSource, string> = {
-  customer_opt_out: 'Clientul a cerut',
+  customer_opt_out: 'Customer asked',
   operator: 'Operator',
-  provider: 'Platforma magazinului',
+  provider: 'Store platform',
 }
 
 // ─── Lenient readers (a value the UI does not know yet reads as itself, never as a blank) ──
@@ -342,7 +366,7 @@ export function connectionStatusLabel(value: string | null | undefined): string 
 }
 
 export function automationTypeLabel(value: string | null | undefined): string {
-  return readLabel(AUTOMATION_TYPE_LABEL, value) ?? 'Automatizare'
+  return readLabel(AUTOMATION_TYPE_LABEL, value) ?? 'Automation'
 }
 
 export function orderStatusLabel(value: string | null | undefined): string {
@@ -354,7 +378,7 @@ export function stockStatusLabel(value: string | null | undefined): string {
 }
 
 export function suppressionSourceLabel(value: string | null | undefined): string {
-  return readLabel(SUPPRESSION_SOURCE_LABEL, value) ?? 'Necunoscută'
+  return readLabel(SUPPRESSION_SOURCE_LABEL, value) ?? 'Unknown'
 }
 
 export function runStatusTone(value: string | null | undefined): StatusTone {
@@ -377,8 +401,8 @@ export function stockStatusTone(value: string | null | undefined): StatusTone {
   return value && Object.hasOwn(STOCK_STATUS_TONE, value) ? STOCK_STATUS_TONE[value as StockStatus] : 'muted'
 }
 
-/** "Apel automat · Confirmare ramburs · Comanda #1234 · Confirmată" (the call sheet's one-line summary). */
+/** "Automated call · COD confirmation · Order #1234 · Confirmed" (the call sheet's one-line summary). */
 export function runSummaryLine(run: { automation_type: string; reference: string; outcome: string | null; status: string }): string {
   const result = runOutcomeLabel(run.outcome) ?? runStatusLabel(run.status)
-  return ['Apel automat', automationTypeLabel(run.automation_type), `Comanda #${run.reference}`, result].join(' · ')
+  return ['Automated call', automationTypeLabel(run.automation_type), `Order #${run.reference}`, result].join(' · ')
 }

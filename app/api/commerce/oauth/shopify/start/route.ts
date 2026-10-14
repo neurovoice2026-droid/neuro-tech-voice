@@ -1,4 +1,4 @@
-// GET /api/commerce/oauth/shopify/start?shop=<x.myshopify.com>&return_to=onboarding|magazin
+// GET /api/commerce/oauth/shopify/start?shop=<x.myshopify.com>&return_to=onboarding|store
 // Sends the signed-in store owner to Shopify's authorize page. CSRF: a random
 // nonce in `state`, echoed back and compared with an httpOnly cookie that also
 // remembers where to return. The app credentials come from the environment.
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     }
     const shop = normalizeShopDomain(url.searchParams.get('shop') ?? '')
     if (!shop) return back('invalid_shop')
-    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Prea multe încercări de conectare.')
+    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Too many connection attempts. Try again in a few minutes.')
     const nonce = randomBytes(24).toString('base64url')
     const res = NextResponse.redirect(buildInstallUrl({ shop, clientId: app.clientId, scopes: app.scopes, redirectUri: `${base}/api/commerce/oauth/shopify/callback`, state: nonce }))
     res.cookies.set(SHOPIFY_STATE_COOKIE, encodeShopifyState({ nonce, returnKey, shop }), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 600, path: '/' })

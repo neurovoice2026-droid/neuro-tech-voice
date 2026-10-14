@@ -3,7 +3,8 @@ import { DEFAULT_DAILY_CALL_LIMIT, PLAN_CONCURRENCY, burstingEnabled, callLimits
 
 describe('call limits from the plan', () => {
   it('maps every plan to its concurrency and defaults the daily limit and bursting', () => {
-    expect(PLAN_CONCURRENCY).toEqual({ trial: 2, starter: 2, pro: 4, business: 6, custom: 10 })
+    expect(PLAN_CONCURRENCY).toEqual({ trial: 2, starter: 2, pro: 4, business: 6, custom: 10, store_starter: 2, store_growth: 4, store_scale: 6, store_enterprise: 10 })
+    expect(planConcurrency('store_scale', { ELEVENLABS_CONCURRENCY_STORE_SCALE: '7' })).toBe(7)
     expect(callLimitsFor('pro', {})).toEqual({ concurrency: 4, daily: DEFAULT_DAILY_CALL_LIMIT, bursting: true })
     expect(DEFAULT_DAILY_CALL_LIMIT).toBe(500)
   })

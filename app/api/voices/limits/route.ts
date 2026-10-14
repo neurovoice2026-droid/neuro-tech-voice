@@ -28,7 +28,9 @@ export async function GET(request: Request) {
       {
         custom_voices: {
           allowed: customVoicesAllowed(org.plan),
-          required_plan: requiredPlanForCustomVoices(),
+          // The cheapest plan with custom voices that this organization can buy:
+          // its own family, so a store is never sent to a service plan.
+          required_plan: requiredPlanForCustomVoices(org.plan, org.business_type),
           used,
           limit: maxCustomVoicesPerOrg(),
         },

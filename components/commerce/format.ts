@@ -1,15 +1,16 @@
-// Romanian number, money and time formatting for the Magazin section. Pure
-// and client-safe; every function accepts the nullable DTO fields as they
-// come and answers "—" rather than throwing on a value it cannot read.
+// Number, money and time formatting for the Store section (en-US, like the
+// rest of the dashboard). Pure and client-safe; every function accepts the
+// nullable DTO fields as they come and answers "—" rather than throwing on a
+// value it cannot read.
 
-const LOCALE = 'ro-RO'
+const LOCALE = 'en-US'
 
 export function formatCount(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
   return value.toLocaleString(LOCALE)
 }
 
-/** "1.234,50 RON"; an unknown currency code falls back to "1234.50 XYZ", no currency to the bare number. */
+/** "RON 1,234.50"; an unknown currency code falls back to "1234.50 XYZ", no currency to the bare number. */
 export function formatMoney(amount: number | null | undefined, currency: string | null | undefined): string {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) return '—'
   if (!currency) return amount.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -28,14 +29,14 @@ function parseIso(iso: string | null | undefined): Date | null {
   return Number.isFinite(date.getTime()) ? date : null
 }
 
-/** "13 oct. 2026, 14:05" in the viewer's zone (the DTO timestamps are instants). */
+/** "Oct 13, 2026, 14:05" in the viewer's zone (the DTO timestamps are instants). */
 export function formatDateTime(iso: string | null | undefined): string {
   const date = parseIso(iso)
   if (!date) return '—'
   return new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date)
 }
 
-/** "13 oct. 2026". */
+/** "Oct 13, 2026". */
 export function formatDate(iso: string | null | undefined): string {
   const date = parseIso(iso)
   if (!date) return '—'
@@ -43,32 +44,32 @@ export function formatDate(iso: string | null | undefined): string {
 }
 
 /**
- * Compact "time ago" for sync times and run activity: "chiar acum",
- * "acum 5 min", "acum 2 h", "acum 3 zile", then the date from a week on.
+ * Compact "time ago" for sync times and run activity: "just now",
+ * "5 min ago", "2 h ago", "3 days ago", then the date from a week on.
  * Always rounds down, like the dashboard's relativeTime.
  */
 export function relativeTime(iso: string | null | undefined, now: number = Date.now()): string {
   const date = parseIso(iso)
   if (!date) return '—'
   const minutes = Math.floor(Math.max(0, now - date.getTime()) / 60_000)
-  if (minutes < 1) return 'chiar acum'
-  if (minutes < 60) return `acum ${minutes} min`
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `acum ${hours} h`
+  if (hours < 24) return `${hours} h ago`
   const days = Math.floor(hours / 24)
-  if (days < 7) return days === 1 ? 'acum o zi' : `acum ${days} zile`
+  if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`
   return formatDate(iso)
 }
 
-/** "15 minute", "1 oră", "2 ore 30 minute" for delays and retry intervals. */
+/** "15 minutes", "1 hour", "2 hours 30 minutes" for delays and retry intervals. */
 export function formatMinutes(minutes: number | null | undefined): string {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 0) return '—'
-  if (minutes === 0) return 'imediat'
+  if (minutes === 0) return 'immediately'
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   const parts: string[] = []
-  if (h > 0) parts.push(h === 1 ? '1 oră' : `${h} ore`)
-  if (m > 0) parts.push(m === 1 ? '1 minut' : `${m} minute`)
+  if (h > 0) parts.push(h === 1 ? '1 hour' : `${h} hours`)
+  if (m > 0) parts.push(m === 1 ? '1 minute' : `${m} minutes`)
   return parts.join(' ')
 }
 

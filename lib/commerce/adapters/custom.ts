@@ -102,15 +102,15 @@ export const EVENT_ID_HEADER = 'x-ntv-event-id'
 export const TOPIC_HEADER = 'x-ntv-topic'
 export const TIMESTAMP_HEADER = 'x-ntv-timestamp'
 
-/** Merchant-facing notes (Romanian) stored in capabilities.notes. */
+/** Merchant-facing notes (English) stored in capabilities.notes. */
 export const NOTE_WEBHOOKS_MANUAL =
-  'Webhook-urile nu pot fi înregistrate automat: magazinul trimite el însuși evenimentele (order.created, order.updated, product.updated, customer.updated, cart.updated) la adresa de webhook a conexiunii, semnate HMAC-SHA256 cu secretul configurat.'
-export const NOTE_NO_WEBHOOK_SECRET = 'Fără secret webhook, evenimentele trimise de magazin nu pot fi verificate: datele ajung prin sincronizare periodică, la 15 minute. Adaugă un secret webhook ca să le activezi.'
-export const NOTE_WEBHOOKS_NOT_SENT = 'API-ul raportează că nu trimite webhook-uri (capabilities.webhooks=false): datele ajung prin sincronizare periodică, la 15 minute.'
-export const NOTE_NO_CARTS = 'API-ul nu expune coșuri (capabilities.carts=false): automatizarea pentru coșuri abandonate nu este disponibilă.'
-export const NOTE_CARTS_POLLED = 'Coșurile se citesc din GET /carts la sincronizarea periodică; trimite evenimentul cart.updated prin webhook pentru o reacție imediată.'
-export const NOTE_NO_PRODUCTS = 'API-ul nu expune produse (capabilities.products=false): produsele nu se sincronizează.'
-export const NOTE_NO_CUSTOMERS = 'API-ul nu expune clienți (capabilities.customers=false): clienții nu se sincronizează; telefonul de contact vine din comenzi.'
+  'Webhooks cannot be registered automatically: the store sends the events itself (order.created, order.updated, product.updated, customer.updated, cart.updated) to the connection\'s webhook address, signed with HMAC-SHA256 using the configured secret.'
+export const NOTE_NO_WEBHOOK_SECRET = 'Without a webhook secret, events sent by the store cannot be verified: data arrives through periodic sync, every 15 minutes. Add a webhook secret to enable them.'
+export const NOTE_WEBHOOKS_NOT_SENT = 'The API reports that it does not send webhooks (capabilities.webhooks=false): data arrives through periodic sync, every 15 minutes.'
+export const NOTE_NO_CARTS = 'The API does not expose carts (capabilities.carts=false): the abandoned cart automation is not available.'
+export const NOTE_CARTS_POLLED = 'Carts are read from GET /carts during periodic sync; send the cart.updated event by webhook for an immediate reaction.'
+export const NOTE_NO_PRODUCTS = 'The API does not expose products (capabilities.products=false): products are not synced.'
+export const NOTE_NO_CUSTOMERS = 'The API does not expose customers (capabilities.customers=false): customers are not synced; the contact phone number comes from orders.'
 
 // ─── Contract description (rendered by the docs) ──────────────────────────────
 
@@ -272,10 +272,10 @@ export function canonicalBaseUrl(raw: string): { storeUrl: string; storeDomain: 
   try {
     url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`)
   } catch (err) {
-    throw new ConnectionError('invalid_url', 'Adresa de bază a API-ului nu este validă.', false, `base url: ${err instanceof Error ? err.message : 'parse failed'}`)
+    throw new ConnectionError('invalid_url', 'The API base address is not valid.', false, `base url: ${err instanceof Error ? err.message : 'parse failed'}`)
   }
-  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'Adresa de bază a API-ului trebuie să înceapă cu https://.', false, 'base url: not https')
-  if (url.username || url.password) throw new ConnectionError('invalid_url', 'Adresa de bază a API-ului nu poate conține utilizator și parolă.', false, 'base url: credentials')
+  if (url.protocol !== 'https:') throw new ConnectionError('invalid_url', 'The API base address must start with https://.', false, 'base url: not https')
+  if (url.username || url.password) throw new ConnectionError('invalid_url', 'The API base address cannot contain a user name and password.', false, 'base url: credentials')
   let path = url.pathname.replace(/\/+$/, '')
   if (path === '/') path = ''
   const host = url.hostname.toLowerCase()
@@ -309,7 +309,7 @@ function parseSecrets(secrets: ConnectionSecrets): CustomSecrets {
   if (!parsed.success) {
     throw new ConnectionError(
       'unauthorized',
-      'Datele de autentificare lipsesc sau au un format greșit (schemă, numele header-ului pentru cheie, token sau utilizator:parolă).',
+      'The authentication details are missing or malformed (scheme, API key header name, token or user:password).',
       false,
       `custom secrets: invalid shape (${parsed.error.issues.map((i) => i.path.join('.') || 'root').join(', ')})`,
     )
@@ -324,7 +324,7 @@ export function authHeadersFor(secrets: CustomSecrets): Record<string, string> {
       return { authorization: `Bearer ${secrets.auth_token.replace(/^bearer\s+/i, '')}` }
     case 'api_key_header':
       // The schema guarantees the name for this scheme; the defensive branch keeps the type honest.
-      if (!secrets.auth_header_name) throw new ConnectionError('unauthorized', 'Numele header-ului pentru cheia API lipsește.', false, 'custom secrets: header name missing')
+      if (!secrets.auth_header_name) throw new ConnectionError('unauthorized', 'The API key header name is missing.', false, 'custom secrets: header name missing')
       return { [secrets.auth_header_name.toLowerCase()]: secrets.auth_token }
     case 'basic':
       return { authorization: `Basic ${Buffer.from(secrets.auth_token, 'utf8').toString('base64')}` }
@@ -346,41 +346,41 @@ function looksLikeHtml(res: ApiResponse): boolean {
 function unsafeUrlFailure(err: UnsafeUrlError): ConnectionError {
   const reason = err.reason
   if (/private or reserved|resolves to a private|local hosts/.test(reason)) {
-    return new ConnectionError('ssrf_blocked', 'Adresa API-ului indică o rețea privată sau locală; este necesară o adresă publică.', false, `base url: ${reason}`)
+    return new ConnectionError('ssrf_blocked', 'The API address points to a private or local network; a public address is required.', false, `base url: ${reason}`)
   }
-  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'Domeniul API-ului nu poate fi rezolvat (DNS).', true, `base url: ${reason}`)
-  return new ConnectionError('invalid_url', 'Adresa API-ului nu este validă (doar https, fără port neobișnuit).', false, `base url: ${reason}`)
+  if (/does not resolve/.test(reason)) return new ConnectionError('unreachable', 'The API domain cannot be resolved (DNS).', true, `base url: ${reason}`)
+  return new ConnectionError('invalid_url', 'The API address is not valid (https only, no unusual port).', false, `base url: ${reason}`)
 }
 
 function transportFailure(err: StoreHttpError, operation: string): ConnectionError {
   switch (err.code) {
     case 'timeout':
-      return new ConnectionError('timeout', 'API-ul magazinului nu a răspuns la timp.', true, `custom ${operation}: timeout`)
+      return new ConnectionError('timeout', 'The store API did not respond in time.', true, `custom ${operation}: timeout`)
     case 'redirect':
-      return new ConnectionError('redirect', 'API-ul redirecționează către altă adresă; folosește adresa finală (https).', false, `custom ${operation}: redirect ${err.status ?? ''}`.trim())
+      return new ConnectionError('redirect', 'The API redirects to another address; use the final address (https).', false, `custom ${operation}: redirect ${err.status ?? ''}`.trim())
     case 'too_large':
-      return new ConnectionError('invalid_response', 'Răspunsul API-ului este prea mare.', false, `custom ${operation}: response too large`)
+      return new ConnectionError('invalid_response', 'The API response is too large.', false, `custom ${operation}: response too large`)
     case 'network':
     case 'http':
-      return new ConnectionError('unreachable', 'API-ul magazinului nu a putut fi contactat.', true, `custom ${operation}: ${err.code}`)
+      return new ConnectionError('unreachable', 'The store API could not be reached.', true, `custom ${operation}: ${err.code}`)
   }
 }
 
 /** Classifies a non-2xx answer. The body is never echoed: only the status reaches the detail. */
 function httpFailure(res: ApiResponse, operation: string): ConnectionError {
   const detail = `custom ${operation}: HTTP ${res.status}`
-  if (res.status === 401) return new ConnectionError('unauthorized', 'API-ul a respins autentificarea (401). Verifică schema și token-ul.', false, detail)
-  if (res.status === 403) return new ConnectionError('forbidden', 'API-ul a refuzat accesul (403): token-ul nu are drepturile necesare.', false, detail)
+  if (res.status === 401) return new ConnectionError('unauthorized', 'The API rejected the authentication (401). Check the scheme and the token.', false, detail)
+  if (res.status === 403) return new ConnectionError('forbidden', 'The API refused access (403): the token lacks the required permissions.', false, detail)
   if (res.status === 404 || looksLikeHtml(res)) {
-    return new ConnectionError('not_a_store', 'La această adresă nu răspunde un API conform contractului (GET /health). Verifică adresa de bază.', false, detail)
+    return new ConnectionError('not_a_store', 'No API following the contract answers at this address (GET /health). Check the base address.', false, detail)
   }
-  if (res.status === 429) return new ConnectionError('rate_limited', 'API-ul limitează cererile; încearcă din nou în câteva minute.', true, detail)
-  if (res.status >= 500) return new ConnectionError('unreachable', 'API-ul a răspuns cu o eroare de server; încearcă din nou.', true, detail)
-  return new ConnectionError('invalid_response', 'API-ul a răspuns neașteptat.', false, detail)
+  if (res.status === 429) return new ConnectionError('rate_limited', 'The API is rate limiting requests; try again in a few minutes.', true, detail)
+  if (res.status >= 500) return new ConnectionError('unreachable', 'The API answered with a server error; try again.', true, detail)
+  return new ConnectionError('invalid_response', 'The API answered unexpectedly.', false, detail)
 }
 
 function invalidResponse(operation: string, what: string): ConnectionError {
-  return new ConnectionError('invalid_response', 'Răspunsul API-ului nu are formatul așteptat.', false, `custom ${operation}: ${what}`)
+  return new ConnectionError('invalid_response', 'The API response does not have the expected format.', false, `custom ${operation}: ${what}`)
 }
 
 /** Zod issues as "path: code" (field names and codes only; never a received value). */
@@ -393,7 +393,7 @@ function describeIssues(error: z.ZodError, max = 3): string {
 
 /** A record that does not follow the contract; the field path helps the merchant fix their endpoint. */
 function contractViolation(operation: string, what: string, issues: string): ConnectionError {
-  return new ConnectionError('invalid_response', `${what} nu respectă contractul (${issues}).`, false, `custom ${operation}: ${issues}`)
+  return new ConnectionError('invalid_response', `${what} does not follow the contract (${issues}).`, false, `custom ${operation}: ${issues}`)
 }
 
 async function apiRequest(deps: CustomAdapterDeps, ctx: ApiContext, operation: string, req: ApiRequest): Promise<ApiResponse> {
@@ -798,7 +798,7 @@ interface ListPage {
   nextCursor: string | null
 }
 
-const PROBE_LABELS: Record<SyncResource, string> = { orders: 'Prima comandă', customers: 'Primul client', products: 'Primul produs', carts: 'Primul coș' }
+const PROBE_LABELS: Record<SyncResource, string> = { orders: 'The first order', customers: 'The first customer', products: 'The first product', carts: 'The first cart' }
 
 /**
  * A declared list endpoint that does not answer 200 JSON at connection time.
@@ -808,14 +808,14 @@ const PROBE_LABELS: Record<SyncResource, string> = { orders: 'Prima comandă', c
 function probeFailure(resource: SyncResource, res: ApiResponse): ConnectionError {
   const endpoint = `GET /${resource}`
   const detail = `custom ${resource}.probe: HTTP ${res.status}`
-  if (res.status === 401) return new ConnectionError('unauthorized', `API-ul a respins autentificarea (401) la ${endpoint}. Verifică schema și token-ul.`, false, detail)
-  if (res.status === 403) return new ConnectionError('forbidden', `API-ul a refuzat accesul (403) la ${endpoint}: token-ul nu are drepturile necesare.`, false, detail)
-  if (res.status === 429) return new ConnectionError('rate_limited', `API-ul limitează cererile (429) la ${endpoint}; încearcă din nou în câteva minute.`, true, detail)
-  if (res.status >= 500) return new ConnectionError('unreachable', `${endpoint} a răspuns cu o eroare de server (${res.status}); încearcă din nou.`, true, detail)
-  const why = resource === 'orders' ? 'conectorul are nevoie de el' : `/health raportează capabilities.${resource}=true`
+  if (res.status === 401) return new ConnectionError('unauthorized', `The API rejected the authentication (401) at ${endpoint}. Check the scheme and the token.`, false, detail)
+  if (res.status === 403) return new ConnectionError('forbidden', `The API refused access (403) at ${endpoint}: the token lacks the required permissions.`, false, detail)
+  if (res.status === 429) return new ConnectionError('rate_limited', `The API is rate limiting requests (429) at ${endpoint}; try again in a few minutes.`, true, detail)
+  if (res.status >= 500) return new ConnectionError('unreachable', `${endpoint} answered with a server error (${res.status}); try again.`, true, detail)
+  const why = resource === 'orders' ? 'the connector requires it' : `/health reports capabilities.${resource}=true`
   return new ConnectionError(
     'invalid_response',
-    `${endpoint} nu răspunde conform contractului (HTTP ${res.status}${looksLikeHtml(res) ? ', HTML' : ''}) deși ${why}. Implementează endpoint-ul sau declară capabilitatea false în GET /health.`,
+    `${endpoint} does not answer according to the contract (HTTP ${res.status}${looksLikeHtml(res) ? ', HTML' : ''}) although ${why}. Implement the endpoint or declare the capability false in GET /health.`,
     false,
     detail,
   )
@@ -908,16 +908,16 @@ export function createCustomAdapter(deps: CustomAdapterDeps = {}): CommerceAdapt
       if (res.status !== 200 || looksLikeHtml(res)) throw httpFailure(res, 'health')
       const body = obj(res.json)
       if (!Object.keys(body).length) throw invalidResponse('health', 'not a JSON object')
-      if (body.ok === false) throw new ConnectionError('invalid_response', 'API-ul raportează că nu este pregătit (ok=false în GET /health).', true, 'custom health: ok=false')
+      if (body.ok === false) throw new ConnectionError('invalid_response', 'The API reports that it is not ready (ok=false in GET /health).', true, 'custom health: ok=false')
       const version = typeof body.contract_version === 'string' ? body.contract_version.trim() : ''
       if (version !== CUSTOM_CONTRACT_VERSION) {
-        const shown = /^[A-Za-z0-9.-]{1,16}$/.test(version) ? version : 'necunoscută'
-        throw new ConnectionError('api_version_unsupported', `Versiunea de contract raportată de API (${shown}) nu este acceptată: este necesară versiunea ${CUSTOM_CONTRACT_VERSION}.`, false, `custom health: contract_version ${shown}`)
+        const shown = /^[A-Za-z0-9.-]{1,16}$/.test(version) ? version : 'unknown'
+        throw new ConnectionError('api_version_unsupported', `The contract version reported by the API (${shown}) is not accepted: version ${CUSTOM_CONTRACT_VERSION} is required.`, false, `custom health: contract_version ${shown}`)
       }
       const health = CustomHealthSchema.safeParse(body)
-      if (!health.success) throw contractViolation('health', 'Răspunsul GET /health', describeIssues(health.error))
+      if (!health.success) throw contractViolation('health', 'The GET /health response', describeIssues(health.error))
       if (!health.data.capabilities.orders) {
-        throw new ConnectionError('invalid_response', 'API-ul raportează că nu expune comenzi (capabilities.orders=false): conectorul are nevoie de GET /orders.', false, 'custom health: orders=false')
+        throw new ConnectionError('invalid_response', 'The API reports that it does not expose orders (capabilities.orders=false): the connector requires GET /orders.', false, 'custom health: orders=false')
       }
 
       // 2. Every list endpoint /health declares must exist and its first record must follow the contract: a
@@ -930,7 +930,7 @@ export function createCustomAdapter(deps: CustomAdapterDeps = {}): CommerceAdapt
         const page = parseListEnvelope(res, operation)
         if (page.items.length) {
           const issues = recordIssues(resource, page.items[0])
-          if (issues) throw contractViolation(operation, `${PROBE_LABELS[resource]} din GET /${resource}`, issues)
+          if (issues) throw contractViolation(operation, `${PROBE_LABELS[resource]} from GET /${resource}`, issues)
         }
         return page.items.length
       }
@@ -972,7 +972,7 @@ export function createCustomAdapter(deps: CustomAdapterDeps = {}): CommerceAdapt
 
     async registerWebhooks(connection: AdapterConnection, log: Logger): Promise<WebhookRegistration[]> {
       if (!connection.webhookUrl) {
-        throw new ConnectionError('not_configured', 'Adresa publică pentru webhook-uri nu este configurată pe platformă.', false, 'custom webhooks: no webhook url')
+        throw new ConnectionError('not_configured', 'The public webhook address is not configured on the platform.', false, 'custom webhooks: no webhook url')
       }
       const secrets = parseSecrets(connection.secrets)
       // Nothing can be created on the merchant's side: deliveries are theirs to send. Registrations recorded as
@@ -1000,7 +1000,7 @@ export function createCustomAdapter(deps: CustomAdapterDeps = {}): CommerceAdapt
       if (checkpoint.pages >= CUSTOM_MAX_PAGES_PER_PASS) {
         throw new ConnectionError(
           'invalid_response',
-          `Paginarea GET /${resource} nu se încheie după ${CUSTOM_MAX_PAGES_PER_PASS} de pagini: next_cursor trebuie să devină null la ultima pagină.`,
+          `Paging GET /${resource} does not end after ${CUSTOM_MAX_PAGES_PER_PASS} pages: next_cursor must become null on the last page.`,
           false,
           `custom ${operation}: page budget exhausted (${checkpoint.pages})`,
         )

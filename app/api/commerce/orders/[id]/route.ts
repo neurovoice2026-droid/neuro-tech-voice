@@ -16,10 +16,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const ctx = await requireCommerceOrg(log)
     await enforceRateLimit(RATE_LIMITS.commerceRead, ctx.org.id)
     const { id } = await params
-    if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'Comanda nu există.', 404)
+    if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'This order does not exist.', 404)
     const { data, error } = await ctx.db.from('commerce_orders').select(ORDER_COLUMNS).eq('id', id).eq('org_id', ctx.org.id).maybeSingle()
     if (error) throw new Error(`commerce_orders read failed: ${error.message}`)
-    if (!data) throw new RequestError('not_found', 'Comanda nu există.', 404)
+    if (!data) throw new RequestError('not_found', 'This order does not exist.', 404)
     const order = data as OrderRow
     const [items, runs] = await Promise.all([
       ctx.db.from('commerce_order_items').select('name, sku, quantity, unit_price, total').eq('order_id', order.id).eq('org_id', ctx.org.id).order('created_at', { ascending: true }).limit(200),

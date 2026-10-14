@@ -314,10 +314,15 @@ function text(v: unknown, max = 500): string | null {
   return typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null
 }
 
+/**
+ * "1 × A, 2 × B +3": the first six lines and a count of the rest. Language-neutral on purpose:
+ * the same string is the Items column of the dashboard and the {{items_summary}} the agent
+ * reads aloud in the store's language.
+ */
 function itemsSummary(items: Array<{ name: string; quantity: number }>): string | null {
   if (!items.length) return null
   const parts = items.slice(0, 6).map((i) => `${Number.isFinite(i.quantity) ? i.quantity : 1} × ${i.name.slice(0, 60)}`)
-  const more = items.length > 6 ? ` și încă ${items.length - 6}` : ''
+  const more = items.length > 6 ? ` +${items.length - 6}` : ''
   return `${parts.join(', ')}${more}`.slice(0, 500)
 }
 
@@ -685,7 +690,7 @@ export function customerDto(row: CustomerRow): CustomerListDto {
   const name = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
   return {
     id: row.id,
-    name: name || (row.external_id.startsWith('phone:') ? 'Client fără cont' : `Client ${row.external_id.slice(0, 12)}`),
+    name: name || (row.external_id.startsWith('phone:') ? 'Guest customer' : `Customer ${row.external_id.slice(0, 12)}`),
     email_masked: maskEmail(row.email),
     phone_masked: row.phone_e164 ? maskPhone(row.phone_e164) : null,
     has_phone: !!row.phone_e164,
@@ -795,7 +800,7 @@ function one<T>(v: T | T[] | null | undefined): T | null {
 export function runReference(row: RunRow): string {
   const order = one(row.commerce_orders)
   if (order?.order_number) return `#${order.order_number}`
-  if (row.automation_type === 'abandoned_cart') return `coș ${row.external_ref.slice(-6)}`
+  if (row.automation_type === 'abandoned_cart') return `cart ${row.external_ref.slice(-6)}`
   return `#${row.external_ref.slice(-8)}`
 }
 

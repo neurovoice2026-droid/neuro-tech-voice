@@ -1,9 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Frame, PillLink } from "@/components/site/product/primitives";
 import { HOME_PRICING } from "@/lib/pages/home/pricing";
+import {
+  AUDIENCES,
+  DEFAULT_AUDIENCE,
+  audienceFromUrl,
+  withAudience,
+  type Audience,
+} from "@/lib/pages/home/pricing-audience";
 import {
   CALLS_DEFAULT,
   CALLS_MAX,
@@ -16,21 +32,31 @@ import {
   planBands,
   type PlanId,
 } from "@/lib/pages/home/pricing-math";
+import { STORE_PRICING, STORE_SIGNUP_HREF } from "@/lib/pages/home/store-pricing";
 import { HomeHeading } from "./heading";
 import { ChipRail, RoundButton, Segmented, Sizer, centreInRail, useRovingRadio, CHIP, RING_LIGHT } from "./controls";
 import { useStageMotion } from "./motion";
 import { PLAN_LIGHTS } from "./palettes";
 import { TYPE, WEIGHT } from "./type";
 import { Receipt } from "./pricing-receipt";
-import { PlanCards, PlanJump } from "./pricing-cards";
+import { PlanCards, PlanJump, serviceJumpChips } from "./pricing-cards";
+import { StoreCalls, StorePlanCards, storeJumpChips } from "./pricing-store-cards";
 import "./pricing.css";
 
 /* ------------------------------------------------------------------ *
  * #pricing — what will I actually pay?
  *
- * The plans first, as colour: five listed cards and Enterprise, each its
- * own pearl mesh, flowing (pricing-cards.tsx), Pro the magenta one in the
- * middle.
+ * Two audiences, one section. A segmented control by the heading says
+ * who the plans are for: service businesses (the default) or online
+ * stores. The choice lives in the URL (`?audience=stores`,
+ * pricing-audience.ts), so a link can open the section on the store plans
+ * and the reader can pass on what they are looking at; the server's
+ * markup is always the default, and the browser's own URL takes over
+ * once it is hydrated.
+ *
+ * Service businesses get the plans first, as colour: five listed cards
+ * and Enterprise, each its own pearl mesh, flowing (pricing-cards.tsx),
+ * Pro the magenta one in the middle.
  * Then one question (calls on a normal day) and everything else is
  * arithmetic done in front of the reader: the receipt adds the plan fee to
  * that plan's own rate past its allowance, the estimator takes on the
@@ -39,17 +65,24 @@ import "./pricing.css";
  * so. Every figure comes from `estimate()`, `planBands()` and
  * `HOME_PLANS`; none is typed here.
  *
+ * Online stores get the store plans on the same cards
+ * (pricing-store-cards.tsx), read off the backend's plan table, and in
+ * place of the estimator what the calls do. The monthly/yearly switch
+ * works the same on both.
+ *
  * Motion is small and all of it time-based: the receipt's figures run to
  * their new values (0.35s, snapped to the cent); a line whose wording
  * changes rolls in 6px; the slider's plan bands slide when Yearly moves
  * their handovers (0.45s, CSS); the estimator's colours ease (0.3s). On a
  * phone the rail brings the card that fits into view when the fit moves.
  * Reduced motion: all of it instant. The server's markup is the finished
- * state: CALLS_DEFAULT calls, Starter, monthly, nothing ringed.
+ * state: service plans, CALLS_DEFAULT calls, Starter, monthly, nothing
+ * ringed.
  * ------------------------------------------------------------------ */
 
 const P = HOME_PRICING;
 const E = P.estimator;
+const S = STORE_PRICING;
 
 // NEW: accessible names the section needs that no page already says.
 const BILLING_LABEL = "Billing";
@@ -96,13 +129,55 @@ function trackStyle(bands: Bands): CSSProperties {
 /** The longest band sentence, to hold the line's height (Sizer). */
 const LONGEST_BAND = E.band("Business", 42, 75, false, false);
 
-export function Pricing() {
+/* ─── The audience, kept in the URL. ──────────────────────────────── *
+ * One store for the section: the URL is read on every change of it, the
+ * reader's own switch writes it back (replaceState, which the app router
+ * is told about) and tells the subscribers. Back/forward and a hash
+ * change (a #your-bill link means the service plans) read it again.
+ */
+const audienceListeners = new Set<() => void>();
+
+function subscribeAudience(onChange: () => void) {
+  audienceListeners.add(onChange);
+  window.addEventListener("popstate", onChange);
+  window.addEventListener("hashchange", onChange);
+  return () => {
+    audienceListeners.delete(onChange);
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener("hashchange", onChange);
+  };
+}
+
+const readAudience = () => audienceFromUrl(window.location.search, window.location.hash);
+
+function writeAudience(audience: Audience) {
+  window.history.replaceState(window.history.state, "", withAudience(window.location.href, audience));
+  audienceListeners.forEach((notify) => notify());
+}
+
+/** The audience the URL names; `initial` on the server and until the browser has hydrated. */
+function useAudience(initial: Audience) {
+  return useSyncExternalStore(subscribeAudience, readAudience, () => initial);
+}
+
+export function Pricing({
+  initialAudience = DEFAULT_AUDIENCE,
+}: {
+  /** What the server's markup shows; the browser's URL takes over on the client. */
+  initialAudience?: Audience;
+}) {
   const labelId = useId();
+  // The stage holds whichever panel the audience gets, so the section's
+  // motion is wired once; the estimator itself is `billRef`, for the jump.
   const stageRef = useRef<HTMLDivElement>(null);
+  const billRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLOListElement>(null);
   const m = useStageMotion(stageRef, { id: "pricing" });
   const { markInteracted } = m;
   const quick = m.reduce || m.tier === "lite";
+
+  const audience = useAudience(initialAudience);
+  const stores = audience === "stores";
 
   const [calls, setCalls] = useState<number>(CALLS_DEFAULT);
   const [annual, setAnnual] = useState(false);
@@ -144,12 +219,26 @@ export function Pricing() {
   // (the reader's first change) and whenever the fit moves after that.
   const lastFit = useRef<PlanId | null>(null);
   useEffect(() => {
-    if (!changed || lastFit.current === est.plan.id) return;
+    if (stores || !changed || lastFit.current === est.plan.id) return;
     lastFit.current = est.plan.id;
     const rail = railRef.current;
-    const li = rail?.querySelector<HTMLElement>(`[data-plan="${est.plan.id}"]`);
+    const li = rail?.querySelector<HTMLElement>(`[data-card="${est.plan.id}"]`);
     if (rail && li && rail.scrollWidth > rail.clientWidth) centreInRail(rail, li, quick);
-  }, [changed, est.plan.id, quick]);
+  }, [stores, changed, est.plan.id, quick]);
+
+  // A #your-bill link clicked while the store plans were showing: the
+  // estimator was not in the page for the browser to land on, so it is
+  // brought into view here, once the service plans are back.
+  const wasStores = useRef(stores);
+  useEffect(() => {
+    const was = wasStores.current;
+    wasStores.current = stores;
+    if (!was || stores || window.location.hash !== "#your-bill") return;
+    const el = billRef.current;
+    if (!el) return;
+    el.scrollIntoView({ block: "start", behavior: quick ? "instant" : "smooth" });
+    el.focus({ preventScroll: true });
+  }, [stores, quick]);
 
   const railPresets = useRef<HTMLDivElement>(null);
   const preset = useRovingRadio({
@@ -169,6 +258,8 @@ export function Pricing() {
   // The handover notches, one at the start of every band but the first.
   const notches = bands.slice(1).map((b) => ({ id: b.id, left: onTrack(share(b.from - 0.5)) }));
 
+  const facts: readonly { title: string; body: string }[] = stores ? S.facts : P.facts;
+
   return (
     <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-28">
       <Frame>
@@ -178,180 +269,199 @@ export function Pricing() {
           title={P.title}
           titleKey={P.key}
           keyTone="spectrum"
-          sub={P.sub}
+          sub={stores ? S.sub : P.sub}
           action={
-            <div className="flex items-center gap-3">
-              <Segmented
-                label={BILLING_LABEL}
-                options={BILLING}
-                value={annual ? "yearly" : "monthly"}
-                onChange={(v) => change(calls, v === "yearly")}
-              />
-              <span
-                className={cn(
-                  "inline-flex h-7 items-center rounded-full px-3 text-[13px] leading-[18px] font-medium transition-[background-color,color] duration-200",
-                  annual ? "bg-(--home-electric) text-white" : "bg-[rgb(124_58_237/0.12)] text-(--home-violet)",
-                )}
-                translate="no"
-              >
-                {P.annualNote}
-              </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <Segmented label={S.audience.label} options={AUDIENCES} value={audience} onChange={writeAudience} />
+              <div className="flex items-center gap-3">
+                <Segmented
+                  label={BILLING_LABEL}
+                  options={BILLING}
+                  value={annual ? "yearly" : "monthly"}
+                  onChange={(v) => change(calls, v === "yearly")}
+                />
+                <span
+                  className={cn(
+                    "inline-flex h-7 items-center rounded-full px-3 text-[13px] leading-[18px] font-medium transition-[background-color,color] duration-200",
+                    annual ? "bg-(--home-electric) text-white" : "bg-[rgb(124_58_237/0.12)] text-(--home-violet)",
+                  )}
+                  translate="no"
+                >
+                  {P.annualNote}
+                </span>
+              </div>
             </div>
           }
         />
 
-        <PlanJump annual={annual} railRef={railRef} reduce={quick} />
-
-        <PlanCards
-          annual={annual}
-          changed={changed}
-          fitId={est.plan.id}
-          calls={calls}
-          bands={bands}
+        {/* Mounted afresh with each rail, so the chips observe the cards that are there. */}
+        <PlanJump
+          key={audience}
+          chips={stores ? storeJumpChips(annual) : serviceJumpChips(annual)}
           railRef={railRef}
+          reduce={quick}
         />
+
+        {stores ? (
+          <StorePlanCards annual={annual} changed={changed} railRef={railRef} />
+        ) : (
+          <PlanCards
+            annual={annual}
+            changed={changed}
+            fitId={est.plan.id}
+            calls={calls}
+            bands={bands}
+            railRef={railRef}
+          />
+        )}
         <p className="mt-4 text-[13px] leading-[18px] text-pp-muted">
-          {P.vat} {P.footnote}
+          {P.vat} {stores ? S.footnote : P.footnote}
         </p>
 
-        {/* #your-bill: the FAQ's "Work out the bill" lands here. Focusable
-            from script only, so the jump carries keyboard focus with it.
-            It wears the colours of the plan that is the lowest bill. */}
-        <div
-          id="your-bill"
-          tabIndex={-1}
-          ref={stageRef}
-          data-plan={est.plan.id}
-          className="home-plan-light home-pricing-panel home-rise mt-14 scroll-mt-28 rounded-[28px] p-5 outline-none sm:p-7 lg:mt-16 lg:p-8 xl:p-10"
-        >
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-10">
-            <div className="flex min-w-0 flex-col">
-              <h3 className={cn(TYPE.h3, "text-pp-ink")} style={{ fontWeight: WEIGHT.h3 }}>
-                {E.title}
-              </h3>
-              <p id={labelId} className="mt-4 text-[13px] leading-[18px] font-medium text-pp-muted">
-                {E.label}
-              </p>
+        <div ref={stageRef}>
+        {stores ? (
+          <StoreCalls />
+        ) : (
+          /* #your-bill: the FAQ's "Work out the bill" lands here. Focusable
+             from script only, so the jump carries keyboard focus with it.
+             It wears the colours of the plan that is the lowest bill. */
+          <div
+            id="your-bill"
+            tabIndex={-1}
+            ref={billRef}
+            data-plan={est.plan.id}
+            className="home-plan-light home-pricing-panel home-rise mt-14 scroll-mt-28 rounded-[28px] p-5 outline-none sm:p-7 lg:mt-16 lg:p-8 xl:p-10"
+          >
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-10">
+              <div className="flex min-w-0 flex-col">
+                <h3 className={cn(TYPE.h3, "text-pp-ink")} style={{ fontWeight: WEIGHT.h3 }}>
+                  {E.title}
+                </h3>
+                <p id={labelId} className="mt-4 text-[13px] leading-[18px] font-medium text-pp-muted">
+                  {E.label}
+                </p>
 
-              <div className="mt-3 flex items-center gap-3">
-                <RoundButton
-                  icon="minus"
-                  size={44}
-                  label={E.fewer}
-                  onClick={() => change(calls - 1, annual)}
-                  ariaDisabled={calls <= CALLS_MIN}
-                />
-                <span
-                  aria-hidden
-                  className="home-pricing-tint pp-display min-w-[3ch] text-center text-[48px] leading-[52px] tracking-[-0.02em] text-(--plan-ink) tabular-nums sm:text-[56px] sm:leading-[60px]"
-                  style={{ fontWeight: WEIGHT.display }}
-                >
-                  {calls}
-                </span>
-                <RoundButton
-                  icon="plus"
-                  size={44}
-                  label={E.more}
-                  onClick={() => change(calls + 1, annual)}
-                  ariaDisabled={calls >= CALLS_MAX}
-                />
-              </div>
-
-              <ChipRail labelledBy={labelId} railRef={railPresets} className="mt-5">
-                {E.presets.map((p, i) => {
-                  const on = p.callsDay === calls;
-                  return (
-                    <button
-                      key={p.label}
-                      type="button"
-                      {...preset.getItemProps(i)}
-                      data-preset={i}
-                      className={cn(
-                        "relative inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm whitespace-nowrap",
-                        "before:absolute before:inset-x-0 before:-inset-y-1",
-                        CHIP.ease,
-                        RING_LIGHT,
-                        on ? "bg-(--plan-ink) text-white" : "pp-shadow-btn bg-white text-pp-ink hover:bg-[#fbfaff]",
-                      )}
-                    >
-                      {!on && (
-                        <span
-                          aria-hidden
-                          data-plan={estimate(p.callsDay, annual).plan.id}
-                          className="home-plan-light home-plan-dot size-1.5 shrink-0 rounded-full"
-                        />
-                      )}
-                      {p.label}
-                      <span className={cn("transition-colors duration-200", on ? "text-white/85" : "text-pp-muted")}>
-                        {` · ${p.callsDay} ${E.perDayUnit}`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </ChipRail>
-
-              <div className="mt-7 lg:mt-auto lg:pt-8">
-                <div className="relative">
-                  {/* A notch at each handover, so the bands read as zones. It
-                      sits under the input: the track hides its middle and
-                      the thumb passes over it. */}
-                  <div aria-hidden className="pointer-events-none absolute inset-0">
-                    {notches.map((n) => (
-                      <span
-                        key={n.id}
-                        className="home-pricing-tick absolute top-1/2 h-3.5 w-px -translate-x-1/2 -translate-y-1/2 bg-[rgb(24_16_40/0.28)]"
-                        style={{ left: n.left }}
-                      />
-                    ))}
-                  </div>
-                  <input
-                    type="range"
-                    min={CALLS_MIN}
-                    max={CALLS_MAX}
-                    step={1}
-                    value={calls}
-                    onChange={(ev) => change(Number(ev.currentTarget.value), annual)}
-                    aria-labelledby={labelId}
-                    aria-valuetext={valueText(calls, est.minutes)}
-                    className="home-range home-pricing-range relative"
-                    style={track}
+                <div className="mt-3 flex items-center gap-3">
+                  <RoundButton
+                    icon="minus"
+                    size={44}
+                    label={E.fewer}
+                    onClick={() => change(calls - 1, annual)}
+                    ariaDisabled={calls <= CALLS_MIN}
+                  />
+                  <span
+                    aria-hidden
+                    className="home-pricing-tint pp-display min-w-[3ch] text-center text-[48px] leading-[52px] tracking-[-0.02em] text-(--plan-ink) tabular-nums sm:text-[56px] sm:leading-[60px]"
+                    style={{ fontWeight: WEIGHT.display }}
+                  >
+                    {calls}
+                  </span>
+                  <RoundButton
+                    icon="plus"
+                    size={44}
+                    label={E.more}
+                    onClick={() => change(calls + 1, annual)}
+                    ariaDisabled={calls >= CALLS_MAX}
                   />
                 </div>
-                {/* Which plan is the cheapest around here, in words. */}
-                <p className="mt-2 grid text-[14px] leading-5 text-pp-ink">
-                  <Sizer as="span">{LONGEST_BAND}</Sizer>
-                  <span className="[grid-area:1/1]">
-                    {band && (
-                      <>
-                        <span className="home-pricing-tint font-medium text-(--plan-ink)">{est.plan.name}</span>
-                        {E.band("", band.from, band.to, bandAt === 0, bandAt === bands.length - 1)}
-                      </>
-                    )}
-                  </span>
-                </p>
-                <p className="mt-3 text-[13px] leading-[18px] text-pp-muted">
-                  {E.beyond.pre}
-                  <a href={HOME_ENTERPRISE.cta.href} className={cn("home-link rounded-sm", RING_LIGHT)}>
-                    {E.beyond.link}
-                  </a>
-                  {E.beyond.post}
-                </p>
-              </div>
-            </div>
 
-            <Receipt
-              estimate={est}
-              annual={annual}
-              kit={m.reduce ? null : m.kit}
-              reduce={m.reduce}
-              changed={changed}
-              announce={said}
-            />
+                <ChipRail labelledBy={labelId} railRef={railPresets} className="mt-5">
+                  {E.presets.map((p, i) => {
+                    const on = p.callsDay === calls;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        {...preset.getItemProps(i)}
+                        data-preset={i}
+                        className={cn(
+                          "relative inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm whitespace-nowrap",
+                          "before:absolute before:inset-x-0 before:-inset-y-1",
+                          CHIP.ease,
+                          RING_LIGHT,
+                          on ? "bg-(--plan-ink) text-white" : "pp-shadow-btn bg-white text-pp-ink hover:bg-[#fbfaff]",
+                        )}
+                      >
+                        {!on && (
+                          <span
+                            aria-hidden
+                            data-plan={estimate(p.callsDay, annual).plan.id}
+                            className="home-plan-light home-plan-dot size-1.5 shrink-0 rounded-full"
+                          />
+                        )}
+                        {p.label}
+                        <span className={cn("transition-colors duration-200", on ? "text-white/85" : "text-pp-muted")}>
+                          {` · ${p.callsDay} ${E.perDayUnit}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </ChipRail>
+
+                <div className="mt-7 lg:mt-auto lg:pt-8">
+                  <div className="relative">
+                    {/* A notch at each handover, so the bands read as zones. It
+                        sits under the input: the track hides its middle and
+                        the thumb passes over it. */}
+                    <div aria-hidden className="pointer-events-none absolute inset-0">
+                      {notches.map((n) => (
+                        <span
+                          key={n.id}
+                          className="home-pricing-tick absolute top-1/2 h-3.5 w-px -translate-x-1/2 -translate-y-1/2 bg-[rgb(24_16_40/0.28)]"
+                          style={{ left: n.left }}
+                        />
+                      ))}
+                    </div>
+                    <input
+                      type="range"
+                      min={CALLS_MIN}
+                      max={CALLS_MAX}
+                      step={1}
+                      value={calls}
+                      onChange={(ev) => change(Number(ev.currentTarget.value), annual)}
+                      aria-labelledby={labelId}
+                      aria-valuetext={valueText(calls, est.minutes)}
+                      className="home-range home-pricing-range relative"
+                      style={track}
+                    />
+                  </div>
+                  {/* Which plan is the cheapest around here, in words. */}
+                  <p className="mt-2 grid text-[14px] leading-5 text-pp-ink">
+                    <Sizer as="span">{LONGEST_BAND}</Sizer>
+                    <span className="[grid-area:1/1]">
+                      {band && (
+                        <>
+                          <span className="home-pricing-tint font-medium text-(--plan-ink)">{est.plan.name}</span>
+                          {E.band("", band.from, band.to, bandAt === 0, bandAt === bands.length - 1)}
+                        </>
+                      )}
+                    </span>
+                  </p>
+                  <p className="mt-3 text-[13px] leading-[18px] text-pp-muted">
+                    {E.beyond.pre}
+                    <a href={HOME_ENTERPRISE.cta.href} className={cn("home-link rounded-sm", RING_LIGHT)}>
+                      {E.beyond.link}
+                    </a>
+                    {E.beyond.post}
+                  </p>
+                </div>
+              </div>
+
+              <Receipt
+                estimate={est}
+                annual={annual}
+                kit={m.reduce ? null : m.kit}
+                reduce={m.reduce}
+                changed={changed}
+                announce={said}
+              />
+            </div>
           </div>
+        )}
         </div>
 
         <ul className="mt-10 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
-          {P.facts.map((f) => (
+          {facts.map((f) => (
             <li key={f.title} className="flex gap-3">
               <span
                 aria-hidden
@@ -380,9 +490,11 @@ export function Pricing() {
           <h3 className={cn(TYPE.h3, "text-pretty")} style={{ fontWeight: WEIGHT.h3 }}>
             {P.trial.headline}
           </h3>
-          <p className={cn(TYPE.body, "max-w-[600px] text-pretty text-pp-ink/80")}>{P.trial.body}</p>
+          <p className={cn(TYPE.body, "max-w-[600px] text-pretty text-pp-ink/80")}>
+            {stores ? S.trial.body : P.trial.body}
+          </p>
           <div className="mt-2 lg:mt-0">
-            <PillLink href={P.trial.href}>{P.trial.cta}</PillLink>
+            <PillLink href={stores ? STORE_SIGNUP_HREF : P.trial.href}>{P.trial.cta}</PillLink>
           </div>
         </div>
 
@@ -398,7 +510,9 @@ export function Pricing() {
                 </svg>
               </span>
             </summary>
-            <p className={cn(TYPE.body, "max-w-[640px] pb-6 text-pretty text-pp-ink/80")}>{P.note.body}</p>
+            <p className={cn(TYPE.body, "max-w-[640px] pb-6 text-pretty text-pp-ink/80")}>
+              {stores ? S.note : P.note.body}
+            </p>
           </details>
         </div>
       </Frame>

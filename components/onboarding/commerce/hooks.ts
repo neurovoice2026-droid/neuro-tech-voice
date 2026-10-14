@@ -9,6 +9,9 @@ import { useCommerceOnboardingStore, type CommerceOnboardingStateDto } from '@/s
 import type { ConnectionDto } from '@/lib/commerce/types'
 import { commerceErrorMessage, isAbort, requestJson } from './api'
 
+const STATE_LOAD_FAILED = 'Your store setup could not be loaded.'
+const CONNECTION_READ_FAILED = 'The connection status could not be read.'
+
 // ─── GET /api/commerce/onboarding/state → store ───────────────────────────────
 
 interface StateLoad {
@@ -26,7 +29,7 @@ export function useCommerceOnboardingState() {
     const ctrl = new AbortController()
     requestJson<CommerceOnboardingStateDto>('/api/commerce/onboarding/state', {
       signal: ctrl.signal,
-      fallback: 'Configurarea magazinului nu a putut fi încărcată.',
+      fallback: STATE_LOAD_FAILED,
     })
       .then((dto) => {
         if (ctrl.signal.aborted) return
@@ -36,7 +39,7 @@ export function useCommerceOnboardingState() {
       .catch((err: unknown) => {
         // Aborted: unmounted or replaced by a newer refetch.
         if (ctrl.signal.aborted || isAbort(err)) return
-        setLoad((prev) => ({ loaded: prev.loaded, error: commerceErrorMessage(err, 'Configurarea magazinului nu a putut fi încărcată.') }))
+        setLoad((prev) => ({ loaded: prev.loaded, error: commerceErrorMessage(err, STATE_LOAD_FAILED) }))
       })
     return () => ctrl.abort()
   }, [hydrate, reloadKey])
@@ -48,7 +51,7 @@ export function useCommerceOnboardingState() {
 // ─── Connection polling (initial sync) ───────────────────────────────────────
 
 export const CONNECTION_POLL_MS = 3_000
-/** After this the poll stops and the panel offers "Reîncearcă" (never a spinner that stays forever). */
+/** After this the poll stops and the panel offers "Retry" (never a spinner that stays forever). */
 export const CONNECTION_POLL_MAX_MS = 5 * 60_000
 
 /**
@@ -90,7 +93,7 @@ export function useConnectionPoll(connection: ConnectionDto | null) {
 
   useEffect(() => {
     if (!id || !busy || poll.timedOut) return
-    // The clock starts with the first tick of a busy phase (and restarts on "Reîncearcă").
+    // The clock starts with the first tick of a busy phase (and restarts on "Retry").
     if (!startedAtRef.current) startedAtRef.current = Date.now()
     const ctrl = new AbortController()
     const timer = setTimeout(() => {
@@ -100,7 +103,7 @@ export function useConnectionPoll(connection: ConnectionDto | null) {
       }
       requestJson<{ connection: ConnectionDto }>(`/api/commerce/connections/${encodeURIComponent(id)}`, {
         signal: ctrl.signal,
-        fallback: 'Starea conexiunii nu a putut fi citită.',
+        fallback: CONNECTION_READ_FAILED,
       })
         .then((data) => {
           if (ctrl.signal.aborted) return
@@ -110,7 +113,7 @@ export function useConnectionPoll(connection: ConnectionDto | null) {
         .catch((err: unknown) => {
           if (ctrl.signal.aborted || isAbort(err)) return
           // Keep polling on a transient read error; the message stays visible meanwhile.
-          setPoll({ timedOut: false, error: commerceErrorMessage(err, 'Starea conexiunii nu a putut fi citită.') })
+          setPoll({ timedOut: false, error: commerceErrorMessage(err, CONNECTION_READ_FAILED) })
         })
         .finally(() => {
           if (!ctrl.signal.aborted) setTick((t) => t + 1)

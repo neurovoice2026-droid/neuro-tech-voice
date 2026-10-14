@@ -53,14 +53,14 @@ export async function POST(request: Request) {
       .eq('id', org.id)
       .single()
     if (isMissingColumn(readErr)) {
-      throw new RequestError('not_configured', 'Alegerea tipului de afacere nu este disponibilă încă.', 503)
+      throw new RequestError('not_configured', 'Choosing a business type is not available yet.', 503)
     }
     if (readErr) throw new Error(`organizations read failed: ${readErr.message}`)
 
     if (row.onboarding_completed) {
       throw new RequestError(
         'precondition_failed',
-        'Tipul afacerii nu mai poate fi schimbat după finalizarea configurării.',
+        'The business type can no longer be changed once setup is complete.',
         409,
         { reason: 'onboarding_completed' },
       )
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     if (alreadySelected) {
       throw new RequestError(
         'precondition_failed',
-        'Tipul afacerii a fost deja ales și nu mai poate fi schimbat.',
+        'The business type has already been chosen and cannot be changed.',
         409,
         { reason: 'already_selected' },
       )

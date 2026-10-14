@@ -29,11 +29,11 @@ export async function requireCommerceOrg(log: Logger, opts: { allowAnyType?: boo
   const db = createAdminClient()
   const { data, error } = await db.from('organizations').select('business_type, commerce_profile').eq('id', ctx.org.id).maybeSingle()
   if (error) {
-    if (error.code === '42703' || error.code === 'PGRST204') throw new RequestError('not_configured', 'Funcțiile pentru magazine nu sunt disponibile încă.', 503)
+    if (error.code === '42703' || error.code === 'PGRST204') throw new RequestError('not_configured', 'Store features are not available yet.', 503)
     throw new Error(`organizations read failed: ${error.message}`)
   }
   const businessType = (data?.business_type as 'services' | 'ecommerce' | null) ?? null
-  if (!opts.allowAnyType && businessType !== 'ecommerce') throw new RequestError('forbidden', 'Această funcție este disponibilă doar magazinelor online.', 403)
+  if (!opts.allowAnyType && businessType !== 'ecommerce') throw new RequestError('forbidden', 'This feature is only available to online stores.', 403)
   return { ...ctx, db, businessType, profile: readCommerceProfile(data?.commerce_profile), log: log.child({ orgId: ctx.org.id }) }
 }
 
@@ -53,9 +53,9 @@ export const uuid = z.string().uuid()
 
 /** A connection of this organization, or 404 (never reveals other tenants' ids). */
 export async function ownedConnection(db: SupabaseClient, orgId: string, id: string): Promise<ConnectionRow> {
-  if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'Conexiunea nu există.', 404)
+  if (!uuid.safeParse(id).success) throw new RequestError('not_found', 'Connection not found.', 404)
   const row = await loadConnection(db, id, orgId)
-  if (!row) throw new RequestError('not_found', 'Conexiunea nu există.', 404)
+  if (!row) throw new RequestError('not_found', 'Connection not found.', 404)
   return row
 }
 

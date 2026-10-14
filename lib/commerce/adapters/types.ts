@@ -65,7 +65,7 @@ export type ConnectionFailureCode =
 export class ConnectionError extends Error {
   constructor(
     readonly code: ConnectionFailureCode,
-    /** Merchant-facing, Romanian, never containing a secret, a token or the raw provider body. */
+    /** Merchant-facing English text, never containing a secret, a token or the raw provider body. */
     readonly publicMessage: string,
     /** Whether a retry later could succeed (network, rate limit) or the input must change (unauthorized). */
     readonly retryable: boolean,

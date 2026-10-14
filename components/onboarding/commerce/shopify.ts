@@ -3,7 +3,7 @@
 
 const SHOP_DOMAIN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/
 
-/** "magazin", "magazin.myshopify.com" or "https://magazin.myshopify.com/" → "magazin.myshopify.com"; null when not a shop domain. */
+/** "my-store", "my-store.myshopify.com" or "https://my-store.myshopify.com/" → "my-store.myshopify.com"; null when not a shop domain. */
 export function normalizeShopDomain(raw: string): string | null {
   let value = raw.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
   if (!value) return null

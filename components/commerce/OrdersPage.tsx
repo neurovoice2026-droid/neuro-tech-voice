@@ -18,7 +18,7 @@ import { LoadMoreFooter, RecordsPanel, SearchField, filterPillClass } from './Li
 import { OrderDetailSheet } from './OrderDetailSheet'
 import { CodChip, OrderStatusChip } from './StatusChips'
 
-const STATUS_OPTIONS = [{ value: 'all', label: 'Toate stările' }, ...ORDER_STATUSES.map((s) => ({ value: s, label: ORDER_STATUS_LABEL[s] }))]
+const STATUS_OPTIONS = [{ value: 'all', label: 'All statuses' }, ...ORDER_STATUSES.map((s) => ({ value: s, label: ORDER_STATUS_LABEL[s] }))]
 
 export function OrdersPage() {
   const { connection, isLoading: connectionLoading, error: connectionError, refetch: refetchConnection } = useCurrentConnection()
@@ -39,22 +39,22 @@ export function OrdersPage() {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Magazin"
-        title="Comenzi"
-        description="Comenzile sincronizate din magazin, cu metoda de plată și apelurile automate legate de fiecare."
+        eyebrow="Store"
+        title="Orders"
+        description="The orders synced from the store, with their payment method and the automated calls tied to each."
         meta={
           typeof orders.total === 'number' ? (
-            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(orders.total)} comenzi</span>
+            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{formatCount(orders.total)} orders</span>
           ) : undefined
         }
       />
 
       <div className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <SearchField value={search} onChange={setSearch} placeholder="Caută după numărul comenzii, nume sau oraș…" label="Caută comenzi" />
+          <SearchField value={search} onChange={setSearch} placeholder="Search by order number, name or city…" label="Search orders" />
           <div className="flex flex-wrap items-center gap-2">
             <Select value={status} onValueChange={(v) => v && setStatus(String(v))}>
-              <SelectTrigger size="sm" aria-label="Filtrează după stare" className={filterPillClass(status !== 'all')}>
+              <SelectTrigger size="sm" aria-label="Filter by status" className={filterPillClass(status !== 'all')}>
                 <SelectValue>{(value: string) => STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value}</SelectValue>
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false} align="start" className="min-w-44">
@@ -64,7 +64,7 @@ export function OrdersPage() {
               </SelectContent>
             </Select>
             <Chip pressed={codOnly} onClick={() => setCodOnly((v) => !v)}>
-              Doar ramburs
+              COD only
             </Chip>
           </div>
         </div>
@@ -79,9 +79,9 @@ export function OrdersPage() {
           isEmpty={orders.items.length === 0}
           filtered={filtered}
           emptyIcon={Package}
-          emptyTitle="Nicio comandă sincronizată"
-          emptyDescription={connection ? 'Comenzile apar aici după prima sincronizare a magazinului.' : 'Conectează magazinul ca să vezi comenzile.'}
-          loadingLabel="Se încarcă comenzile…"
+          emptyTitle="No orders synced"
+          emptyDescription={connection ? 'Orders show up here after the store’s first sync.' : 'Connect the store to see its orders.'}
+          loadingLabel="Loading orders…"
           footer={
             <LoadMoreFooter
               shown={orders.items.length}
@@ -94,16 +94,16 @@ export function OrdersPage() {
           }
         >
           <Table>
-            <caption className="sr-only">Comenzi</caption>
+            <caption className="sr-only">Orders</caption>
             <TableHeader>
               <TableRow>
-                <TableHead scope="col">Comandă</TableHead>
-                <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Client</TableHead>
-                <TableHead scope="col">Stare</TableHead>
-                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Plată</TableHead>
+                <TableHead scope="col">Order</TableHead>
+                <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Customer</TableHead>
+                <TableHead scope="col">Status</TableHead>
+                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Payment</TableHead>
                 <TableHead scope="col" className="text-right">Total</TableHead>
-                <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Produse</TableHead>
-                <TableHead scope="col" className="hidden text-right @min-[1000px]/records:table-cell">Plasată</TableHead>
+                <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Items</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[1000px]/records:table-cell">Placed</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -126,7 +126,7 @@ function OrderRow({ order, onOpen, active }: { order: OrderListDto; onOpen: () =
     // the open order gets an ink bar on its leading edge.
     <TableRow
       tabIndex={0}
-      aria-label={`Deschide comanda #${order.order_number}`}
+      aria-label={`Open order #${order.order_number}`}
       data-state={active ? 'selected' : undefined}
       onClick={onOpen}
       onKeyDown={(e) => {
@@ -143,7 +143,7 @@ function OrderRow({ order, onOpen, active }: { order: OrderListDto; onOpen: () =
       <TableCell className="py-2.5">
         <span className="block text-sm font-medium text-foreground tabular-nums">#{order.order_number}</span>
         <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs leading-4 text-muted-foreground @min-[560px]/records:hidden">
-          {order.contact_name ?? 'Client necunoscut'}
+          {order.contact_name ?? 'Unknown customer'}
           {order.is_cod && <CodChip className="h-5 px-2 text-[11px]" />}
         </span>
       </TableCell>
@@ -168,7 +168,7 @@ function OrderRow({ order, onOpen, active }: { order: OrderListDto; onOpen: () =
       <TableCell className="text-right font-medium text-foreground tabular-nums">{formatMoney(order.total, order.currency)}</TableCell>
       <TableCell className="hidden text-muted-foreground @min-[900px]/records:table-cell">
         <span className="block max-w-[32ch] truncate" title={order.items_summary ?? undefined}>
-          {order.items_summary ?? `${formatCount(order.items_count)} produse`}
+          {order.items_summary ?? `${formatCount(order.items_count)} items`}
         </span>
       </TableCell>
       <TableCell className="hidden text-right text-muted-foreground @min-[1000px]/records:table-cell">

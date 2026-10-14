@@ -9,7 +9,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     assertSameOrigin(request)
     const ctx = await requireCommerceOrg(log)
     const row = await ownedConnection(ctx.db, ctx.org.id, (await params).id)
-    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Prea multe teste. Încearcă din nou în câteva minute.')
+    await enforceRateLimit(RATE_LIMITS.commerceConnect, ctx.org.id, 'Too many tests. Try again in a few minutes.')
     return noStore(await testConnection(ctx.db, row, ctx.log))
   })
 }

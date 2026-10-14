@@ -1,12 +1,12 @@
 // POST /api/commerce/onboarding/agent — store onboarding step 5 (the agent
 // form): name, language, tone, transfer number, return policy URL, system
-// prompt and first message. A blank prompt or first message gets the Romanian
-// baseline (lib/commerce/prompt.ts) built from the saved profile. Saves the
-// agent locally (the launch step pushes it to the providers), the tone /
-// transfer / return-policy fields into commerce_profile (admin client: the
-// column is guarded against tenant writes) and keeps the resume position on
-// step 5: the voice is chosen next, still inside "Agentul tău", and the UI
-// moves to step 6 only once it is saved.
+// prompt and first message. A blank prompt or first message gets the baseline
+// (lib/commerce/prompt.ts, written in the language the agent calls in) built
+// from the saved profile. Saves the agent locally (the launch step pushes it
+// to the providers), the tone / transfer / return-policy fields into
+// commerce_profile (admin client: the column is guarded against tenant writes)
+// and keeps the resume position on step 5: the voice is chosen next, still
+// inside "Your agent", and the UI moves to step 6 only once it is saved.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -47,14 +47,14 @@ const AgentSchema = z.object({
     .max(20)
     .optional()
     .default('')
-    .refine((v) => v === '' || E164_REGEX.test(v), 'Număr în format internațional, ex. +40712345678'),
+    .refine((v) => v === '' || E164_REGEX.test(v), 'Use the international format, e.g. +40712345678'),
   return_policy_url: z
     .string()
     .trim()
     .max(500)
     .optional()
     .default('')
-    .refine((v) => v === '' || isHttpsUrl(v), 'Adresa trebuie să înceapă cu https://'),
+    .refine((v) => v === '' || isHttpsUrl(v), 'The address must start with https://'),
   system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).optional(),
   first_message: z.string().trim().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).optional(),
 })
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       .single()
     if (readErr) throw new Error(`organizations read failed: ${readErr.message}`)
     if (row.business_type !== 'ecommerce') {
-      throw new RequestError('precondition_failed', 'Această configurare este disponibilă doar pentru magazine online.', 409, {
+      throw new RequestError('precondition_failed', 'This setup is only available to online stores.', 409, {
         reason: 'not_ecommerce',
       })
     }
