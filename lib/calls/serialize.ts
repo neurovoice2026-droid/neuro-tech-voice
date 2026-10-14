@@ -95,6 +95,8 @@ const BASE_COLUMNS = [
   'call_successful', 'summary_title', 'termination_reason', 'has_recording', 'recording_status',
   // Migration 017.
   'channel', 'is_test', 'owner_feedback',
+  // Migration 024 (e-commerce automation run of a campaign call).
+  'commerce_run_id',
 ].join(', ')
 
 /** List views: no transcript/analysis (they can be large). */
@@ -137,6 +139,7 @@ export interface CallRow {
   channel?: string | null
   is_test?: boolean | null
   owner_feedback?: string | null
+  commerce_run_id?: string | null
   transcript?: unknown
   analysis?: unknown
   call_metadata?: unknown
@@ -269,6 +272,7 @@ export function serializeListItem(row: CallRow): CallListItem {
     channel: oneOf(CHANNELS, row.channel) ?? 'phone',
     is_test: row.is_test === true,
     owner_feedback: oneOf(FEEDBACK_VALUES, row.owner_feedback),
+    commerce_run_id: typeof row.commerce_run_id === 'string' ? row.commerce_run_id : null,
   }
 }
 

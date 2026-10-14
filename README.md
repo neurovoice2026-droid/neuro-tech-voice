@@ -21,8 +21,8 @@ cp .env.example .env.local     # fill in the values (never commit them)
 npm run dev                    # http://localhost:3000
 ```
 
-Database: apply the SQL files in `supabase/migrations/` in order (001 → 021;
-the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+Database: apply the SQL files in `supabase/migrations/` in order (001 → 021,
+then 023 and 024; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
 SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
 ships it, apply `022_security_performance_hardening.sql`: it is the former
@@ -58,6 +58,19 @@ configuration. Working hours are enforced before any provider is used.
   [`docs/voice-providers.md`](docs/voice-providers.md)
 * Automated, manual and live test procedure:
   [`docs/voice-provider-test-plan.md`](docs/voice-provider-test-plan.md)
+
+## E-commerce vertical (Magazin)
+
+A sign-up chooses its business type (service business or online store). Store
+organizations connect WooCommerce, Shopify, Magento, PrestaShop or a custom
+JSON API, mirror orders/customers/products, and run outbound automations
+(cash-on-delivery confirmation, abandoned cart, order follow-up) through the
+same outbound-call path as the rest of the product. Set-up, platform
+prerequisites, the custom connector contract, webhooks, the job scheduler
+(the `commerce` step of `/api/cron/voice-maintenance`, so the 5-minute
+schedule above applies), retention and the runbook:
+[`docs/commerce-integrations.md`](docs/commerce-integrations.md). Requires
+migration `024_commerce.sql` and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`.
 
 ## Deployment (Vercel)
 

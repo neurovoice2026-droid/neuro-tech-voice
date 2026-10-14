@@ -30,12 +30,12 @@ interface Step6LaunchProps {
 // ─── Plan cards ───────────────────────────────────────────────────────────────
 
 // Annual billing = pay for 10 months (2 months free).
-function priceFor(id: Plan, annual: boolean): number {
+export function priceFor(id: Plan, annual: boolean): number {
   const monthly = PLANS[id].price_monthly
   return annual ? Math.round((monthly * 10) / 12) : monthly
 }
 
-interface PlanCardProps {
+export interface PlanCardProps {
   id: Plan
   selected: boolean
   onSelect: () => void
@@ -57,7 +57,7 @@ interface PlanCardProps {
  * The radio's accessible name stays short: name, price, billing note and the minutes allowance;
  * the tagline and the rest of the list are visual detail (OptionCard has no aria-describedby).
  */
-function PlanCard({ id, selected, onSelect, annual, badge, disabled, className }: PlanCardProps) {
+export function PlanCard({ id, selected, onSelect, annual, badge, disabled, className }: PlanCardProps) {
   const p = PLANS[id]
   const isTrial = id === 'trial'
   const isCustom = id === 'custom'
@@ -129,7 +129,7 @@ function PlanCard({ id, selected, onSelect, annual, badge, disabled, className }
  * Monthly / yearly as the segmented pill (tinted track, white active segment). A radio group, not
  * tabs: it only changes the prices shown, there is no panel to switch to. Arrow keys select.
  */
-function BillingPeriod({ annual, onChange, disabled }: { annual: boolean; onChange: (annual: boolean) => void; disabled?: boolean }) {
+export function BillingPeriod({ annual, onChange, disabled }: { annual: boolean; onChange: (annual: boolean) => void; disabled?: boolean }) {
   const options = [
     { label: 'Monthly', annual: false },
     { label: 'Yearly', annual: true },

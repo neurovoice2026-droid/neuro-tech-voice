@@ -42,6 +42,7 @@ describe('maintenance step order', () => {
       'web_test_finalize',
       'call_retention',
       'business_tools_retention',
+      'commerce',
       'retention',
       'elevenlabs_quota',
       'elevenlabs_workspace_health',

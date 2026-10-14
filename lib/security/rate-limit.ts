@@ -53,6 +53,14 @@ export const RATE_LIMITS = {
   passwordResetEmailHourly: { name: 'password_reset_email_hour', limit: 5, windowSeconds: 3_600 },
   passwordResetGlobalHourly: { name: 'password_reset_all_hour', limit: 30, windowSeconds: 3_600 },
   passwordResetGlobalDaily: { name: 'password_reset_all_day', limit: 60, windowSeconds: 86_400 },
+  // E-commerce (lib/commerce): connection tests hit the merchant's store,
+  // syncs queue provider imports, automation changes may start calls.
+  commerceConnect: { name: 'commerce_connect', limit: 10, windowSeconds: 600 },
+  commerceSync: { name: 'commerce_sync', limit: 6, windowSeconds: 600 },
+  commerceAutomationWrite: { name: 'commerce_automation_write', limit: 30, windowSeconds: 600 },
+  commerceRead: { name: 'commerce_read', limit: 240, windowSeconds: 60 },
+  /** Unauthenticated webhook deliveries per connection (a flood never fills the queue). */
+  commerceWebhook: { name: 'commerce_webhook', limit: 600, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

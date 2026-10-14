@@ -19,7 +19,15 @@ vi.mock('@/lib/api/auth', () => ({
 }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => state.admin }))
 vi.mock('@/lib/observability/telemetry', () => ({ deferBackground: () => {}, emitProviderEvent: () => {} }))
-vi.mock('@/lib/stripe/client', () => ({ getStripeClient: () => ({}), isStripeConfigured: () => false }))
+// Stripe is off by default; a test switches it on to exercise the checkout path.
+const stripe = {
+  configured: false,
+  client: {
+    customers: { create: vi.fn() },
+    checkout: { sessions: { create: vi.fn() } },
+  },
+}
+vi.mock('@/lib/stripe/client', () => ({ getStripeClient: () => stripe.client, isStripeConfigured: () => stripe.configured }))
 vi.mock('@/lib/email/client', () => ({ sendEmail: vi.fn() }))
 
 const enforceRateLimit = vi.fn()
@@ -41,6 +49,7 @@ vi.mock('@/lib/agents/ensure-agent', async (importOriginal) => {
 
 import { POST } from '@/app/api/onboarding/complete/route'
 import { RequestError } from '@/lib/api/http'
+import { PLANS } from '@/types'
 
 const baseAgent = {
   id: AGENT,
@@ -69,6 +78,10 @@ const complete = (body: unknown) =>
 const activations = () =>
   state.user!.calls.filter((c: FakeCall) => c.table === 'agents' && c.op === 'update' && (c.payload as { is_active?: boolean }).is_active === true)
 
+/** The service-role organizations update that records plan + onboarding position. */
+const orgUpdates = () =>
+  state.admin!.calls.filter((c: FakeCall) => c.table === 'organizations' && c.op === 'update').map((c) => c.payload as Record<string, unknown>)
+
 const sameAgent = { name: 'Ana', language: 'en', system_prompt: '', first_message: 'Hello there!' }
 
 beforeEach(() => {
@@ -78,6 +91,9 @@ beforeEach(() => {
   ensureAgent.mockReset().mockResolvedValue({ ...baseAgent })
   syncAgentProviders.mockReset().mockResolvedValue([{ provider: 'elevenlabs', status: 'ready', error: null }])
   enforceRateLimit.mockReset().mockResolvedValue(undefined)
+  stripe.configured = false
+  stripe.client.customers.create.mockReset().mockResolvedValue({ id: 'cus_test' })
+  stripe.client.checkout.sessions.create.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/s' })
 })
 
 describe('POST /api/onboarding/complete', () => {
@@ -138,5 +154,41 @@ describe('POST /api/onboarding/complete', () => {
     expect(res.status).toBe(429)
     expect(state.user!.calls.filter((c: FakeCall) => c.op === 'update')).toHaveLength(0)
     expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
+  // The route is shared by both onboardings: the resume position it records
+  // must be the launch step of the flow the org is actually in.
+  describe('onboarding_step per business type', () => {
+    it('service org (explicit or legacy backfill) → the service launch step (4)', async () => {
+      for (const businessType of ['services', undefined]) {
+        state.admin = fakeDb(() => ({ data: null, error: null }))
+        state.org = { ...state.org, business_type: businessType }
+        expect((await complete({ plan: 'trial', agent: sameAgent })).status).toBe(200)
+        expect(orgUpdates()).toEqual([expect.objectContaining({ onboarding_step: 4, onboarding_completed: true, plan: 'trial' })])
+      }
+    })
+
+    it('e-commerce org on a paid plan → stays on the store launch step (6) until the billing webhook completes it', async () => {
+      state.org.business_type = 'ecommerce'
+      stripe.configured = true
+      const priceId = PLANS.pro.stripe_price_id
+      PLANS.pro.stripe_price_id = 'price_pro_month'
+      try {
+        const body = await (await complete({ plan: 'pro', agent: sameAgent })).json()
+        expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      } finally {
+        PLANS.pro.stripe_price_id = priceId
+      }
+      // The cancel_url is /onboarding: with step 4 the store flow would reopen "Automatizări".
+      expect(orgUpdates()[0]).toEqual(expect.objectContaining({ onboarding_step: 6, onboarding_completed: false, plan: 'trial' }))
+      expect(orgUpdates().some((p) => p.onboarding_completed === true)).toBe(false)
+      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: 'price_pro_month', quantity: 1 }] }))
+    })
+
+    it('e-commerce org on the trial plan → completed at the store launch step (6)', async () => {
+      state.org.business_type = 'ecommerce'
+      expect((await complete({ plan: 'trial', agent: sameAgent })).status).toBe(200)
+      expect(orgUpdates()).toEqual([expect.objectContaining({ onboarding_step: 6, onboarding_completed: true })])
+    })
   })
 })

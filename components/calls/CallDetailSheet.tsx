@@ -44,6 +44,7 @@ import {
 } from '@/lib/calls/labels'
 import type { Call, CallDetails, TranscriptEntry } from '@/types'
 import { CallBusinessSection } from './CallBusinessSection'
+import { CallCommerceSection } from './CallCommerceSection'
 
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -1007,6 +1008,9 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                 <RecordingSection call={call} />
 
                 <CallBusinessSection key={call.id} callId={call.id} />
+
+                {/* Calls placed by a store automation (migration 024) show which run they belong to. */}
+                {call.commerce_run_id && <CallCommerceSection key={`commerce-${call.id}`} callId={call.id} />}
 
                 <CallHandlingSection call={call} />
 

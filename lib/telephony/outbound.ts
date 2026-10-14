@@ -21,6 +21,18 @@ import 'server-only'
 //     conversation_reconcile finds the conversation by ntv_call_id (or settles
 //     the row as failed after 2 h);
 //   • any other provider error → failed ('elevenlabs:outbound_failed').
+//
+// App-routed outbound outcomes (Twilio calls.create):
+//   • a CallSid → the row keeps ringing; outbound-connect and the status
+//     callback complete it;
+//   • a Twilio error response (numeric status) → failed ('twilio:create_failed');
+//   • timeout / connection lost before a response → Twilio may have created
+//     the call (there is no idempotency key for calls.create): the row stays
+//     'ringing' with routing.outbound_uncertain, the caller gets 'unconfirmed'
+//     (a campaign run is then never dialed again automatically) and the status
+//     callback, or the stale-call sweeps, settle the row;
+//   • a failure before any connection (DNS, refused, bad request options) →
+//     nothing reached Twilio: failed, like an error response.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
@@ -42,6 +54,13 @@ export interface OutboundRequest {
   toNumber: string
   phoneNumberId?: string | null
   purpose: 'outbound' | 'test'
+  /** The e-commerce automation run this call is placed for (calls.commerce_run_id, migration 024). */
+  commerceRunId?: string | null
+  /**
+   * Per-call tenant variables (typed script values of a campaign call): sent
+   * as dynamic variables with the client data; platform keys always win.
+   */
+  variables?: Record<string, string>
 }
 
 export interface OutboundResult {
@@ -55,6 +74,30 @@ export interface OutboundResult {
 function logSafe(text: unknown): string | null {
   if (typeof text !== 'string' || !text) return null
   return text.replace(/\+?\d[\d\s().-]{3,}\d/g, '[number]').replace(/\s+/g, ' ').slice(0, 160)
+}
+
+/** The request waited for Twilio and gave up: it may have been received. */
+const TWILIO_TIMEOUT_CODES: ReadonlySet<string> = new Set(['ECONNABORTED', 'ETIMEDOUT'])
+/** No connection was ever made (or the request was rejected locally): Twilio received nothing. */
+const TWILIO_NEVER_SENT_CODES: ReadonlySet<string> = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ERR_BAD_OPTION', 'ERR_BAD_OPTION_VALUE', 'ERR_BAD_REQUEST'])
+
+/**
+ * Whether a failed Twilio calls.create left the outcome unknown. The SDK
+ * turns every HTTP response into an exception with a numeric `status`
+ * (RestException / TwilioServiceException): those are definite. A transport
+ * failure surfaces as the axios/Node error itself, with a string `code` and
+ * no response; unless the connection was never made, the request may already
+ * have reached Twilio and created the call. Returns the uncertainty kind, or
+ * null when the call was definitely not placed.
+ */
+export function twilioCreateUncertainty(err: unknown): 'timeout' | 'network' | null {
+  if (!err || typeof err !== 'object') return null
+  const e = err as { status?: unknown; code?: unknown; response?: unknown }
+  if (typeof e.status === 'number' || e.response) return null
+  if (typeof e.code !== 'string') return null
+  if (TWILIO_TIMEOUT_CODES.has(e.code)) return 'timeout'
+  if (TWILIO_NEVER_SENT_CODES.has(e.code)) return null
+  return 'network'
 }
 
 export async function startOutboundCall(req: OutboundRequest, log: Logger = createLogger()): Promise<OutboundResult> {
@@ -98,7 +141,9 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
     lifecycle_rank: 10,
     started_at: new Date().toISOString(),
     primary_provider: ctx.agent.primary,
-    routing: { attempts: [], purpose: req.purpose },
+    // App-routed calls read commerce_variables again at answer time (router.ts).
+    routing: { attempts: [], purpose: req.purpose, ...(req.variables && Object.keys(req.variables).length ? { commerce_variables: req.variables } : {}) },
+    ...(req.commerceRunId ? { commerce_run_id: req.commerceRunId } : {}),
   }
 
   if (number.routing_mode === 'native_elevenlabs') {
@@ -120,6 +165,7 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
       businessName: ctx.org.name ?? '',
       agent: { name: ctx.agent.name, language: ctx.agent.language, recordingNotice: ctx.agent.recordingNotice === true, maxDurationSeconds: ctx.agent.maxDurationSeconds },
       endUserNumber: to,
+      tenantVariables: req.variables,
       allowedOverrides: ctx.elevenLabsOverrides,
       capSeconds: allowance.capSeconds,
     })
@@ -206,6 +252,21 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
     const { error: updErr } = await db.from('calls').update({ twilio_call_sid: created.sid }).eq('id', callId)
     if (updErr) l.error('outbound.sid_update_failed', updErr)
   } catch (err) {
+    const uncertainty = twilioCreateUncertainty(err)
+    if (uncertainty) {
+      // The request may have reached Twilio and the callee may be ringing:
+      // never report a definite failure (or invite a second call). The row
+      // keeps 'ringing'; outbound-connect stamps the CallSid at answer, the
+      // status callback settles the row, and a row still ringing hours later
+      // is abandoned by the stale sweeps (reconcileStaleCallingRuns).
+      const { error: markErr } = await db
+        .from('calls')
+        .update({ routing: { ...baseRow.routing, outbound_uncertain: true, outbound_error: uncertainty } })
+        .eq('id', callId)
+      if (markErr) l.error('outbound.uncertain_update_failed', markErr)
+      l.warn('outbound.twilio_unconfirmed', { callId, code: uncertainty, cause: (err as { code?: string }).code ?? null })
+      return { callId, routingMode: 'app_routed', status: 'unconfirmed' }
+    }
     const { error: failErr } = await db.from('calls').update({ status: 'failed', lifecycle_rank: 30, routing_reason: 'no_provider', failover_reason: 'twilio:create_failed' }).eq('id', callId)
     if (failErr) l.error('outbound.fail_update_failed', failErr)
     l.error('outbound.twilio_create_failed', err)

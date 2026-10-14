@@ -7,6 +7,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import {
   LayoutDashboard, PhoneCall, Bot, Phone, Plug, CreditCard,
   LogOut, Menu, GitBranch, Settings, ChevronsUpDown,
+  Store, Cable, Package, Users, Tag, Workflow, PhoneOff, SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -32,8 +33,13 @@ interface NavItem {
   icon: LucideIcon
 }
 
+interface NavGroup {
+  label?: string
+  items: NavItem[]
+}
+
 /** Sidebar groups, like the site's drawing of the workspace: no label · Configure · Account. */
-const NAV_GROUPS: Array<{ label?: string; items: NavItem[] }> = [
+const NAV_GROUPS: NavGroup[] = [
   {
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -58,8 +64,32 @@ const NAV_GROUPS: Array<{ label?: string; items: NavItem[] }> = [
   },
 ]
 
+/** The store section of an e-commerce organization (migration 024), after the first group. */
+const COMMERCE_NAV_GROUP: NavGroup = {
+  label: 'Magazin',
+  items: [
+    { href: '/magazin', label: 'Prezentare', icon: Store },
+    { href: '/magazin/conexiuni', label: 'Conexiuni', icon: Cable },
+    { href: '/magazin/comenzi', label: 'Comenzi', icon: Package },
+    { href: '/magazin/clienti', label: 'Clienți', icon: Users },
+    { href: '/magazin/produse', label: 'Produse', icon: Tag },
+    { href: '/magazin/automatizari', label: 'Automatizări', icon: Workflow },
+    { href: '/magazin/nu-suna', label: 'Lista „Nu suna”', icon: PhoneOff },
+    { href: '/magazin/setari', label: 'Setări magazin', icon: SlidersHorizontal },
+  ],
+}
+
+/** Service organizations see exactly the groups above; e-commerce ones get the Magazin group too. */
+function navGroupsFor(org: Organization): NavGroup[] {
+  if (org.business_type !== 'ecommerce') return NAV_GROUPS
+  return [NAV_GROUPS[0], COMMERCE_NAV_GROUP, ...NAV_GROUPS.slice(1)]
+}
+
+/** Section roots: active on their own path only, so their sub-pages do not light them up too. */
+const EXACT_MATCH_PAGES = ['/dashboard', '/magazin']
+
 /** Pages whose content sits in a left-aligned 768 px column inside the default PageContainer. */
-const NARROW_PAGES = ['/billing', '/settings']
+const NARROW_PAGES = ['/billing', '/settings', '/magazin/setari']
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -70,13 +100,13 @@ interface DashboardShellProps {
 }
 
 function isActive(pathname: string, href: string) {
-  return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+  return pathname === href || (!EXACT_MATCH_PAGES.includes(href) && pathname.startsWith(href))
 }
 
-function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function NavLinks({ pathname, groups, onNavigate }: { pathname: string; groups: NavGroup[]; onNavigate?: () => void }) {
   return (
     <nav aria-label="Main" className="mt-1 flex-1 overflow-y-auto px-3 pb-3">
-      {NAV_GROUPS.map((group, i) => (
+      {groups.map((group, i) => (
         <div key={group.label ?? i}>
           {group.label && (
             <p className="px-2.5 pt-5 pb-1.5 text-[11px] leading-4 text-muted-foreground">{group.label}</p>
@@ -220,7 +250,7 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
 
       <WorkspaceMenu org={org} userEmail={userEmail} onNavigate={() => setMobileOpen(false)} />
 
-      <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+      <NavLinks pathname={pathname} groups={navGroupsFor(org)} onNavigate={() => setMobileOpen(false)} />
 
       <div className="p-3">
         <UsageTile org={org} />

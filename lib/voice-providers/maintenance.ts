@@ -253,6 +253,8 @@ export function maintenanceSteps(log: Logger): { head: MaintenanceStep[]; tail: 
     ['web_test_finalize', () => import('./web-test').then((m) => m.finalizeStaleWebTests(100, log))],
     ['call_retention', (deadline) => import('./call-retention').then((m) => m.runCallRetention(log, Date.now(), deadline))],
     ['business_tools_retention', () => import('@/lib/voice-tools/retention').then((m) => m.runBusinessToolRetention(log))],
+    // E-commerce vertical: webhook deliveries, store syncs, due automation calls (its own budget, never past the run's deadline).
+    ['commerce', (deadline) => import('@/lib/commerce/worker').then((m) => m.runCommerceWorker(log, { deadline }))],
     // Hourly, from the stored last run (not the clock minute: the cron may be daily).
     ['retention', () => import('./maintenance-state').then((m) => m.runIfDue('retention', 3_600_000, log, () => pruneOperationalData(log)))],
     ['elevenlabs_quota', () => import('./quota-monitor').then((m) => m.runQuotaMonitor(log))],

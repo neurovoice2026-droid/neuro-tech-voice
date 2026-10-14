@@ -18,6 +18,8 @@ export interface CartesiaPlatformResources {
   contextToolId: string | null
   /** Webhook tool take_message (slice B2): attached when the owner enabled message taking. */
   messageToolId?: string | null
+  /** Webhook tool store_assistant (e-commerce vertical): attached for store agents. */
+  storeToolId?: string | null
 }
 
 /** Removes {{variables}}: inbound SIP calls cannot supply custom values for the greeting. */
@@ -52,7 +54,7 @@ export function buildCartesiaAgentConfig(spec: AgentSpec, voiceId: string, platf
       output: { voice_id: voiceId, speed: speed === null ? null : clamp(speed, 0.6, 1.5), volume: null, emotion: null },
     },
     turn: { inactivity_end_call_secs: endCallSecs, inactivity_check_in_secs: checkIn },
-    tools: [platform.contextToolId, platform.messageToolId].filter((id): id is string => !!id).map((id) => ({ id })),
+    tools: [platform.contextToolId, platform.messageToolId, platform.storeToolId].filter((id): id is string => !!id).map((id) => ({ id })),
     system_tools: {
       end_call: c.allow_end_call ? { description: null, pre_tool_speech: 'force' } : null,
       send_dtmf: null,
@@ -141,6 +143,50 @@ export function messageToolDefinition(url: string, bearerToken: string): Record<
           },
         },
         required: ['reason', 'urgency'],
+      },
+      authentication: { mode: 'bearer', token: { type: 'secret', secret_value: bearerToken } },
+    },
+  }
+}
+
+/**
+ * The e-commerce store tools for the fallback agent, folded into ONE webhook
+ * tool with an `action` parameter (Cartesia tools are shared workspace
+ * resources; one keeps the fallback agent light). The call is resolved from
+ * the called/caller numbers like get_call_context; the order and the campaign
+ * run come from the call on our server, never from these parameters.
+ */
+export function storeToolDefinition(url: string, bearerToken: string): Record<string, unknown> {
+  return {
+    type: 'webhook',
+    name: 'store_assistant',
+    description:
+      'Store tools. action = get_order_status (status, total and delivery state of the order this call is about, or of the order number + full name the customer gives), get_order_items (products and quantities of that order; on an inbound call pass the same order number + full name), get_product_availability (stock and price of up to three products matching query), record_cod_confirmation (the customer confirmed = true/false the cash-on-delivery order you called about), record_callback_request (the customer wants a person to call back: reason + preferred_time), mark_do_not_call (the customer asked not to be called again: call it immediately). If the result has ok = false, follow its message.',
+    pre_tool_speech: 'auto',
+    execution_mode: 'immediate',
+    response_timeout_secs: 15,
+    api_schema: {
+      url,
+      method: 'POST',
+      request_body_schema: {
+        type: 'object',
+        properties: {
+          called_number: { type: 'string', dynamic_variable: 'system__called_number' },
+          caller_number: { type: 'string', dynamic_variable: 'system__caller_id' },
+          action: {
+            type: 'string',
+            enum: ['get_order_status', 'get_order_items', 'get_product_availability', 'record_cod_confirmation', 'record_callback_request', 'mark_do_not_call'],
+            description: 'Which store tool to run.',
+          },
+          order_number: { type: 'string', description: 'get_order_status and get_order_items on an inbound call: the order number the customer gave. Otherwise empty.' },
+          customer_name: { type: 'string', description: 'get_order_status and get_order_items on an inbound call: the full name on the order (first and last name). Otherwise empty.' },
+          query: { type: 'string', description: 'get_product_availability: the product name or code, a few words.' },
+          confirmed: { type: 'boolean', description: 'record_cod_confirmation: true when the customer confirmed the order, false otherwise.' },
+          note: { type: 'string', description: 'record_cod_confirmation: optional short reason or change requested. Never phone, card or address details.' },
+          reason: { type: 'string', description: 'record_callback_request: what the customer wants. mark_do_not_call: optional, their words.' },
+          preferred_time: { type: 'string', description: 'record_callback_request: when the customer prefers to be called, in their words.' },
+        },
+        required: ['action'],
       },
       authentication: { mode: 'bearer', token: { type: 'secret', secret_value: bearerToken } },
     },

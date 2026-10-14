@@ -421,6 +421,36 @@ describe('buildElevenLabsAgentBody', () => {
       expect(spoof.ntv_routing_mode).toBe('native')
       expect(vars.business_name).toBe('')
     })
+
+    describe('store agents (e-commerce vertical)', () => {
+      const SCRIPT = ['store_name', 'order_number', 'items_summary', 'order_total', 'customer_name', 'delivery_city', 'agent_name', 'call_reason']
+
+      it('keeps every script-variable placeholder when the store has no usable connection (the stored prompt still references them)', () => {
+        const vars = dynamicVariablePlaceholders(makeAgentSpec({ name: 'Maria', commerce: { enabled: false, isStore: true, storeName: 'Magazinul Exemplu' } }))
+        for (const name of SCRIPT) expect(typeof vars[name], name).toBe('string')
+        expect(vars).toMatchObject({ call_reason: 'inbound', store_name: 'Magazinul Exemplu', agent_name: 'Maria', order_number: '', items_summary: '', order_total: '', customer_name: '', delivery_city: '' })
+      })
+
+      it('names the store after the organization when the profile has no name', () => {
+        const vars = dynamicVariablePlaceholders(makeAgentSpec({ orgName: 'Acme SRL', commerce: { enabled: false, isStore: true, storeName: null } }))
+        expect(vars.store_name).toBe('Acme SRL')
+        expect(dynamicVariablePlaceholders(makeAgentSpec({ orgName: null, commerce: { enabled: true, isStore: true, storeName: null } })).store_name).toBe('')
+      })
+
+      it('the placeholders are part of the body and the config hash (a disconnect re-syncs through config rollout)', async () => {
+        const connected = build({ commerce: { enabled: true, isStore: true, storeName: 'Shop' } })
+        const disconnected = build({ commerce: { enabled: false, isStore: true, storeName: 'Shop' } })
+        for (const body of [connected, disconnected]) expect(at(body, 'conversation_config.agent.dynamic_variables.dynamic_variable_placeholders.call_reason')).toBe('inbound')
+        const services = build({ commerce: { enabled: false, isStore: false, storeName: null } })
+        expect(at(services, 'conversation_config.agent.dynamic_variables.dynamic_variable_placeholders.call_reason')).toBeUndefined()
+        expect(await configHash(disconnected)).not.toBe(await configHash(services))
+      })
+
+      it('services organizations (no commerce block) never get the script variables', () => {
+        const vars = dynamicVariablePlaceholders(makeAgentSpec())
+        for (const name of SCRIPT) expect(vars[name], name).toBeUndefined()
+      })
+    })
   })
 
   describe('platform settings', () => {

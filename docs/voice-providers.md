@@ -184,7 +184,9 @@ knowledge, dynamic variables, working hours (enforced at ingress, plus
 
 Fallback agent context: Cartesia calls `get_call_context`
 (`/api/telephony/tools/cartesia-context`, bearer `CARTESIA_TOOL_SECRET`) to learn
-whether the business is closed and the call direction. No caller PII is returned.
+whether the business is closed and the call direction. No caller PII is returned;
+store agents additionally get the script variables of a campaign call, only when
+the caller id is that campaign call's callee (docs/commerce-integrations.md §5).
 
 ## 6. Configuration
 

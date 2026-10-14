@@ -9,6 +9,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Logger } from '@/lib/observability/logger'
 import type { PlatformToolKey } from '@/lib/elevenlabs/tools/definitions'
+import { COMMERCE_TOOL_KEYS } from '@/lib/elevenlabs/tools/commerce'
 import { readBookingSettings, readMessageSettings } from './settings'
 import { composeSystemPrompt } from './prompt'
 import type { BookingPromptMode } from './prompt-business'
@@ -124,4 +125,41 @@ export function withAttachedBusinessTools(spec: AgentSpec, attached: Pick<Busine
 /** An agent write that referenced the business tools failed: re-verify them next time (a tool may have been deleted). */
 export function invalidateBusinessToolMemo(): void {
   for (const key of [...BOOKING_TOOL_KEYS, MESSAGE_TOOL_KEY]) invalidatePlatformToolMemo(key)
+}
+
+/**
+ * The e-commerce store tools (lib/elevenlabs/tools/commerce.ts) for a store
+ * agent: all six or none (a partial set would make the prompt promise what
+ * it cannot do). Same obtain/hash semantics as the business tools.
+ */
+export async function resolveCommerceToolIds(spec: AgentSpec, mode: 'write' | 'hash', log: Logger): Promise<{ ids: string[]; attached: boolean; degraded: typeof COMMERCE_TOOLS_DEGRADED | null }> {
+  if (!spec.active || !spec.commerce?.enabled) return { ids: [], attached: false, degraded: null }
+  const ids: string[] = []
+  for (const key of COMMERCE_TOOL_KEYS) {
+    let id: string | null = null
+    if (mode === 'hash') id = await storedPlatformToolId(key)
+    else {
+      try {
+        id = (await ensurePlatformTool(key, { verify: 'cached' })).toolId
+      } catch (err) {
+        log.error('agent_sync.commerce_tool_unavailable', err, { key, orgId: spec.orgId, agentId: spec.localAgentId })
+      }
+    }
+    if (!id) return { ids: [], attached: false, degraded: COMMERCE_TOOLS_DEGRADED }
+    ids.push(id)
+  }
+  return { ids, attached: true, degraded: null }
+}
+
+export const COMMERCE_TOOLS_DEGRADED = {
+  code: 'commerce_tools_unavailable',
+  message: 'The store tools are unavailable during calls right now: your agent answers general questions only. This is retried automatically.',
+} as const
+
+/** The spec whose prompt matches whether the store tools were attached. */
+export function withAttachedCommerceTools(spec: AgentSpec, attached: boolean): AgentSpec {
+  if (!spec.commerce?.enabled || !spec.promptInput) return spec
+  if (!!spec.promptInput.storeTools === attached) return spec
+  const promptInput = { ...spec.promptInput, storeTools: attached }
+  return { ...spec, promptInput, systemPrompt: composeSystemPrompt(promptInput) }
 }

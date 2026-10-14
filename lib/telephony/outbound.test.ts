@@ -1,6 +1,7 @@
 // Outbound calls (slice C): native outcomes (success, rejection, null
 // conversation id, timeout), the outbound greeting with the recording notice,
-// the ring timeout, the plan-minutes pre-check and the opaque user_id.
+// the ring timeout, the plan-minutes pre-check and the opaque user_id; the
+// app-routed (Twilio) outcomes: rejection, timeout, lost connection.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeDb, type FakeCall } from '@/tests/helpers/fake-db'
 import { ProviderError } from '@/lib/voice-providers/errors'
@@ -49,7 +50,7 @@ vi.mock('@/lib/voice-providers/routing', () => ({
   outboundRoutingInput: (x: unknown) => x,
 }))
 
-import { startOutboundCall } from './outbound'
+import { startOutboundCall, twilioCreateUncertainty } from './outbound'
 
 beforeEach(() => {
   vi.stubEnv('VOICE_PUBLIC_BASE_URL', 'https://voice.example.com')
@@ -137,5 +138,79 @@ describe('app-routed outbound (Twilio dials)', () => {
     const params = twilioCreate.mock.calls[0][0] as { timeout: number; timeLimit: number }
     expect(params.timeout).toBe(30)
     expect(params.timeLimit).toBe(120)
+  })
+
+  /** The SDK rethrows the axios transport error itself: a string code, no response. */
+  const transportError = (code: string) => Object.assign(new Error(`transport ${code}`), { code, isAxiosError: true })
+  /** A Twilio error response (RestException): numeric HTTP status and numeric Twilio code. */
+  const twilioRejection = (status: number, code: number) => Object.assign(new Error(`[HTTP ${status}] Failed to execute request`), { status, code })
+  const RUN = '7b1c2d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e'
+
+  it('a request timeout leaves the row ringing (Twilio may have placed the call) and answers "unconfirmed"', async () => {
+    routingMode = 'app_routed'
+    twilioCreate.mockRejectedValueOnce(transportError('ECONNABORTED'))
+    const res = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound', commerceRunId: RUN })
+    expect(res).toEqual({ callId: CALL_ID, routingMode: 'app_routed', status: 'unconfirmed' })
+    expect(inserts[0]).toMatchObject({ status: 'ringing', commerce_run_id: RUN })
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toEqual({ routing: { attempts: [], purpose: 'outbound', outbound_uncertain: true, outbound_error: 'timeout' } })
+    expect(updates[0]).not.toHaveProperty('status')
+  })
+
+  it('a connection lost after the request may have left is "unconfirmed" too (network)', async () => {
+    routingMode = 'app_routed'
+    twilioCreate.mockRejectedValueOnce(transportError('ECONNRESET'))
+    const res = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'test' })
+    expect(res.status).toBe('unconfirmed')
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toEqual({ routing: { attempts: [], purpose: 'test', outbound_uncertain: true, outbound_error: 'network' } })
+  })
+
+  it('a Twilio error response is definite: the row is failed and the user gets the mapped status', async () => {
+    routingMode = 'app_routed'
+    twilioCreate.mockRejectedValueOnce(twilioRejection(400, 21211))
+    const err = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RequestError)
+    expect((err as RequestError).status).toBe(400)
+    expect(updates.at(-1)).toMatchObject({ status: 'failed', lifecycle_rank: 30, failover_reason: 'twilio:create_failed' })
+  })
+
+  it('a Twilio 5xx is definite too (the request was answered): failed and 502', async () => {
+    routingMode = 'app_routed'
+    twilioCreate.mockRejectedValueOnce(twilioRejection(503, 20503))
+    const err = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' }).catch((e: unknown) => e)
+    expect((err as RequestError).status).toBe(502)
+    expect(updates.at(-1)).toMatchObject({ status: 'failed', failover_reason: 'twilio:create_failed' })
+  })
+
+  it('a failure before any connection (DNS) never reached Twilio: failed and 502, so the dispatcher may retry', async () => {
+    routingMode = 'app_routed'
+    twilioCreate.mockRejectedValueOnce(transportError('ENOTFOUND'))
+    const err = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' }).catch((e: unknown) => e)
+    expect((err as RequestError).status).toBe(502)
+    expect(updates.at(-1)).toMatchObject({ status: 'failed', failover_reason: 'twilio:create_failed' })
+  })
+})
+
+describe('twilioCreateUncertainty', () => {
+  it('classifies transport failures by whether the request may have reached Twilio', () => {
+    expect(twilioCreateUncertainty(Object.assign(new Error('timeout of 10000ms exceeded'), { code: 'ECONNABORTED' }))).toBe('timeout')
+    expect(twilioCreateUncertainty(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' }))).toBe('timeout')
+    expect(twilioCreateUncertainty(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }))).toBe('network')
+    expect(twilioCreateUncertainty(Object.assign(new Error('broken pipe'), { code: 'EPIPE' }))).toBe('network')
+    expect(twilioCreateUncertainty(Object.assign(new Error('maxContentLength exceeded'), { code: 'ERR_BAD_RESPONSE' }))).toBe('network')
+  })
+
+  it('treats anything Twilio answered, or that never left the process, as definite', () => {
+    expect(twilioCreateUncertainty(Object.assign(new Error('[HTTP 400]'), { status: 400, code: 21211 }))).toBeNull()
+    expect(twilioCreateUncertainty(Object.assign(new Error('[HTTP 503]'), { status: 503, code: 20503 }))).toBeNull()
+    expect(twilioCreateUncertainty(Object.assign(new Error('bad'), { code: 'ERR_BAD_REQUEST', response: { status: 400 } }))).toBeNull()
+    for (const code of ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ERR_BAD_OPTION', 'ERR_BAD_OPTION_VALUE', 'ERR_BAD_REQUEST']) {
+      expect(twilioCreateUncertainty(Object.assign(new Error(code), { code })), code).toBeNull()
+    }
+    expect(twilioCreateUncertainty(new Error("Required parameter \"params['to']\" missing."))).toBeNull()
+    expect(twilioCreateUncertainty(new TypeError('x is not a function'))).toBeNull()
+    expect(twilioCreateUncertainty(null)).toBeNull()
+    expect(twilioCreateUncertainty('oops')).toBeNull()
   })
 })

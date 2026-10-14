@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardClient } from '@/components/dashboard/DashboardClient'
+import { CommerceDashboard } from '@/components/commerce/CommerceDashboard'
 import type { Agent, Organization, Integration } from '@/types'
 
 export default async function DashboardPage() {
@@ -38,6 +39,20 @@ export default async function DashboardPage() {
       .limit(1)
       .maybeSingle(),
   ])
+
+  // An e-commerce organization gets the store overview above the generic cards; every other
+  // organization gets the dashboard exactly as before.
+  if ((org as Organization).business_type === 'ecommerce') {
+    return (
+      <Suspense>
+        <CommerceDashboard
+          org={org as Organization}
+          agent={(agentRes.data as Agent | null) ?? null}
+          phoneNumber={phoneRes.data?.number ?? null}
+        />
+      </Suspense>
+    )
+  }
 
   return (
     <Suspense>

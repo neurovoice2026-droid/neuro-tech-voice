@@ -286,6 +286,13 @@ export interface AgentSpec {
   revision: number
   /** In-call business tools (slice B2); absent = none. */
   businessTools?: BusinessToolsSpec
+  /**
+   * E-commerce vertical. `isStore`: the org chose the store business type, so its
+   * prompt references the script variables and the agent always carries their
+   * placeholders (whatever the connection state). `enabled`: a usable store
+   * connection exists, so the store tools and the commerce prompt rules are attached.
+   */
+  commerce?: { enabled: boolean; isStore: boolean; storeName: string | null }
 }
 
 export interface ExternalAgentRef {

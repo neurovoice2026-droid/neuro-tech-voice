@@ -9,6 +9,7 @@ const PROTECTED_PATHS = [
   '/phone',
   '/integrations',
   '/billing',
+  '/magazin',
 ]
 
 // Machine-to-machine endpoints: each authenticates itself (provider
@@ -22,6 +23,8 @@ const PUBLIC_API_PREFIXES = [
   '/api/telephony/',
   '/api/cron/',
   '/api/billing/webhook',
+  // Store platform webhooks (signature-verified per delivery, lib/commerce/webhooks).
+  '/api/commerce/webhooks/',
 ]
 
 export async function proxy(request: NextRequest) {

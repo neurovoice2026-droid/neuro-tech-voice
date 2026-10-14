@@ -1,0 +1,330 @@
+'use client'
+
+import { useState } from 'react'
+import {
+  Check, ExternalLink, KeyRound, PlugZap, RefreshCw, Stethoscope, TriangleAlert, Unplug, Webhook, X,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { OrbInline } from '@/components/shared/OrbLoader'
+import { CommerceApiError, commerceErrorMessage } from '@/hooks/useCommerceApi'
+import { disconnectConnection, fetchConnection, syncConnection, testConnection } from '@/hooks/useCommerceConnections'
+import { PLATFORM_CATALOG } from '@/lib/commerce/platforms'
+import type { CommerceCapabilities, ConnectionDto } from '@/lib/commerce/types'
+import { cn } from '@/lib/utils'
+import { formatCount, formatDateTime, relativeTime } from './format'
+import { SYNC_KIND_LABEL, SYNC_RESOURCE_LABEL, SYNC_STATUS_LABEL } from './labels'
+import { ConnectionStatusChip } from './StatusChips'
+
+const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
+
+interface ConnectionCardProps {
+  connection: ConnectionDto
+  onChanged: (connection: ConnectionDto) => void
+  onReconnect: (connection: ConnectionDto) => void
+  /** Polling has given up on a long sync (the card says so instead of spinning). */
+  syncTimedOut?: boolean
+}
+
+type Busy = 'sync' | 'test' | 'disconnect' | null
+
+/** What the connection can actually do, from its stored capabilities (never from the catalog alone). */
+function capabilityRows(c: CommerceCapabilities): Array<{ ok: boolean; label: string }> {
+  return [
+    { ok: c.orders, label: 'Comenzi' },
+    { ok: c.customers, label: 'Clienți' },
+    { ok: c.products, label: 'Produse' },
+    {
+      ok: c.webhooks,
+      label: c.webhooks
+        ? 'Evenimente în timp real (webhook-uri)'
+        : c.polling_minutes
+          ? `Fără webhook-uri: sincronizare periodică la ${c.polling_minutes} minute`
+          : 'Fără webhook-uri: sincronizare periodică',
+    },
+    { ok: c.customer_phone, label: c.customer_phone ? 'Telefonul clienților este disponibil' : 'Telefonul clienților nu este disponibil' },
+    { ok: c.abandoned_carts, label: c.abandoned_carts ? 'Coșuri abandonate' : 'Coșuri abandonate indisponibile' },
+  ]
+}
+
+function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className={OVERLINE}>{label}</dt>
+      <dd className="mt-1 text-sm break-words text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+function When({ iso, never = 'niciodată' }: { iso: string | null; never?: string }) {
+  if (!iso) return <span className="text-muted-foreground">{never}</span>
+  return (
+    <time dateTime={iso} title={formatDateTime(iso)} className="tabular-nums">
+      {relativeTime(iso)}
+    </time>
+  )
+}
+
+export function ConnectionCard({ connection, onChanged, onReconnect, syncTimedOut = false }: ConnectionCardProps) {
+  const [busy, setBusy] = useState<Busy>(null)
+  const [disconnectOpen, setDisconnectOpen] = useState(false)
+  const descriptor = PLATFORM_CATALOG[connection.platform]
+  const sync = connection.sync
+  const syncing = sync?.status === 'running' || sync?.status === 'pending' || connection.status === 'connecting'
+  const disconnected = connection.status === 'disconnected'
+  const name = connection.display_name?.trim() || connection.store_domain
+
+  async function refresh() {
+    try {
+      onChanged(await fetchConnection(connection.id))
+    } catch (err) {
+      // The action itself succeeded; the next poll or reload shows the new state.
+      console.warn('Connection re-read failed', err)
+    }
+  }
+
+  async function handleSync() {
+    setBusy('sync')
+    try {
+      await syncConnection(connection.id, 'all')
+      toast.success('Sincronizarea a pornit', { description: 'Comenzile, clienții și produsele se reîmprospătează în fundal.' })
+      await refresh()
+    } catch (err) {
+      if (err instanceof CommerceApiError && err.status === 409) {
+        toast.info('Sincronizare deja în curs', { description: 'Așteaptă să se termine sincronizarea curentă.' })
+        await refresh()
+      } else {
+        toast.error('Sincronizarea nu a putut fi pornită', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleTest() {
+    setBusy('test')
+    try {
+      const result = await testConnection(connection.id)
+      if (result.ok) toast.success('Conexiunea funcționează', { description: result.message })
+      else toast.warning('Conexiunea are probleme', { description: result.message, duration: 10_000 })
+      await refresh()
+    } catch (err) {
+      toast.error('Testul nu a putut fi rulat', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleDisconnect() {
+    setBusy('disconnect')
+    try {
+      const next = await disconnectConnection(connection.id)
+      onChanged(next)
+      setDisconnectOpen(false)
+      toast.success('Magazinul a fost deconectat', { description: 'Cheile de acces au fost șterse; datele sincronizate rămân până le ștergi din Setări magazin.' })
+    } catch (err) {
+      toast.error('Magazinul nu a putut fi deconectat', { description: commerceErrorMessage(err, 'Încearcă din nou.') })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const syncCounts = sync ? Object.entries(sync.counts ?? {}).filter(([, n]) => typeof n === 'number') : []
+
+  return (
+    <Card className="gap-0 py-0">
+      {/* Header */}
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-[15px] leading-[22px] font-medium text-foreground">{name}</h3>
+            <ConnectionStatusChip status={connection.status} />
+          </div>
+          <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">
+            {descriptor.name} ·{' '}
+            <a
+              href={connection.store_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-sm break-all underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+            >
+              {connection.store_domain}
+              <ExternalLink className="size-3" aria-hidden="true" />
+            </a>
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          {!disconnected && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => void handleSync()} loading={busy === 'sync'} loadingState="connecting" loadingText="Pornește…" disabled={busy !== null && busy !== 'sync'}>
+                <RefreshCw aria-hidden="true" />
+                Sincronizează acum
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void handleTest()} loading={busy === 'test'} loadingState="solving" loadingText="Se testează…" disabled={busy !== null && busy !== 'test'}>
+                <Stethoscope aria-hidden="true" />
+                Testează
+              </Button>
+            </>
+          )}
+          <Button variant={disconnected ? 'default' : 'outline'} size="sm" onClick={() => onReconnect(connection)} disabled={busy !== null}>
+            <PlugZap aria-hidden="true" />
+            Reconectează
+          </Button>
+          {!disconnected && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => setDisconnectOpen(true)} disabled={busy !== null}>
+              <Unplug aria-hidden="true" />
+              Deconectează
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Error */}
+      {connection.error_message && (connection.status === 'error' || connection.status === 'degraded') && (
+        <div className="px-5 pb-5">
+          <Alert variant={connection.status === 'error' ? 'destructive' : 'warning'}>
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{connection.status === 'error' ? 'Conexiunea are o eroare' : 'Conexiunea funcționează cu probleme'}</AlertTitle>
+            <AlertDescription>
+              {connection.error_message}
+              {connection.error_code && <span className="ml-1 font-mono text-xs">({connection.error_code})</span>}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Meta */}
+      <div className="border-t border-rule px-5 py-5">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+          <MetaItem label="Conectat">
+            <When iso={connection.connected_at} never="—" />
+          </MetaItem>
+          <MetaItem label="Ultima sincronizare reușită">
+            <When iso={connection.last_successful_sync_at} />
+          </MetaItem>
+          <MetaItem label="Ultima sincronizare">
+            <When iso={connection.last_sync_at} />
+          </MetaItem>
+          <MetaItem label="Date sincronizate">
+            <span className="tabular-nums">
+              {formatCount(connection.counts.orders)} comenzi · {formatCount(connection.counts.customers)} clienți · {formatCount(connection.counts.products)} produse
+            </span>
+          </MetaItem>
+        </dl>
+
+        {/* Sync state */}
+        {sync && sync.status !== 'idle' && (
+          <div
+            role="status"
+            className={cn(
+              'mt-5 flex flex-wrap items-start gap-x-3 gap-y-2 rounded-2xl p-4 text-[13px] leading-[19px]',
+              sync.status === 'failed' ? 'bg-destructive-soft text-destructive' : 'bg-secondary text-foreground',
+            )}
+          >
+            {syncing && !syncTimedOut ? <OrbInline state="connecting" /> : null}
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">
+                {SYNC_STATUS_LABEL[sync.status]}
+                {sync.kind && <span className="font-normal text-muted-foreground"> · {SYNC_KIND_LABEL[sync.kind]}</span>}
+                {sync.resource && <span className="font-normal text-muted-foreground"> · {SYNC_RESOURCE_LABEL[sync.resource]}</span>}
+              </p>
+              {syncCounts.length > 0 && (
+                <p className="mt-0.5 text-muted-foreground tabular-nums">
+                  {syncCounts.map(([key, n]) => `${formatCount(n)} ${SYNC_RESOURCE_LABEL[key as keyof typeof SYNC_RESOURCE_LABEL] ?? key}`).join(' · ')}
+                </p>
+              )}
+              {sync.error_message && <p className="mt-0.5">{sync.error_message}</p>}
+              {syncTimedOut && (
+                <p className="mt-0.5 text-muted-foreground">
+                  Sincronizarea durează mai mult decât de obicei. Pagina nu se mai actualizează singură; reîncarc-o peste câteva minute.
+                </p>
+              )}
+              {sync.updated_at && (
+                <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
+                  Actualizat <When iso={sync.updated_at} />
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Capabilities + webhooks */}
+      <div className="grid gap-6 border-t border-rule px-5 py-5 lg:grid-cols-2">
+        <div>
+          <h4 className={OVERLINE}>Ce poate face conexiunea</h4>
+          <ul className="mt-2.5 space-y-1.5" aria-label="Capabilități">
+            {capabilityRows(connection.capabilities).map((row) => (
+              <li key={row.label} className="flex items-start gap-2 text-[13px] leading-[19px] text-foreground/80">
+                {row.ok ? (
+                  <Check aria-hidden className="mt-[3px] size-3.5 shrink-0 text-success-dot" />
+                ) : (
+                  <X aria-hidden className="mt-[3px] size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className={cn(!row.ok && 'text-muted-foreground')}>{row.label}</span>
+              </li>
+            ))}
+          </ul>
+          {connection.capabilities.notes.length > 0 && (
+            <ul className="mt-3 space-y-1 text-xs leading-[18px] text-muted-foreground" aria-label="Note despre capabilități">
+              {connection.capabilities.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <h4 className={cn('flex items-center gap-1.5', OVERLINE)}>
+            <Webhook className="size-3.5" aria-hidden="true" />
+            Webhook-uri active
+          </h4>
+          {connection.webhook_topics.length > 0 ? (
+            <ul className="mt-2.5 flex flex-wrap gap-1.5" aria-label="Subiecte webhook">
+              {connection.webhook_topics.map((topic) => (
+                <li key={topic}>
+                  <Badge variant="outline" className="font-mono text-[11px]">{topic}</Badge>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2.5 text-[13px] leading-[19px] text-muted-foreground">
+              {connection.capabilities.webhooks
+                ? 'Niciun webhook înregistrat încă; rulează o sincronizare sau reconectează magazinul.'
+                : 'Platforma nu trimite evenimente; datele se reîmprospătează periodic.'}
+            </p>
+          )}
+          <p className="mt-3 flex items-start gap-1.5 text-xs leading-[18px] text-muted-foreground">
+            <KeyRound className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            Cheile de acces sunt criptate și nu se mai afișează niciodată. Ca să le schimbi, reconectează magazinul.
+          </p>
+        </div>
+      </div>
+
+      <Dialog open={disconnectOpen} onOpenChange={(open) => !busy && setDisconnectOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deconectezi magazinul?</DialogTitle>
+            <DialogDescription>
+              Cheile de acces sunt șterse și webhook-urile dezînregistrate; automatizările nu mai pot suna. Comenzile, clienții și
+              produsele deja sincronizate rămân. Poți reconecta oricând.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDisconnectOpen(false)} disabled={busy === 'disconnect'}>
+              Renunță
+            </Button>
+            <Button variant="destructive-solid" onClick={() => void handleDisconnect()} loading={busy === 'disconnect'} loadingText="Se deconectează…">
+              Deconectează
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
+}

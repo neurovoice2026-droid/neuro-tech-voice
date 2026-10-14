@@ -4,6 +4,7 @@ import 'server-only'
 // built from this, which is what keeps primary and fallback consistent.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/observability/logger'
 import { composeSystemPrompt, type ComposePromptInput } from './prompt'
 import {
   readAfterHours,
@@ -146,6 +147,8 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
   // In-call business tools (slice B2): booking needs Google Calendar; the
   // fallback agent can take messages (webhook tool) but never books.
   const businessTools = await loadBusinessTools(db, agent)
+  // E-commerce vertical: a store org with a usable connection gets the store tools and script variables.
+  const commerce = await loadCommerceSpec(db, agent.org_id)
   // ElevenLabs only: the Cartesia fallback agent stays single-language.
   const additionalLanguages = effectiveAdditionalLanguages(language, conversation.additional_languages)
 
@@ -205,6 +208,7 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     openingHours,
     bookingMode: businessTools.booking ? 'tools' : businessTools.bookingEnabled ? 'take_message' : null,
     takeMessageTool: businessTools.takeMessage,
+    storeTools: commerce.enabled,
   }
 
   return {
@@ -221,6 +225,8 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
       callContext: cartesiaToolAvailable ? 'tool' : 'none',
       bookingMode: businessTools.bookingEnabled ? 'take_message' : null,
       takeMessageTool: businessTools.takeMessage && cartesiaToolAvailable,
+      storeTools: commerce.enabled && cartesiaToolAvailable,
+      storeToolsSingle: true,
     }),
     knowledgeAppendix: appendix.trim(),
     firstMessage,
@@ -253,5 +259,37 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     openingHours,
     revision: agent.config_revision ?? 1,
     businessTools,
+    commerce,
   }
+}
+
+/**
+ * Whether this organization is a store (`isStore`) and whether it has a
+ * connection the agent can use (`enabled`), migration 024. A store keeps
+ * `isStore` (and its name) without a usable connection — disconnected, in
+ * error or not yet connected — because its stored prompt references the script
+ * variables regardless, and the agent must keep their placeholders or inbound
+ * calls fail to start. Missing columns/tables (migration not applied) read as off.
+ */
+export async function loadCommerceSpec(db: SupabaseClient, orgId: string): Promise<NonNullable<AgentSpec['commerce']>> {
+  const off = { enabled: false, isStore: false, storeName: null }
+  const { data: org, error } = await db.from('organizations').select('business_type, commerce_profile').eq('id', orgId).maybeSingle()
+  if (error) {
+    if (error.code === '42703' || error.code === 'PGRST204') return off
+    throw new Error(`organizations read failed: ${error.message}`)
+  }
+  if (org?.business_type !== 'ecommerce') return off
+  const profile = org.commerce_profile && typeof org.commerce_profile === 'object' ? (org.commerce_profile as Record<string, unknown>) : {}
+  const profileName = typeof profile.display_name === 'string' && profile.display_name.trim() ? profile.display_name.trim() : null
+  const { data: conn, error: connErr } = await db.from('commerce_connections').select('id, status, display_name').eq('org_id', orgId).in('status', ['active', 'degraded', 'connecting']).order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (connErr) {
+    if (connErr.code === '42P01') {
+      createLogger({ component: 'agent_spec' }).warn('commerce.spec.migration_missing', { orgId })
+      return { enabled: false, isStore: true, storeName: profileName }
+    }
+    throw new Error(`commerce_connections read failed: ${connErr.message}`)
+  }
+  if (!conn) return { enabled: false, isStore: true, storeName: profileName }
+  const storeName = profileName ?? ((conn.display_name as string | null) ?? null)
+  return { enabled: true, isStore: true, storeName }
 }

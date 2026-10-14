@@ -2,7 +2,10 @@
 // calls it at the start of a call with the called/caller numbers (system
 // dynamic variables); we answer with the minimum context the agent needs to
 // behave like the primary agent: is the business closed right now, call
-// direction and the business name. No caller PII is returned.
+// direction and the business name. No caller PII is returned. Store agents
+// (lib/commerce) additionally get the script variables of a campaign call
+// (call_reason, order number, customer name…), only when the caller id is
+// that campaign call's callee; every other call gets call_reason "inbound".
 // Auth: static bearer token (CARTESIA_TOOL_SECRET) configured on the tool.
 import crypto from 'crypto'
 import { NextResponse } from 'next/server'
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     const since = new Date(Date.now() - 15 * 60_000).toISOString()
     const { data: calls, error } = await db
       .from('calls')
-      .select('id, direction, routing, from_number, to_number')
+      .select('id, direction, routing, from_number, to_number, commerce_run_id')
       .eq('org_id', number.org_id)
       .eq('phone_number_id', number.id)
       .eq('provider', 'cartesia')
@@ -79,13 +82,29 @@ export async function POST(request: Request) {
     const ctx = await loadRoutingContext(number)
     const routing = (call?.routing ?? {}) as { after_hours?: boolean }
     const afterHours = typeof routing.after_hours === 'boolean' ? routing.after_hours : !(ctx.routingInput?.hours.open ?? true)
-    log.info('tools.context', { orgId: number.org_id, callId: call?.id ?? null, matched: !!call })
+    // Store agents (lib/commerce): the typed script values of a campaign call
+    // were written on the call row at dispatch; an inbound store call gets
+    // call_reason "inbound" and no order. Unlike after_hours/direction, these
+    // name a customer and their order, so the loose match above is not enough:
+    // they are only answered when the caller id is present and the matched row
+    // is that campaign call itself (outbound, our line → this callee), the
+    // same both-numbers rule as lib/voice-tools/cartesia-call.ts. A withheld
+    // caller id, or the newest row on the line being another customer's
+    // campaign call, therefore never leaks that customer's order.
+    const campaignCallee = !!caller && !!call && call.direction === 'outbound' && call.from_number === called && call.to_number === caller && typeof call.commerce_run_id === 'string'
+    const commerceVariables = campaignCallee ? (call.routing as { commerce_variables?: Record<string, unknown> } | null)?.commerce_variables : undefined
+    const commerce = commerceVariables && typeof commerceVariables === 'object' && !Array.isArray(commerceVariables)
+      ? Object.fromEntries(Object.entries(commerceVariables).filter(([, v]) => typeof v === 'string').map(([k, v]) => [k, String(v).slice(0, 500)]))
+      : null
+    log.info('tools.context', { orgId: number.org_id, callId: call?.id ?? null, matched: !!call, commerce: commerce !== null })
     return NextResponse.json(
       {
         after_hours: afterHours,
         direction: (call?.direction as string | undefined) ?? (body.direction === 'outbound' ? 'outbound' : 'inbound'),
         business_name: ctx.org.name,
         business_local_time: formatIsoWithOffset(Date.now(), ctx.org.timezone),
+        call_reason: commerce?.call_reason ?? 'inbound',
+        ...(commerce ?? {}),
       },
       { headers: { 'Cache-Control': 'no-store' } },
     )

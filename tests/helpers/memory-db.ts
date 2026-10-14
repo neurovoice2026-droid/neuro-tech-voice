@@ -7,11 +7,41 @@
 
 type Row = Record<string, unknown>
 
+/** PostgREST list syntax: (a,b,"c d","q\"uote","back\\slash") — quoted values honour backslash escapes. */
+export function parsePostgrestList(raw: string): string[] {
+  const s = raw.replace(/^\(/, '').replace(/\)$/, '')
+  const out: string[] = []
+  let cur = ''
+  let quoted = false
+  let wasQuoted = false
+  const push = () => {
+    out.push(wasQuoted ? cur : cur.trim())
+    cur = ''
+    wasQuoted = false
+  }
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (quoted) {
+      if (ch === '\\' && i + 1 < s.length) cur += s[++i]
+      else if (ch === '"') quoted = false
+      else cur += ch
+    } else if (ch === '"') {
+      quoted = true
+      wasQuoted = true
+    } else if (ch === ',') push()
+    else cur += ch
+  }
+  if (s.length) push()
+  return out
+}
+
 export interface MemoryDbOptions {
   /** Called for every updated row (e.g. to bump updated_at like the DB trigger). */
   onUpdate?: (table: string, row: Row) => void
   /** Unique keys per table, for upsert(onConflict) and duplicate inserts (23505). */
   unique?: Record<string, string[][]>
+  /** Answers rpc(fn, args) (default: { data: 2, error: null }). Receives the tables for in-memory implementations. */
+  rpc?: (fn: string, args: unknown, tables: Record<string, Row[]>) => { data: unknown; error: { message: string; code?: string } | null }
 }
 
 export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOptions = {}) {
@@ -46,7 +76,10 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
     is(c: string, v: null) { this.filters.push((r) => (r[c] ?? null) === v); return this }
     not(c: string, op: string, v: unknown) {
       if (op === 'is' && v === null) this.filters.push((r) => (r[c] ?? null) !== null)
-      else throw new Error(`memoryDb: unsupported not(${op})`)
+      else if (op === 'in' && typeof v === 'string') {
+        const values = parsePostgrestList(v)
+        this.filters.push((r) => !values.includes(String(r[c])))
+      } else throw new Error(`memoryDb: unsupported not(${op})`)
       return this
     }
     lt(c: string, v: unknown) { this.filters.push((r) => r[c] !== null && r[c] !== undefined && String(r[c]) < String(v)); return this }
@@ -84,6 +117,7 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
             if (this.op === 'insert') return { data: null, error: { message: 'duplicate key', code: '23505' }, count: null }
             if (this.upsertOpts.ignoreDuplicates) continue
             Object.assign(clash, item)
+            opts.onUpdate?.(this.table, clash)
             out.push({ ...clash })
             continue
           }
@@ -137,7 +171,7 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
     from: (t: string) => new Query(t),
     rpc: (fn: string, args: unknown) => {
       rpcCalls.push({ fn, args })
-      return Promise.resolve({ data: 2, error: null })
+      return Promise.resolve(opts.rpc ? opts.rpc(fn, args, tables) : { data: 2, error: null })
     },
   }
 }

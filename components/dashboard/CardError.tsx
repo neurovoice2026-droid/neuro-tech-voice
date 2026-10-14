@@ -20,13 +20,19 @@ interface CardErrorProps {
   role?: 'alert' | 'status'
   /** Padding / height of the region it replaces (default: a list row, px-5 py-4). */
   className?: string
+  /** The retry button's text ("Retry" by default; translated sections pass their own). */
+  retryLabel?: React.ReactNode
+  /** The retry button's text while the retry is in flight ("Retrying…" by default). */
+  retryingLabel?: React.ReactNode
 }
 
 /**
  * The dashboard's one card-level error: a muted row with a red icon, the
  * message and an outline Retry. Page-level failures keep the red Alert.
  */
-export function CardError({ message, detail, onRetry, retrying, role = 'alert', className }: CardErrorProps) {
+export function CardError({
+  message, detail, onRetry, retrying, role = 'alert', className, retryLabel = 'Retry', retryingLabel = 'Retrying…',
+}: CardErrorProps) {
   const [clicked, setClicked] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => {
@@ -56,11 +62,11 @@ export function CardError({ message, detail, onRetry, retrying, role = 'alert', 
           size="xs"
           onClick={retry}
           loading={retrying ?? clicked}
-          loadingText="Retrying…"
+          loadingText={retryingLabel}
           className="tap-44 shrink-0"
         >
           <RotateCw aria-hidden="true" />
-          Retry
+          {retryLabel}
         </Button>
       )}
     </div>

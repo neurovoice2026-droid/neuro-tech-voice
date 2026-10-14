@@ -46,6 +46,7 @@ import {
   type AgentSyncReport,
 } from '@/lib/agents/ensure-agent'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
+import { TOTAL_COMMERCE_ONBOARDING_STEPS, isEcommerceOrg } from '@/lib/commerce/business-type'
 import { PLANS, stripePriceId } from '@/types'
 import type { BillingInterval, Plan } from '@/types'
 import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
 
     const { data: orgRow, error: orgErr } = await supabase
       .from('organizations')
-      .select('id, name, industry, website, description, stripe_customer_id, onboarding_completed')
+      .select('id, name, industry, website, description, stripe_customer_id, onboarding_completed, business_type')
       .eq('id', org.id)
       .single()
     if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
@@ -206,12 +207,16 @@ export async function POST(request: Request) {
     // Only mark onboarding complete now if we're NOT sending the user to Stripe.
     // For paid checkout it's completed on payment success (billing webhook), so a
     // cancelled checkout returns to onboarding instead of dumping them in the app.
+    // That return must land on the launch step of the flow the org is in: the
+    // service flow launches at step 4, the store flow (both post here) at its
+    // last step — a store org sent back to 4 would reopen "Automatizări" instead.
+    const launchStep = isEcommerceOrg(orgRow) ? TOTAL_COMMERCE_ONBOARDING_STEPS : 4
     const admin = createAdminClient()
     const { error: planErr } = await admin
       .from('organizations')
       .update({
         onboarding_completed: !willCheckout,
-        onboarding_step: 4,
+        onboarding_step: launchStep,
         plan: effectivePlan,
         minutes_limit: PLANS[effectivePlan].minutes_limit,
       })

@@ -15,8 +15,20 @@ export const ONBOARDING_STEPS = [
 
 export const TOTAL_ONBOARDING_STEPS = ONBOARDING_STEPS.length
 
+/** One step of a step list (the service flow's ONBOARDING_STEPS, the store flow's COMMERCE_ONBOARDING_STEPS). */
+export interface OnboardingStepDef {
+  num: number
+  label: string
+}
+
 interface StepIndicatorProps {
   currentStep: number
+  /** The step list to render; the service onboarding's four steps by default. */
+  steps?: readonly OnboardingStepDef[]
+  /** Accessible name of the list (translated by flows that are not in English). */
+  ariaLabel?: string
+  /** Screen-reader suffix of a completed step ("(done)"; translated by flows that are not in English). */
+  doneLabel?: string
   className?: string
 }
 
@@ -24,11 +36,11 @@ interface StepIndicatorProps {
  * Text step list for the onboarding top bar: `01 Company · 02 Agent · 03 Voice · 04 Launch`.
  * Done steps are ink with a check, the current one sits on a tinted pill, upcoming ones are muted.
  */
-export function StepIndicator({ currentStep, className }: StepIndicatorProps) {
+export function StepIndicator({ currentStep, steps = ONBOARDING_STEPS, ariaLabel = 'Onboarding progress', doneLabel = '(done)', className }: StepIndicatorProps) {
   return (
-    <nav aria-label="Onboarding progress" className={className}>
+    <nav aria-label={ariaLabel} className={className}>
       <ol className="flex items-center gap-1">
-        {ONBOARDING_STEPS.map((step, idx) => {
+        {steps.map((step, idx) => {
           const isCompleted = step.num < currentStep
           const isCurrent = step.num === currentStep
           return (
@@ -57,7 +69,7 @@ export function StepIndicator({ currentStep, className }: StepIndicatorProps) {
                   <span className="tabular-nums">{String(step.num).padStart(2, '0')}</span>
                 )}
                 {step.label}
-                {isCompleted && <span className="sr-only">(done)</span>}
+                {isCompleted && <span className="sr-only">{doneLabel}</span>}
               </span>
             </li>
           )
@@ -105,6 +117,10 @@ interface StepHeaderProps {
   description?: React.ReactNode
   /** Overrides the eyebrow ("Step 2 · Agent" by default). */
   eyebrow?: React.ReactNode
+  /** The step list the eyebrow's label comes from; the service onboarding's steps by default. */
+  steps?: readonly OnboardingStepDef[]
+  /** The word before the number in the default eyebrow ("Step" → "Step 2 · Agent"; "Pasul" for the store flow). */
+  stepWord?: string
   /** Ref to the title, for callers that move focus to it (it is always focusable with tabIndex -1). */
   headingRef?: React.Ref<HTMLHeadingElement>
   className?: string
@@ -114,12 +130,12 @@ interface StepHeaderProps {
  * Opener of every onboarding step: eyebrow, display title (the page's h1) and a 15 px description.
  * The title takes focus (tabIndex -1) when the step changes, see OnboardingWrapper.
  */
-export function StepHeader({ step, title, description, eyebrow, headingRef, className }: StepHeaderProps) {
-  const label = ONBOARDING_STEPS.find((s) => s.num === step)?.label
+export function StepHeader({ step, title, description, eyebrow, steps = ONBOARDING_STEPS, stepWord = 'Step', headingRef, className }: StepHeaderProps) {
+  const label = steps.find((s) => s.num === step)?.label
   const enter = useStepEnter()
   return (
     <header className={cn('mb-10', enter.className, className)} style={enter.style}>
-      <Eyebrow>{eyebrow ?? `Step ${step} · ${label ?? ''}`}</Eyebrow>
+      <Eyebrow>{eyebrow ?? `${stepWord} ${step} · ${label ?? ''}`}</Eyebrow>
       <h1
         ref={headingRef}
         tabIndex={-1}

@@ -5,13 +5,63 @@ import { useTransition } from 'react'
 import { Logo } from '@/components/shared/Logo'
 import { Button } from '@/components/ui/button'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
+import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
+import { COMMERCE_ONBOARDING_STEPS, TOTAL_COMMERCE_ONBOARDING_STEPS, type OnboardingVariant } from '@/lib/commerce/business-type'
 import { signOut } from '@/lib/auth/actions'
-import { StepIndicator, TOTAL_ONBOARDING_STEPS } from './StepIndicator'
+import { ONBOARDING_STEPS, StepIndicator, TOTAL_ONBOARDING_STEPS, type OnboardingStepDef } from './StepIndicator'
 
-export function OnboardingTopBar() {
-  const currentStep = useOnboardingStore((s) => s.currentStep)
-  const progress = (currentStep / TOTAL_ONBOARDING_STEPS) * 100
+interface OnboardingTopBarProps {
+  /**
+   * Which flow the bar belongs to (decided by the server from the organization row):
+   * 'services' is the original four-step bar, 'ecommerce' the six Romanian store steps,
+   * 'choose' (the business-type screen) shows no step list at all.
+   */
+  variant?: OnboardingVariant
+}
+
+interface BarCopy {
+  steps: readonly OnboardingStepDef[]
+  total: number
+  navLabel: string
+  doneLabel: string
+  counter: (step: number, total: number) => string
+  exit: string
+  signingOut: string
+}
+
+const SERVICES_COPY: BarCopy = {
+  steps: ONBOARDING_STEPS,
+  total: TOTAL_ONBOARDING_STEPS,
+  navLabel: 'Onboarding progress',
+  doneLabel: '(done)',
+  counter: (step, total) => `Step ${step} of ${total}`,
+  exit: 'Exit',
+  signingOut: 'Signing out…',
+}
+
+const COMMERCE_COPY: BarCopy = {
+  steps: COMMERCE_ONBOARDING_STEPS,
+  total: TOTAL_COMMERCE_ONBOARDING_STEPS,
+  navLabel: 'Progresul configurării',
+  doneLabel: '(finalizat)',
+  counter: (step, total) => `Pasul ${step} din ${total}`,
+  exit: 'Ieși',
+  signingOut: 'Se deconectează…',
+}
+
+export function OnboardingTopBar({ variant = 'services' }: OnboardingTopBarProps) {
+  // Both stores are read unconditionally (hooks), the variant picks which one drives the bar.
+  const serviceStep = useOnboardingStore((s) => s.currentStep)
+  const commerceStep = useCommerceOnboardingStore((s) => s.currentStep)
   const [isPending, startTransition] = useTransition()
+
+  // The service flow keeps its English bar; the business-type screen (Romanian, like the store
+  // flow it leads to) and the store flow share the Romanian one.
+  const copy = variant === 'services' ? SERVICES_COPY : COMMERCE_COPY
+  const currentStep = variant === 'ecommerce' ? commerceStep : serviceStep
+  // The business-type screen comes before step 1: no list, no counter, an empty progress rule.
+  const showSteps = variant !== 'choose'
+  const progress = showSteps ? (currentStep / copy.total) * 100 : 0
 
   function handleExit() {
     startTransition(async () => {
@@ -26,25 +76,32 @@ export function OnboardingTopBar() {
         <Logo size="sm" />
 
         {/* Step list (md+). Phones get the "Step 2 of 4" line instead. */}
-        <StepIndicator
-          currentStep={currentStep}
-          className="absolute top-1/2 left-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block"
-        />
+        {showSteps && (
+          <StepIndicator
+            currentStep={currentStep}
+            steps={copy.steps}
+            ariaLabel={copy.navLabel}
+            doneLabel={copy.doneLabel}
+            className="absolute top-1/2 left-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block"
+          />
+        )}
 
         <div className="flex items-center gap-2">
-          <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums md:hidden">
-            Step {currentStep} of {TOTAL_ONBOARDING_STEPS}
-          </span>
+          {showSteps && (
+            <span className="text-[13px] leading-[19px] text-muted-foreground tabular-nums md:hidden">
+              {copy.counter(currentStep, copy.total)}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="sm"
             onClick={handleExit}
             loading={isPending}
-            loadingText="Signing out…"
+            loadingText={copy.signingOut}
             className="text-muted-foreground hover:text-foreground"
           >
             <LogOut aria-hidden="true" />
-            Exit
+            {copy.exit}
           </Button>
         </div>
 

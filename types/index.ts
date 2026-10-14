@@ -2,10 +2,19 @@
 
 export type Plan = 'trial' | 'starter' | 'pro' | 'business' | 'custom'
 
+/** Which onboarding and dashboard an organization gets (migration 024). NULL = the owner has not chosen yet. */
+export type BusinessType = 'services' | 'ecommerce'
+
 export interface Organization {
   id: string
   user_id: string
   name: string | null
+  /** 'services' (the original product, also the backfill of every pre-existing org) or 'ecommerce'. */
+  business_type?: BusinessType | null
+  /** When the owner chose the business type; null for the legacy backfill. */
+  business_type_selected_at?: string | null
+  /** Store profile from the store onboarding (lib/commerce/profile.ts). */
+  commerce_profile?: Record<string, unknown> | null
   /** IANA zone used for working hours (default UTC). */
   timezone?: string
   /** Org-level opt-out of provider fallback (ElevenLabs → Cartesia). */
@@ -280,6 +289,8 @@ export interface Call {
   owner_feedback?: 'like' | 'dislike' | null
   /** Provider details for the call view (detail endpoint only). */
   details?: CallDetails | null
+  /** The e-commerce automation run this call was placed for (migration 024). */
+  commerce_run_id?: string | null
 }
 
 /** Call view extras from calls.call_metadata (lib/voice-providers/call-metadata.ts). */

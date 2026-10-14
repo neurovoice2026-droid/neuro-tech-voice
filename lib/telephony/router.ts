@@ -65,6 +65,15 @@ interface CallRow {
 
 const CALL_COLUMNS = 'id, org_id, agent_id, phone_number_id, direction, status, provider, from_number, to_number, caller_number, routing, routing_reason, failover_reason, outcome, duration_seconds'
 
+/** routing.commerce_variables written by startOutboundCall for campaign calls (strings only). */
+function commerceVariablesOf(routing: Record<string, unknown>): Record<string, string> | undefined {
+  const raw = routing.commerce_variables
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) if (typeof v === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(k)) out[k] = v.slice(0, 500)
+  return Object.keys(out).length ? out : undefined
+}
+
 function base(): string {
   const b = publicBaseUrl()
   if (!b) throw new Error('VOICE_PUBLIC_BASE_URL is not configured')
@@ -164,6 +173,8 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
     businessName: ctx.org.name ?? '',
     agent: { name: ctx.agent.name, language: ctx.agent.language, recordingNotice: ctx.agent.recordingNotice === true, maxDurationSeconds: ctx.agent.maxDurationSeconds },
     endUserNumber: other,
+    // Campaign calls (lib/commerce) carry their typed script values on the row.
+    tenantVariables: commerceVariablesOf(call.routing),
     allowedOverrides: ctx.elevenLabsOverrides,
     capSeconds: callAllowance(ctx.org.usage).capSeconds,
   })

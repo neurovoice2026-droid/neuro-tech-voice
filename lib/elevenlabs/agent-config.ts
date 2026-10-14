@@ -38,6 +38,7 @@ import {
 import { pausedAgentBody } from './paused-agent'
 import { SYSTEM_TRANSFER_BEHAVIOUR } from './tools/behaviour'
 import { OFFERED_SLOTS_VARIABLE } from './tools/business'
+import { inboundScriptValues } from '@/lib/commerce/automations/variables'
 import { initiationWebhookBlock } from './api/telephony'
 
 /**
@@ -90,6 +91,12 @@ export function agentTags(spec: Pick<AgentSpec, 'orgId' | 'localAgentId'>): stri
 export function dynamicVariablePlaceholders(spec: AgentSpec): Record<string, string> {
   return {
     ...spec.dynamicVariables,
+    // Store agents: the typed script variables of a campaign call; inbound calls
+    // keep these defaults. Keyed on the business type, not on a live connection:
+    // the stored store prompt references {{call_reason}}, {{store_name}}, … even
+    // while the store is disconnected or in error, and a prompt variable with
+    // neither a value nor a placeholder stops ElevenLabs from starting the call.
+    ...(spec.commerce?.isStore || spec.commerce?.enabled ? inboundScriptValues(spec.commerce.storeName ?? spec.orgName ?? '', spec.name) : {}),
     [PLATFORM_VARIABLES.callId]: 'unknown',
     [PLATFORM_VARIABLES.callToken]: 'none',
     [PLATFORM_VARIABLES.secretCallToken]: 'none',

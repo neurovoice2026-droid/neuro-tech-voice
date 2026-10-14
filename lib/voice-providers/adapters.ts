@@ -26,7 +26,7 @@ import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
 import { forgetPlatformResource, tryPlatformResource } from './platform-resources'
 import { TRANSFER_TOOL_DEGRADED, ensurePlatformTool, invalidatePlatformToolMemo, storedPlatformToolId } from './platform-tools'
 import { composeSystemPrompt } from './prompt'
-import { invalidateBusinessToolMemo, resolveBusinessToolIds, withAttachedBusinessTools } from './business-tools'
+import { invalidateBusinessToolMemo, resolveBusinessToolIds, resolveCommerceToolIds, withAttachedBusinessTools, withAttachedCommerceTools } from './business-tools'
 
 export interface SyncedAgent extends ExternalAgentRef {
   configHash: string
@@ -125,7 +125,10 @@ async function elevenLabsBody(
   // In-call business tools (slice B2): attached only when obtained; the prompt follows what is attached.
   const business = await resolveBusinessToolIds(spec, mode, createLogger({ component: 'elevenlabs_lifecycle' }))
   degraded = degraded ?? business.degraded
-  const effective = withAttachedBusinessTools(needsTransferTool && !transferToolId ? withoutAppTransfer(spec) : spec, business)
+  // E-commerce store tools: all six or none; the prompt follows what is attached.
+  const commerce = await resolveCommerceToolIds(spec, mode, createLogger({ component: 'elevenlabs_lifecycle' }))
+  degraded = degraded ?? commerce.degraded
+  const effective = withAttachedCommerceTools(withAttachedBusinessTools(needsTransferTool && !transferToolId ? withoutAppTransfer(spec) : spec, business), commerce.attached)
   // ELEVENLABS_POST_CALL_WEBHOOK_ID, else the workspace webhook pointing at our receiver (discovered once).
   const postCallWebhookId = await import('./webhook-health').then((m) => m.resolvePostCallWebhookId())
   // Cached LLM catalogue: the configured LLM when offered and not deprecated,
@@ -135,7 +138,7 @@ async function elevenLabsBody(
   const initiationWebhook = spec.hasNativeNumbers ? await import('@/lib/telephony/initiation-config').then((m) => m.initiationWebhookFor(mode)) : null
   const body = buildElevenLabsAgentBody(
     effective,
-    { transferToolId, postCallWebhookId, businessToolIds: business.ids, bookingToolsAttached: business.booking, initiationWebhook },
+    { transferToolId, postCallWebhookId, businessToolIds: [...business.ids, ...commerce.ids], bookingToolsAttached: business.booking, initiationWebhook },
     { llm: llm.llm, reasoningEffort: llm.reasoningEffort },
   )
   return {
@@ -364,7 +367,9 @@ async function cartesiaConfig(spec: AgentSpec) {
   const contextToolId = await tryPlatformResource('cartesia.context_tool')
   // take_message on the fallback agent (slice B2), when the owner enabled it.
   const messageToolId = spec.active && spec.businessTools?.takeMessage ? await tryPlatformResource('cartesia.message_tool') : null
-  return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId, messageToolId }), voice }
+  // Store tools on the fallback agent (e-commerce vertical), one webhook tool with an action parameter.
+  const storeToolId = spec.active && spec.commerce?.enabled ? await tryPlatformResource('cartesia.store_tool') : null
+  return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId, messageToolId, storeToolId }), voice }
 }
 
 /** Pages through the whole listing; throws (keep the id) if it cannot be read completely. */

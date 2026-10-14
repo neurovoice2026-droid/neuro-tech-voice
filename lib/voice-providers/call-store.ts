@@ -371,6 +371,8 @@ async function afterWrite(
   }
   if (event.kind === 'call.completed' || event.kind === 'call.initiation_failed') {
     await triggerWorkflowsOnce(db, callId, event.kind === 'call.completed' ? 'ended' : 'missed', log)
+    // A campaign call (lib/commerce): the automation run takes its outcome. Never throws.
+    await import('@/lib/commerce/automations/reconcile').then((m) => m.reconcileCommerceRun(db, callId, log))
   }
 }
 

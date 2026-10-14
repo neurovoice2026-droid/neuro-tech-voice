@@ -11,6 +11,7 @@
 
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { businessToolRules, type BookingPromptMode } from './prompt-business'
+import { commerceToolRules } from './prompt-commerce'
 import { stripPlatformVariables } from './template-variables'
 
 const DEFAULT_FALLBACK_MESSAGES: Record<string, string> = {
@@ -111,6 +112,10 @@ export interface ComposePromptInput {
   bookingMode?: BookingPromptMode | null
   /** The take_message tool is attached. */
   takeMessageTool?: boolean
+  /** E-commerce vertical: the store tools are attached (lib/voice-providers/prompt-commerce.ts). */
+  storeTools?: boolean
+  /** The store tools are one webhook tool with an action parameter (Cartesia fallback). */
+  storeToolsSingle?: boolean
 }
 
 const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(AGENT_LANGUAGES.map((l) => [l.value, l.label]))
@@ -244,6 +249,7 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
       callIdVariable: PLATFORM_VARIABLES.callId,
     })
   )
+  rules.push(...commerceToolRules({ storeTools: !!input.storeTools, callContext: context, singleTool: input.storeToolsSingle }))
 
   // Browser test sessions (slice G, lib/voice-providers/web-test.ts) carry
   // ntv_routing_mode "web": there is no phone line, and the platform tools
