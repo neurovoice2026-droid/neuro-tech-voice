@@ -40,6 +40,7 @@ export async function automationDto(db: SupabaseClient, connection: ConnectionRo
     stats: {
       eligible: stats?.eligible ?? 0,
       scheduled: stats?.scheduled ?? 0,
+      retrying: stats?.retry_waiting ?? 0,
       calling: stats?.calling ?? 0,
       completed: stats?.completed ?? 0,
       suppressed: stats?.suppressed ?? 0,
@@ -72,10 +73,25 @@ export async function enableGate(db: SupabaseClient, orgId: string): Promise<Ena
 }
 
 /**
+ * True while the organization has not launched yet. The agent is activated
+ * only at launch and a number can be bought only after it, so the store
+ * onboarding's automations step could never pass the agent and number check.
+ */
+async function beforeLaunch(db: SupabaseClient, orgId: string): Promise<boolean> {
+  const { data, error } = await db.from('organizations').select('onboarding_completed').eq('id', orgId).maybeSingle()
+  if (error) throw new Error(`organizations read failed: ${error.message}`)
+  return data?.onboarding_completed === false
+}
+
+/**
  * Creates or updates the automation of `type` on the connection. Enabling
  * requires the consent confirmation (this request or an earlier one), an
  * available capability, an active agent with an outbound number, the
  * encryption key and a usable connection; otherwise 409 with the reason.
+ * Before launch the agent and number are not required yet: the automation is
+ * saved enabled and starts calling once both exist, because dispatch
+ * (startOutboundCall) refuses every call while the agent is paused or no
+ * number can place calls.
  */
 export async function upsertAutomation(
   db: SupabaseClient,
@@ -98,9 +114,11 @@ export async function upsertAutomation(
     if (!consentAt) throw fail('no_consent', 'Confirm customer consent for calls first.')
     if (connection.status !== 'active' && connection.status !== 'degraded') throw fail('connection_inactive', 'Connect the store before enabling automations.')
     if (!commerceCryptoConfigured()) throw fail('encryption_not_configured', 'Credential encryption is not configured on the platform.')
-    const gate = await enableGate(db, input.orgId)
-    if (!gate.agentActive) throw fail('agent_inactive', 'The agent is paused: turn it on before enabling automations.')
-    if (!gate.hasOutboundNumber) throw fail('no_phone_number', 'You need an active phone number that can place calls.')
+    if (!(await beforeLaunch(db, input.orgId))) {
+      const gate = await enableGate(db, input.orgId)
+      if (!gate.agentActive) throw fail('agent_inactive', 'The agent is paused: turn it on before enabling automations.')
+      if (!gate.hasOutboundNumber) throw fail('no_phone_number', 'You need an active phone number that can place calls.')
+    }
   }
 
   const row = {

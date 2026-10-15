@@ -175,12 +175,18 @@ export async function POST(request: Request) {
     log = log.child({ agentId: agent.id })
 
     // ── Work out what changes (voice excluded) ─────────────────────────────
+    // A client that holds the agent always sends its name: the service wizard cannot leave step 2
+    // without one, and the store flow sends the saved row. An agent without a name is a wizard
+    // still at its defaults (a reload, a return from a cancelled Checkout), so its English and
+    // its empty prompt and greeting are nobody's choice: it changes nothing, and the launch
+    // pushes the agent the earlier steps saved.
+    const agentInput = body.agent?.name ? body.agent : undefined
     const agentPatch: Record<string, unknown> = {}
-    if (body.agent?.name) agentPatch.name = body.agent.name
-    if (body.agent?.language) agentPatch.language = body.agent.language
-    if (body.agent?.system_prompt !== undefined) agentPatch.system_prompt = blankToNull(body.agent.system_prompt)
-    if (body.agent?.first_message !== undefined) agentPatch.first_message = blankToNull(body.agent.first_message)
-    if (body.agent?.personality) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: body.agent.personality })
+    if (agentInput?.name) agentPatch.name = agentInput.name
+    if (agentInput?.language) agentPatch.language = agentInput.language
+    if (agentInput?.system_prompt !== undefined) agentPatch.system_prompt = blankToNull(agentInput.system_prompt)
+    if (agentInput?.first_message !== undefined) agentPatch.first_message = blankToNull(agentInput.first_message)
+    if (agentInput?.personality) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: agentInput.personality })
 
     // The org name is part of the provider-side agent too (AgentSpec).
     const current = agent as unknown as Record<string, unknown>

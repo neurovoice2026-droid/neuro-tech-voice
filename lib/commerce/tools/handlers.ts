@@ -272,7 +272,8 @@ export async function recordCallbackRequestTool(ctx: ToolCallContext, args: unkn
   const parsed = parse('record_callback_request', args)
   if (!parsed.ok) return { ok: false, message: parsed.message }
   return recordOutcome(ctx, 'record_callback_request', { reason: parsed.data.reason, preferred_time: parsed.data.preferred_time }, log, async (c) => {
-    const detail = [parsed.data.reason, parsed.data.preferred_time ? `Preferă: ${parsed.data.preferred_time}` : null].filter(Boolean).join(' · ').slice(0, 400)
+    // outcome_detail is read by the merchant (call history, call sheet): the label is English UI copy, the values stay as the customer said them.
+    const detail = [parsed.data.reason, parsed.data.preferred_time ? `Preferred time: ${parsed.data.preferred_time}` : null].filter(Boolean).join(' · ').slice(0, 400)
     if (c.run) {
       const { error } = await ctx.db.from('commerce_automation_runs').update({ outcome: 'callback_requested', outcome_detail: detail }).eq('id', c.run.id).eq('org_id', ctx.org.id)
       if (error) throw new Error(`commerce_automation_runs update failed: ${error.message}`)

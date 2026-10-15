@@ -165,6 +165,14 @@ export interface ConnectionDto {
   capabilities: CommerceCapabilities
   /** Topics with a live registration (never ids or secrets). */
   webhook_topics: string[]
+  /**
+   * Where the store must send its events, for platforms whose deliveries the
+   * merchant sets up (custom connector; WooCommerce cart events): null for
+   * the others, for a disconnected store and when no public origin is set.
+   */
+  webhook_url: string | null
+  /** Last verified delivery (unverified ones are never recorded). */
+  webhook_last_delivery_at: string | null
   last_sync_at: string | null
   last_successful_sync_at: string | null
   error_code: string | null
@@ -222,9 +230,20 @@ export interface AutomationDto {
   script: AutomationScript
   consent_confirmed_at: string | null
   consent_version: string | null
-  stats: { eligible: number; scheduled: number; calling: number; completed: number; suppressed: number; failed: number }
+  stats: RunCounts
   created_at: string
   updated_at: string
+}
+
+/** Runs by status as the tiles show them; `retrying` = retry_waiting (a failed dial waiting for its next attempt). */
+export interface RunCounts {
+  eligible: number
+  scheduled: number
+  retrying: number
+  calling: number
+  completed: number
+  suppressed: number
+  failed: number
 }
 
 export interface RunDto {
@@ -236,8 +255,10 @@ export interface RunDto {
   outcome: RunOutcome | null
   outcome_detail: string | null
   eligibility_reason: string | null
-  /** Order number / cart reference, never the provider id. */
+  /** Order number (no '#') or the cart's short reference, never the provider id. */
   reference: string
+  /** What `reference` names: an order, or an abandoned cart. */
+  reference_kind: 'order' | 'cart'
   order_id: string | null
   customer_id: string | null
   /** Masked (+40 7** *** 123). */
@@ -300,7 +321,7 @@ export interface ProductListDto {
 export interface CommerceOverviewDto {
   connection: ConnectionDto | null
   automations: AutomationDto[]
-  queue: { eligible: number; scheduled: number; calling: number; completed: number; suppressed: number; failed: number }
+  queue: RunCounts
   recent_runs: RunDto[]
   problems: Array<{ code: CommerceProblemCode; message: string; href: string | null }>
 }
@@ -316,6 +337,14 @@ export type CommerceProblemCode =
   | 'agent_inactive'
   | 'minutes_exhausted'
   | 'encryption_not_configured'
+
+/** What this deployment can do, as booleans only (GET /api/commerce/connections and the onboarding state return it as `config`). */
+export interface CommerceConfigSummary {
+  encryption: boolean
+  /** The Shopify app is configured (SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET); without it Shopify cannot be connected. */
+  shopify: boolean
+  publicBaseUrl: boolean
+}
 
 /** Paged list envelope of the read-only routes. */
 export interface PagedDto<T> {

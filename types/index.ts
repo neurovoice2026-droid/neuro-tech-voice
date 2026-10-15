@@ -424,6 +424,10 @@ export interface DashboardMetrics {
   peak_hour: number
   /** Answered rate: share of finished calls that completed (telephony). */
   success_rate: number
+  /** Calls no longer ringing or in progress: success_rate's denominator (0 = no rate to show). */
+  finished_calls?: number
+  /** Completed calls: avg_duration_seconds' denominator (0 = no average to show). */
+  completed_calls?: number
   minutes_used: number
   minutes_limit: number
   /** Purchased extra minutes left (organizations.extra_minutes_balance). */

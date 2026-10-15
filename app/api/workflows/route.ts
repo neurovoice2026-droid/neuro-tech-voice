@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { RequestError, apiError, assertSameOrigin, requestErrorResponse } from '@/lib/api/http'
+import { validateWorkflowActions } from '@/lib/workflows/outbound'
 
 export async function GET() {
   const supabase = await createClient()
@@ -27,6 +29,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  try {
+    assertSameOrigin(request)
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err)
+    throw err
+  }
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -41,6 +49,9 @@ export async function POST(request: Request) {
   if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await request.json()
+  // Webhook and Slack URLs are fetched server-side later: refuse unsafe ones now.
+  const checked = await validateWorkflowActions(body.actions ?? [])
+  if (!checked.ok) return apiError('invalid_request', checked.error, 400, { details: checked.details })
 
   const { data: workflow, error } = await supabase
     .from('workflows')
@@ -50,7 +61,7 @@ export async function POST(request: Request) {
       description: body.description ?? null,
       trigger: body.trigger,
       trigger_config: body.trigger_config ?? {},
-      actions: body.actions ?? [],
+      actions: checked.actions,
       enabled: body.enabled ?? true,
     })
     .select()

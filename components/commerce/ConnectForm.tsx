@@ -30,6 +30,8 @@ interface ConnectFormProps {
   onCancel?: () => void
   /** Where the Shopify callback brings the browser back. */
   returnTo?: ShopifyReturnKey
+  /** Set when this deployment cannot connect the platform (PLATFORM_UNAVAILABLE_NOTE): the form says so and does not submit. */
+  unavailableNote?: string
 }
 
 interface FormError {
@@ -74,7 +76,7 @@ function Instructions({ platform }: { platform: CommercePlatform }) {
 }
 
 /** Shopify: the browser leaves for the OAuth consent page; nothing is posted from here. */
-function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<ConnectFormProps, 'platform' | 'onConnected'>) {
+function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store', unavailableNote }: Omit<ConnectFormProps, 'platform' | 'onConnected'>) {
   const id = useId()
   const [domain, setDomain] = useState(prefill?.store_url ? (normalizeShopDomain(prefill.store_url) ?? '') : '')
   const [error, setError] = useState<string | null>(null)
@@ -82,6 +84,8 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<Conne
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
+    // The start route would only send the browser back with "not configured".
+    if (unavailableNote) return
     const shop = normalizeShopDomain(domain)
     if (!shop) {
       setError(SHOP_DOMAIN_ERROR)
@@ -94,6 +98,13 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<Conne
 
   return (
     <form onSubmit={submit} noValidate className="space-y-5">
+      {unavailableNote && (
+        <Alert variant="warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>Shopify cannot be connected yet</AlertTitle>
+          <AlertDescription>{unavailableNote}</AlertDescription>
+        </Alert>
+      )}
       <Instructions platform="shopify" />
       <Field label="Store domain" htmlFor={`${id}-shop`} error={error} hint="The myshopify.com domain, not the store's custom domain.">
         <Input
@@ -104,7 +115,7 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<Conne
           autoComplete="off"
           spellCheck={false}
           inputMode="url"
-          disabled={leaving}
+          disabled={leaving || !!unavailableNote}
           className="h-11"
         />
       </Field>
@@ -114,7 +125,7 @@ function ShopifyForm({ mode, prefill, onCancel, returnTo = 'store' }: Omit<Conne
             Cancel
           </Button>
         )}
-        <Button type="submit" loading={leaving} loadingState="connecting" loadingText="Taking you to Shopify…">
+        <Button type="submit" loading={leaving} loadingState="connecting" loadingText="Taking you to Shopify…" disabled={!!unavailableNote}>
           {mode === 'reconnect' ? 'Reauthorize in Shopify' : 'Continue in Shopify'}
           <ArrowRight aria-hidden="true" />
         </Button>
@@ -261,8 +272,8 @@ function CredentialsForm({ platform, mode, prefill, onConnected, onCancel }: Con
 export function ConnectForm(props: ConnectFormProps) {
   const descriptor = PLATFORM_CATALOG[props.platform]
   if (descriptor.connectMode === 'oauth') {
-    const { mode, prefill, onCancel, returnTo } = props
-    return <ShopifyForm mode={mode} prefill={prefill} onCancel={onCancel} returnTo={returnTo} />
+    const { mode, prefill, onCancel, returnTo, unavailableNote } = props
+    return <ShopifyForm mode={mode} prefill={prefill} onCancel={onCancel} returnTo={returnTo} unavailableNote={unavailableNote} />
   }
   return <CredentialsForm key={props.platform} {...props} />
 }

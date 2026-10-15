@@ -42,6 +42,7 @@ import { GET as exportGET } from '@/app/api/calls/export/route'
 import { GET as metricsGET } from '@/app/api/dashboard/metrics/route'
 import { GET as chartGET } from '@/app/api/dashboard/calls-chart/route'
 import { POST as integrationsPOST } from '@/app/api/calls/[id]/integrations/route'
+import { requireOrg } from '@/lib/api/auth'
 import { conversations } from '@/lib/elevenlabs/client'
 import { calls as cartesiaCalls } from '@/lib/cartesia/client'
 import { ProviderError } from '@/lib/voice-providers/errors'
@@ -277,5 +278,23 @@ describe('integrations', () => {
     const h = { origin: 'https://app.test', host: 'app.test', 'content-type': 'application/json' }
     expect((await integrationsPOST(req('/x', { method: 'POST', headers: h, body: JSON.stringify({ type: 'webhook' }) }), params(ROW.id))).status).toBe(400)
     expect((await integrationsPOST(req('/x', { method: 'POST', headers: h, body: JSON.stringify({ type: 'gmail' }) }), params('a),or(id.eq.1'))).status).toBe(400)
+  })
+
+  it('reads the Google connection with the service role, never with the owner session (030)', async () => {
+    const h = { origin: 'https://app.test', host: 'app.test', 'content-type': 'application/json' }
+    const ownerSession = {
+      from: (table: string) => {
+        if (table === 'integrations') throw new Error('integrations read with the owner session')
+        return db.from(table)
+      },
+    }
+    vi.mocked(requireOrg).mockResolvedValueOnce({ supabase: ownerSession, user: { id: 'u1', email: 'o@example.test' }, org: { id: 'org1' } } as never)
+    handler = (table) => (table === 'integrations' ? { data: { is_active: true, google_refresh_token: null, config: {} }, error: null } : { data: ROW, error: null })
+    const res = await integrationsPOST(req('/x', { method: 'POST', headers: h, body: JSON.stringify({ type: 'google_docs' }) }), params(ROW.id))
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('precondition_failed')
+    const read = calls.find((c) => c.table === 'integrations')
+    expect(read?.ops).toContainEqual(['eq', 'org_id', 'org1'])
+    expect(read?.ops).toContainEqual(['eq', 'type', 'google_docs'])
   })
 })

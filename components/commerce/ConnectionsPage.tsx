@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Plug, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CommerceCardError } from './ListScaffold'
@@ -14,7 +15,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionHeading } from '@/components/shared/SectionHeading'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { pickCurrentConnection, useCommerceConnections, useConnectionPolling } from '@/hooks/useCommerceConnections'
-import { PLATFORM_CATALOG, PLATFORM_ORDER } from '@/lib/commerce/platforms'
+import { PLATFORM_CATALOG, PLATFORM_ORDER, PLATFORM_UNAVAILABLE_NOTE } from '@/lib/commerce/platforms'
 import type { CommercePlatform, ConnectionDto } from '@/lib/commerce/types'
 import { ConnectForm } from './ConnectForm'
 import { ConnectionCard } from './ConnectionCard'
@@ -45,7 +46,8 @@ interface ReconnectTarget {
 }
 
 export function ConnectionsPage() {
-  const { connections, isLoading, error, refetch, replaceConnection } = useCommerceConnections()
+  const { connections, unavailablePlatforms, isLoading, error, refetch, replaceConnection } = useCommerceConnections()
+  const unavailableNote = (id: CommercePlatform) => (unavailablePlatforms.has(id) ? (PLATFORM_UNAVAILABLE_NOTE[id] ?? 'Not available on this platform yet.') : undefined)
   const [platform, setPlatform] = useState<CommercePlatform | null>(null)
   const [reconnect, setReconnect] = useState<ReconnectTarget | null>(null)
 
@@ -123,6 +125,7 @@ export function ConnectionsPage() {
             <div role="radiogroup" aria-labelledby="connect-store" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {PLATFORM_ORDER.map((id) => {
                 const descriptor = PLATFORM_CATALOG[id]
+                const note = unavailableNote(id)
                 return (
                   <OptionCard
                     key={id}
@@ -130,7 +133,10 @@ export function ConnectionsPage() {
                     onSelect={() => setPlatform(id)}
                     icon={Plug}
                     title={descriptor.name}
-                    description={descriptor.tagline}
+                    // Said up front, so nobody types a domain and leaves for Shopify only to be sent back.
+                    description={note ?? descriptor.tagline}
+                    badge={note ? <Badge variant="secondary">Not available yet</Badge> : undefined}
+                    disabled={!!note}
                     className="min-h-[120px]"
                   />
                 )
@@ -158,7 +164,7 @@ export function ConnectionsPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <ConnectForm platform={platform} mode="connect" onConnected={handleConnected} onCancel={() => setPlatform(null)} returnTo="store" />
+                  <ConnectForm platform={platform} mode="connect" onConnected={handleConnected} onCancel={() => setPlatform(null)} returnTo="store" unavailableNote={unavailableNote(platform)} />
                 </div>
               </Card>
             )}
@@ -187,6 +193,7 @@ export function ConnectionsPage() {
               onConnected={handleConnected}
               onCancel={() => setReconnect(null)}
               returnTo="store"
+              unavailableNote={unavailableNote(reconnect.platform)}
             />
           )}
         </DialogContent>

@@ -5,6 +5,7 @@
 import { commerceRoute, noStore, requireCommerceOrg } from '@/lib/commerce/api'
 import { listAutomationDtos, enableGate } from '@/lib/commerce/automations/service'
 import { commerceStepOf } from '@/lib/commerce/business-type'
+import { summarizeCommerceConfig } from '@/lib/commerce/config'
 import { connectionDto, primaryConnection } from '@/lib/commerce/store'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 
@@ -53,6 +54,8 @@ export async function GET(request: Request) {
       agent,
       has_phone_number: gate.hasOutboundNumber,
       checklist,
+      // Booleans only: step 2 shows a platform this deployment cannot connect yet (Shopify without its app) as unavailable.
+      config: summarizeCommerceConfig(),
     })
   })
 }

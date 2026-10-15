@@ -10,6 +10,7 @@ import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusChip } from '@/components/shared/StatusChip'
 import { DeleteAccountDialog } from '@/components/settings/DeleteAccountDialog'
+import { planDisplayName } from '@/components/dashboard/plan-label'
 import { cn } from '@/lib/utils'
 
 interface SettingsPageClientProps {
@@ -87,7 +88,8 @@ export function SettingsPageClient({ businessName, email, plan, deletionRequeste
               </AccountRow>
               <AccountRow icon={CreditCard} label="Plan">
                 <span className="flex flex-wrap items-center gap-3 sm:justify-end">
-                  <StatusChip tone="neutral" className="capitalize">{plan ?? 'trial'}</StatusChip>
+                  {/* The plan's display name ("Store Growth", "Free trial"), as the billing page shows it. */}
+                  <StatusChip tone="neutral">{planDisplayName(plan)}</StatusChip>
                   <Link
                     href="/billing"
                     // tap-44 gives the 19 px text link a 44 px target on touch screens.

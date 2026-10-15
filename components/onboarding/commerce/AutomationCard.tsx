@@ -198,7 +198,7 @@ export function AutomationCard({ automation, connectionId, storeTimezone, onChan
             <Label htmlFor={ids.enable} className="flex-col items-start gap-0.5">
               <span>Turn on this automation</span>
               <span className="text-xs leading-4 font-normal text-muted-foreground">
-                {consented ? 'Calls start after launch, within the window above.' : 'Confirm the statement above first.'}
+                {consented ? 'Calls start after launch, once your phone number is active, within the window above.' : 'Confirm the statement above first.'}
               </span>
             </Label>
             <div className="flex items-center gap-2">

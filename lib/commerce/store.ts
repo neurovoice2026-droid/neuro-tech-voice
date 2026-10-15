@@ -2,8 +2,9 @@ import 'server-only'
 // Data access of the commerce vertical (service role, every query scoped by
 // org_id / connection_id). Routes, the worker and the tools read and write
 // through here, so the DTO rules live in one place: no credential envelope,
-// cursor, webhook id or raw payload ever leaves this module, and phone
-// numbers reach the browser masked.
+// cursor, webhook registration id or raw payload ever leaves this module
+// (the owner sees the webhook address only where the store's own code must
+// send to it), and phone numbers reach the browser masked.
 
 import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -110,6 +111,27 @@ export function readWebhookConfig(raw: unknown): WebhookConfig {
 export function webhookUrlFor(platform: CommercePlatform, publicId: string): string | null {
   const base = commercePublicBaseUrl()
   return base ? `${base}/api/commerce/webhooks/${platform}/${encodeURIComponent(publicId)}` : null
+}
+
+/**
+ * Platforms whose deliveries the merchant sets up: the custom connector (the
+ * store's own code sends every event) and WooCommerce (the cart events of a
+ * companion plugin). Every other platform registers its webhooks through
+ * its API, so its address never needs to be shown.
+ */
+const MERCHANT_SENT_WEBHOOKS: readonly CommercePlatform[] = ['custom', 'woocommerce']
+
+/**
+ * Where the merchant's store must send events (shown in the connection card),
+ * or null. A connection without the webhooks capability gets none: a custom
+ * connector without a webhook secret could not have its deliveries verified,
+ * and a WooCommerce key without webhook permission created no webhooks, so
+ * the merchant has no secret to sign cart events with. Both are polled.
+ */
+export function publicWebhookUrl(row: Pick<ConnectionRow, 'platform' | 'status' | 'webhook_public_id' | 'capabilities'>): string | null {
+  if (!MERCHANT_SENT_WEBHOOKS.includes(row.platform) || row.status === 'disconnected') return null
+  if (!readCapabilities(row.capabilities).webhooks) return null
+  return webhookUrlFor(row.platform, row.webhook_public_id)
 }
 
 export async function loadConnection(db: SupabaseClient, id: string, orgId?: string): Promise<ConnectionRow | null> {
@@ -244,6 +266,8 @@ export async function connectionDto(db: SupabaseClient, row: ConnectionRow): Pro
     status: row.status,
     capabilities: readCapabilities(row.capabilities),
     webhook_topics: webhooks.registrations.map((r) => r.topic),
+    webhook_url: publicWebhookUrl(row),
+    webhook_last_delivery_at: webhooks.last_delivery_at,
     last_sync_at: row.last_sync_at,
     last_successful_sync_at: row.last_successful_sync_at,
     error_code: row.error_code,
@@ -797,14 +821,16 @@ function one<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : (v ?? null)
 }
 
-export function runReference(row: RunRow): string {
+/** The bare reference of a run (the UI adds '#' or "Cart"): the order number, else a short tail of the event's reference. */
+export function runReference(row: RunRow): { reference: string; kind: 'order' | 'cart' } {
   const order = one(row.commerce_orders)
-  if (order?.order_number) return `#${order.order_number}`
-  if (row.automation_type === 'abandoned_cart') return `cart ${row.external_ref.slice(-6)}`
-  return `#${row.external_ref.slice(-8)}`
+  if (order?.order_number) return { reference: order.order_number, kind: 'order' }
+  if (row.automation_type === 'abandoned_cart') return { reference: row.external_ref.slice(-6), kind: 'cart' }
+  return { reference: row.external_ref.slice(-8), kind: 'order' }
 }
 
 export function runDto(row: RunRow): RunDto {
+  const ref = runReference(row)
   return {
     id: row.id,
     automation_id: row.automation_id,
@@ -814,7 +840,8 @@ export function runDto(row: RunRow): RunDto {
     outcome: row.outcome,
     outcome_detail: row.outcome_detail,
     eligibility_reason: row.eligibility_reason,
-    reference: runReference(row),
+    reference: ref.reference,
+    reference_kind: ref.kind,
     order_id: row.order_id,
     customer_id: row.customer_id,
     to_phone_masked: row.to_phone_e164 ? maskPhone(row.to_phone_e164) : null,

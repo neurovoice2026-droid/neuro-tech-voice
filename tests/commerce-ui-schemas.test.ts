@@ -102,7 +102,7 @@ const automation: AutomationDto = {
   script: { template: 'Bună ziua {{customer_name}}, sun de la {{store_name}} pentru comanda {{order_number}}.', tone: 'friendly', brand_name: null, transfer_number: null, return_policy_url: null },
   consent_confirmed_at: null,
   consent_version: null,
-  stats: { eligible: 0, scheduled: 0, calling: 0, completed: 0, suppressed: 0, failed: 0 },
+  stats: { eligible: 0, scheduled: 0, retrying: 0, calling: 0, completed: 0, suppressed: 0, failed: 0 },
   created_at: '2026-10-13T00:00:00Z',
   updated_at: '2026-10-13T00:00:00Z',
 }

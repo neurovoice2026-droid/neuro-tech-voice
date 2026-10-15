@@ -105,7 +105,7 @@ export function AutomationsStep() {
           <p className="text-[13px] leading-[19px] text-muted-foreground" aria-live="polite">
             {enabledCount === 0
               ? 'No automation is on. You can continue and turn them on after launch.'
-              : `${enabledCount} ${enabledCount === 1 ? 'automation' : 'automations'} on. Calls start after launch.`}
+              : `${enabledCount} ${enabledCount === 1 ? 'automation' : 'automations'} on. Calls start after launch, once your phone number is active.`}
           </p>
         )}
       </StepBody>

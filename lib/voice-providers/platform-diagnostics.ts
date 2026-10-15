@@ -72,10 +72,18 @@ export async function agentStateProblems(db: SupabaseClient, log: Logger): Promi
     log.warn('diagnostics.agent_state_unavailable', { error: describeError(err) })
     return { problems: [{ key: 'agent_sync.read_back', severity: 'warning', message: 'Could not read synced agents: read-back checks were skipped.' }], counts: {} }
   }
-  const counts = { agents: rows.length, analysis_items_migrated: 0, stale_keys: 0, pii_redaction_rejected: 0, outdated_platform_config: 0, paused: 0 }
+  const counts = { agents: rows.length, analysis_items_present: 0, analysis_items_migrated: 0, analysis_items_unchecked: 0, stale_keys: 0, pii_redaction_rejected: 0, outdated_platform_config: 0, paused: 0 }
   for (const r of rows) {
     const d = r.details ?? {}
-    if (d.analysis_items_migrated === true) counts.analysis_items_migrated++
+    // Non-null analysis_items read back (informational: without user items the legacy fields are still read).
+    if (d.analysis_items && typeof d.analysis_items === 'object') counts.analysis_items_present++
+    // The flag means attached user items only on rows that also record the
+    // shape. Older rows were flagged for any non-null value, which every agent
+    // reads back: unchecked until their next sync, not an error.
+    if (d.analysis_items_migrated === true) {
+      if ('analysis_items' in d) counts.analysis_items_migrated++
+      else counts.analysis_items_unchecked++
+    }
     const stale = d.stale_keys as Record<string, unknown> | undefined
     if (stale && Object.values(stale).some((v) => Array.isArray(v) && v.length > 0)) counts.stale_keys++
     if (d.pii_redaction === 'rejected') counts.pii_redaction_rejected++
@@ -87,7 +95,7 @@ export async function agentStateProblems(db: SupabaseClient, log: Logger): Promi
     problems.push({
       key: 'agent_sync.analysis_items',
       severity: 'error',
-      message: `${counts.analysis_items_migrated} agent(s) have platform_settings.analysis_items set at ElevenLabs: their success criteria and data collection may no longer be evaluated. Do not edit Analysis in the ElevenLabs dashboard for tenant agents; see docs/elevenlabs/A2.md.`,
+      message: `${counts.analysis_items_migrated} agent(s) have user analysis items attached at ElevenLabs (platform_settings.analysis_items): their success criteria and data collection may no longer be evaluated. Do not edit Analysis in the ElevenLabs dashboard for tenant agents; see docs/elevenlabs/A2.md.`,
     })
   }
   if (counts.stale_keys) {
@@ -97,7 +105,7 @@ export async function agentStateProblems(db: SupabaseClient, log: Logger): Promi
     problems.push({
       key: 'ELEVENLABS_PII_REDACTION',
       severity: 'warning',
-      message: `The workspace rejected transcript redaction for ${counts.pii_redaction_rejected} agent(s) (enterprise feature): card numbers are not redacted. Set ELEVENLABS_PII_REDACTION=false to stop trying, or upgrade the workspace.`,
+      message: `The workspace rejected transcript redaction for ${counts.pii_redaction_rejected} agent(s) (enterprise feature): card numbers are not redacted. It is asked again once a day or when the plan changes; set ELEVENLABS_PII_REDACTION=false to stop asking, or upgrade the workspace.`,
     })
   }
   if (counts.outdated_platform_config) {

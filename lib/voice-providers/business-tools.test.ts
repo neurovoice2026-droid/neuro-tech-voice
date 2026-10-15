@@ -20,6 +20,8 @@ vi.mock('@/lib/voice-providers/platform-tools', () => ({
 }))
 vi.mock('@/lib/elevenlabs/llm-selection', () => ({ effectiveAgentLlm: vi.fn(async () => ({ llm: 'gpt-5.4-mini', reasoningEffort: null })) }))
 vi.mock('@/lib/voice-providers/webhook-health', () => ({ resolvePostCallWebhookId: vi.fn(async () => null) }))
+// The workspace's transcript-redaction refusal lives in maintenance_state: none here.
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => memoryDb({ maintenance_state: [] }) }))
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as el from '@/lib/elevenlabs/client'

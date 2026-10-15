@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ShopifyReturnKey } from '@/lib/commerce/shopify-state'
-import type { CommerceCapabilities, CommercePlatform, ConnectionDto, SyncResource } from '@/lib/commerce/types'
+import type { CommerceCapabilities, CommerceConfigSummary, CommercePlatform, ConnectionDto, SyncResource } from '@/lib/commerce/types'
 import { commerceRequest, useCommerceQuery } from './useCommerceApi'
 
 const LIST_PATH = '/api/commerce/connections'
@@ -11,9 +11,18 @@ function connectionPath(id: string, suffix = ''): string {
   return `${LIST_PATH}/${encodeURIComponent(id)}${suffix}`
 }
 
+/**
+ * Platforms this deployment cannot connect yet, from the server's `config`
+ * (booleans only): Shopify needs the platform's Shopify app. Unknown (an
+ * older answer without `config`) blocks nothing.
+ */
+export function unavailablePlatforms(config: Partial<CommerceConfigSummary> | null | undefined): ReadonlySet<CommercePlatform> {
+  return new Set<CommercePlatform>(config?.shopify === false ? ['shopify'] : [])
+}
+
 /** The organization's store connections (one today; the list stays a list for the day there are more). */
 export function useCommerceConnections() {
-  const query = useCommerceQuery<{ items: ConnectionDto[] }>(LIST_PATH, { fallback: 'Connections could not be loaded.' })
+  const query = useCommerceQuery<{ items: ConnectionDto[]; config?: CommerceConfigSummary }>(LIST_PATH, { fallback: 'Connections could not be loaded.' })
   const { setData } = query
 
   const replaceConnection = useCallback(
@@ -21,18 +30,23 @@ export function useCommerceConnections() {
       setData((prev) => {
         if (!prev) return { items: [connection] }
         const exists = prev.items.some((c) => c.id === connection.id)
-        return { items: exists ? prev.items.map((c) => (c.id === connection.id ? connection : c)) : [connection, ...prev.items] }
+        return { ...prev, items: exists ? prev.items.map((c) => (c.id === connection.id ? connection : c)) : [connection, ...prev.items] }
       }),
     [setData],
   )
 
   const removeConnection = useCallback(
-    (id: string) => setData((prev) => (prev ? { items: prev.items.filter((c) => c.id !== id) } : prev)),
+    (id: string) => setData((prev) => (prev ? { ...prev, items: prev.items.filter((c) => c.id !== id) } : prev)),
     [setData],
   )
 
+  const config = query.data?.config
+  const unavailable = useMemo(() => unavailablePlatforms(config), [config])
+
   return {
     connections: query.data?.items ?? [],
+    /** Platforms that cannot be connected on this deployment (shown disabled, with the reason). */
+    unavailablePlatforms: unavailable,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

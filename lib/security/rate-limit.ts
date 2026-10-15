@@ -67,6 +67,8 @@ export const RATE_LIMITS = {
   billingMinutesRead: { name: 'billing_minutes_read', limit: 120, windowSeconds: 60 },
   billingMinutesCheckout: { name: 'billing_minutes_checkout', limit: 10, windowSeconds: 600 },
   billingMinutesAutoTopUp: { name: 'billing_minutes_auto_topup', limit: 20, windowSeconds: 600 },
+  // Number search (app/api/phone/search): each one queries the platform's Twilio account.
+  phoneSearch: { name: 'phone_search', limit: 10, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

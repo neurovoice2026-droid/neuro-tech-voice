@@ -97,10 +97,13 @@ export function CustomersPage() {
               <TableRow>
                 <TableHead scope="col">Customer</TableHead>
                 <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Phone</TableHead>
-                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Email</TableHead>
-                <TableHead scope="col" className="hidden text-right @min-[900px]/records:table-cell">Orders</TableHead>
-                <TableHead scope="col" className="hidden @min-[1000px]/records:table-cell">Updated</TableHead>
-                <TableHead scope="col" className="text-right">Do not call</TableHead>
+                <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Email</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[1000px]/records:table-cell">Orders</TableHead>
+                <TableHead scope="col" className="hidden @min-[1100px]/records:table-cell">Updated</TableHead>
+                <TableHead scope="col" className="pl-1 text-right">
+                  {/* Below 760 px the cell keeps only the switch (the list link sits under the name): the heading would be wider than the column. */}
+                  <span className="sr-only @min-[760px]/records:not-sr-only">Do not call</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -111,29 +114,41 @@ export function CustomersPage() {
                 return (
                   <TableRow key={customer.id}>
                     <TableCell className="py-2.5">
-                      <span className="block text-sm font-medium text-foreground">{displayName}</span>
-                      <span className="mt-0.5 block text-xs leading-4 text-muted-foreground tabular-nums @min-[560px]/records:hidden">
-                        {maskedOrDash(customer.phone_masked)}
-                      </span>
-                      {customer.do_not_call && (
-                        <span className="mt-1.5 block">
-                          <StatusChip tone="danger" dot>
-                            Do not call · {suppressionSourceLabel(customer.do_not_call_source)}
-                          </StatusChip>
+                      {/* The panel width less the switch cell, so a long name truncates instead of pushing the switch out. */}
+                      <div className="max-w-[calc(100cqw-136px)] min-w-0 @min-[560px]/records:max-w-[32ch]">
+                        <span className="block truncate text-sm font-medium text-foreground" title={displayName}>{displayName}</span>
+                        <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground tabular-nums @min-[560px]/records:hidden">
+                          {maskedOrDash(customer.phone_masked)}
                         </span>
-                      )}
+                        {customer.do_not_call && (
+                          <span className="mt-1.5 block">
+                            <StatusChip tone="danger" dot>
+                              Do not call · {suppressionSourceLabel(customer.do_not_call_source)}
+                            </StatusChip>
+                          </span>
+                        )}
+                        {customer.do_not_call && (
+                          <Link
+                            href={STORE_PATHS.doNotCall}
+                            className="relative mt-1 tap-44 inline-block rounded-sm text-xs leading-4 text-muted-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:text-foreground hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring @min-[760px]/records:hidden"
+                            aria-label={`${displayName} is on the do-not-call list; removal happens from that list`}
+                          >
+                            Manage on the do-not-call list
+                          </Link>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="hidden tabular-nums @min-[560px]/records:table-cell">
                       {customer.has_phone ? maskedOrDash(customer.phone_masked) : <span className="text-muted-foreground">no phone</span>}
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground @min-[760px]/records:table-cell">{maskedOrDash(customer.email_masked)}</TableCell>
-                    <TableCell className="hidden text-right tabular-nums @min-[900px]/records:table-cell">{formatCount(customer.orders_count)}</TableCell>
-                    <TableCell className="hidden text-muted-foreground @min-[1000px]/records:table-cell">
+                    <TableCell className="hidden text-muted-foreground @min-[900px]/records:table-cell">{maskedOrDash(customer.email_masked)}</TableCell>
+                    <TableCell className="hidden text-right tabular-nums @min-[1000px]/records:table-cell">{formatCount(customer.orders_count)}</TableCell>
+                    <TableCell className="hidden text-muted-foreground @min-[1100px]/records:table-cell">
                       <time dateTime={customer.updated_at} title={formatDateTime(customer.updated_at)} className="tabular-nums">
                         {relativeTime(customer.updated_at)}
                       </time>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="pl-1 text-right">
                       <span className="inline-flex items-center justify-end gap-2">
                         <span className="grid size-5 shrink-0 place-items-center" aria-hidden={!busy}>
                           {busy && <OrbInline state="working" label="Saving" />}
@@ -141,7 +156,7 @@ export function CustomersPage() {
                         {customer.do_not_call ? (
                           <Link
                             href={STORE_PATHS.doNotCall}
-                            className="relative tap-44 rounded-sm text-xs leading-4 text-muted-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:text-foreground hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            className="relative hidden tap-44 rounded-sm text-xs leading-4 text-muted-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:text-foreground hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring @min-[760px]/records:inline"
                             aria-label={`${displayName} is on the do-not-call list; removal happens from that list`}
                           >
                             on the do-not-call list

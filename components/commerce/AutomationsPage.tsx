@@ -38,6 +38,7 @@ function readTab(raw: string | null): AutomationType {
 const STATS: Array<{ key: keyof AutomationDto['stats']; label: string }> = [
   { key: 'eligible', label: 'Eligible' },
   { key: 'scheduled', label: 'Scheduled' },
+  { key: 'retrying', label: 'Retrying' },
   { key: 'calling', label: 'Calling' },
   { key: 'completed', label: 'Completed' },
   { key: 'suppressed', label: 'Suppressed' },
@@ -128,7 +129,7 @@ function AutomationPanel({ automation, connection, onChanged }: { automation: Au
           </div>
         )}
         {configured && automation.available && (
-          <div className="grid grid-cols-2 gap-3 border-t border-rule p-5 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 border-t border-rule p-5 sm:grid-cols-4 xl:grid-cols-7">
             {STATS.map(({ key, label }) => (
               <StatTile key={key} size="sm" label={label} value={formatCount(automation.stats[key])} />
             ))}

@@ -22,6 +22,8 @@ import {
 import { OrbInline } from '@/components/shared/OrbLoader'
 import { StatTile } from '@/components/shared/StatTile'
 import { StatusChip } from '@/components/shared/StatusChip'
+import { WEBHOOK_ADDRESS_HINT, awaitsStoreSentEvents, resourceCount } from '@/components/commerce/labels'
+import { WebhookAddress } from '@/components/commerce/WebhookAddress'
 import { platformName } from '@/lib/commerce/platforms'
 import type { CommerceCapabilities, ConnectionDto } from '@/lib/commerce/types'
 import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
@@ -46,16 +48,21 @@ function syncLine(c: ConnectionDto): string {
   const kind = sync.kind === 'initial' ? ' (initial)' : sync.kind === 'manual' ? ' (manual)' : ''
   const counts = Object.entries(sync.counts ?? {})
     .filter(([, n]) => typeof n === 'number' && n > 0)
-    .map(([k, n]) => `${n} ${k}`)
+    .map(([k, n]) => resourceCount(k, n))
     .join(', ')
   return `${SYNC_STATUS[sync.status]}${kind}${counts ? ` · ${counts}` : ''}`
 }
 
 function webhookLine(c: ConnectionDto): string {
   if (c.capabilities.webhooks) {
-    return c.webhook_topics.length
-      ? `Real-time events active: ${c.webhook_topics.join(', ')}.`
-      : 'The platform supports real-time events; webhooks are registered when the sync finishes.'
+    if (c.webhook_topics.length) return `Real-time events active: ${c.webhook_topics.join(', ')}.`
+    // Merchant-sent deliveries (custom connector): nothing is registered here; the store sends to the address below.
+    if (awaitsStoreSentEvents(c)) {
+      return c.webhook_last_delivery_at
+        ? `Real-time events active: the last one arrived ${formatDate(c.webhook_last_delivery_at) ?? 'recently'}.`
+        : 'Waiting for the first event from your store; until one arrives, data refreshes periodically.'
+    }
+    return 'The platform supports real-time events; webhooks are registered when the sync finishes.'
   }
   const minutes = c.capabilities.polling_minutes
   return minutes
@@ -170,6 +177,12 @@ export function ConnectionPanel({ connection }: ConnectionPanelProps) {
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
               <span>{webhookLine(connection)}</span>
             </p>
+            {connection.webhook_url && (
+              <div className="mt-3">
+                <h4 className="text-[13px] leading-[19px] font-medium text-foreground">Webhook address</h4>
+                <WebhookAddress url={connection.webhook_url} hint={WEBHOOK_ADDRESS_HINT[connection.platform]} className="mt-1.5" />
+              </div>
+            )}
             {caps.notes.length > 0 && (
               <ul className="mt-2 space-y-1 text-[13px] leading-[19px] text-muted-foreground">
                 {caps.notes.map((note) => (

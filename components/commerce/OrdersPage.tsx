@@ -100,10 +100,10 @@ export function OrdersPage() {
                 <TableHead scope="col">Order</TableHead>
                 <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Customer</TableHead>
                 <TableHead scope="col">Status</TableHead>
-                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Payment</TableHead>
-                <TableHead scope="col" className="text-right">Total</TableHead>
-                <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Items</TableHead>
-                <TableHead scope="col" className="hidden text-right @min-[1000px]/records:table-cell">Placed</TableHead>
+                <TableHead scope="col" className="hidden @min-[800px]/records:table-cell">Payment</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[640px]/records:table-cell">Total</TableHead>
+                <TableHead scope="col" className="hidden @min-[1000px]/records:table-cell">Items</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[1100px]/records:table-cell">Placed</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,37 +141,48 @@ function OrderRow({ order, onOpen, active }: { order: OrderListDto; onOpen: () =
       )}
     >
       <TableCell className="py-2.5">
-        <span className="block text-sm font-medium text-foreground tabular-nums">#{order.order_number}</span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs leading-4 text-muted-foreground @min-[560px]/records:hidden">
-          {order.contact_name ?? 'Unknown customer'}
-          {order.is_cod && <CodChip className="h-5 px-2 text-[11px]" />}
-        </span>
+        {/* What a narrow panel has no column for folds in here: customer (560 px), total (640 px), placed time (1100 px). */}
+        <div className="max-w-[calc(100cqw-160px)] min-w-0 @min-[560px]/records:max-w-none">
+          <span className="block truncate text-sm font-medium text-foreground tabular-nums">#{order.order_number}</span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs leading-4 text-muted-foreground @min-[560px]/records:hidden">
+            <span className="min-w-0 truncate">{order.contact_name ?? 'Unknown customer'}</span>
+            {order.is_cod && <CodChip className="h-5 px-2 text-[11px]" />}
+          </span>
+          <span className="mt-0.5 block text-sm font-medium text-foreground tabular-nums @min-[640px]/records:hidden">{formatMoney(order.total, order.currency)}</span>
+          {order.provider_created_at && (
+            <time dateTime={order.provider_created_at} title={formatDateTime(order.provider_created_at)} className="mt-0.5 block text-xs leading-4 text-muted-foreground tabular-nums @min-[1100px]/records:hidden">
+              {relativeTime(order.provider_created_at)}
+            </time>
+          )}
+        </div>
       </TableCell>
       <TableCell className="hidden @min-[560px]/records:table-cell">
-        <span className="block text-sm text-foreground">{order.contact_name ?? '—'}</span>
-        <span className="block text-xs leading-4 text-muted-foreground tabular-nums">
-          {maskedOrDash(order.contact_phone_masked)}
-          {order.shipping_city ? ` · ${order.shipping_city}` : ''}
-        </span>
+        <div className="max-w-[24ch] min-w-0">
+          <span className="block truncate text-sm text-foreground" title={order.contact_name ?? undefined}>{order.contact_name ?? '—'}</span>
+          <span className="block truncate text-xs leading-4 text-muted-foreground tabular-nums">
+            {maskedOrDash(order.contact_phone_masked)}
+            {order.shipping_city ? ` · ${order.shipping_city}` : ''}
+          </span>
+        </div>
       </TableCell>
       <TableCell>
         <OrderStatusChip status={order.status} />
       </TableCell>
-      <TableCell className="hidden @min-[760px]/records:table-cell">
+      <TableCell className="hidden @min-[800px]/records:table-cell">
         <span className="flex flex-wrap items-center gap-1.5">
-          <span className="max-w-[18ch] truncate text-sm" title={order.payment_method_title ?? undefined}>
+          <span className="max-w-[16ch] truncate text-sm" title={order.payment_method_title ?? undefined}>
             {order.payment_method_title ?? '—'}
           </span>
           {order.is_cod && <CodChip />}
         </span>
       </TableCell>
-      <TableCell className="text-right font-medium text-foreground tabular-nums">{formatMoney(order.total, order.currency)}</TableCell>
-      <TableCell className="hidden text-muted-foreground @min-[900px]/records:table-cell">
-        <span className="block max-w-[32ch] truncate" title={order.items_summary ?? undefined}>
+      <TableCell className="hidden text-right font-medium text-foreground tabular-nums @min-[640px]/records:table-cell">{formatMoney(order.total, order.currency)}</TableCell>
+      <TableCell className="hidden text-muted-foreground @min-[1000px]/records:table-cell">
+        <span className="block max-w-[24ch] truncate" title={order.items_summary ?? undefined}>
           {order.items_summary ?? `${formatCount(order.items_count)} items`}
         </span>
       </TableCell>
-      <TableCell className="hidden text-right text-muted-foreground @min-[1000px]/records:table-cell">
+      <TableCell className="hidden text-right text-muted-foreground @min-[1100px]/records:table-cell">
         {order.provider_created_at ? (
           <time dateTime={order.provider_created_at} title={formatDateTime(order.provider_created_at)} className="tabular-nums">
             {relativeTime(order.provider_created_at)}

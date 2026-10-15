@@ -7,6 +7,7 @@ import 'server-only'
 // cron tick. Failures classify as retryable (backoff with jitter) or final
 // (credentials, mapping): the connection status reflects them.
 
+import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Logger } from '@/lib/observability/logger'
 import { adapterFor } from './adapters'
@@ -15,7 +16,7 @@ import { CommerceCryptoError } from './crypto'
 import { StoreHttpError, UnsafeUrlError } from './safe-fetch'
 import { pollingMinutes } from './config'
 import { applyEvents } from './events'
-import { type ConnectionRow, type SyncJobRow, enqueueSyncJob, listConnections, loadConnection, readCapabilities, toAdapterConnection, writeAudit } from './store'
+import { type ConnectionRow, SYNC_JOB_COLUMNS, type SyncJobRow, enqueueSyncJob, listConnections, loadConnection, readCapabilities, readWebhookConfig, toAdapterConnection, writeAudit } from './store'
 import type { CommerceEvent, SyncResource } from './types'
 
 export const SYNC_LEASE_SECONDS = 120
@@ -208,18 +209,39 @@ async function markConnectionError(db: SupabaseClient, connection: ConnectionRow
   if (error) log.error('commerce.connection_error_update_failed', error)
 }
 
+/** Polling interval of a store whose webhooks are known to arrive (a safety net only). */
+export const WEBHOOK_SAFETY_NET_MINUTES = 60
+/** How recent a verified delivery must be for a store without API-registered webhooks to count as receiving them. */
+export const WEBHOOK_DELIVERY_FRESH_MS = 24 * 3_600_000
+
+/**
+ * Minutes between incremental syncs of a connection. Only a store whose
+ * webhooks are known to work gets the hourly safety net: one with webhooks
+ * registered through its API, or one whose merchant-sent deliveries (custom
+ * connector) arrived verified within the last day. A store that merely
+ * declares webhooks keeps the platform's polling interval until then.
+ */
+export function pollingIntervalMinutes(row: { capabilities: unknown; webhook_config: unknown }, now = Date.now()): number {
+  const caps = readCapabilities(row.capabilities)
+  if (caps.webhooks) {
+    const webhooks = readWebhookConfig(row.webhook_config)
+    const lastDelivery = webhooks.last_delivery_at ? Date.parse(webhooks.last_delivery_at) : Number.NaN
+    if (webhooks.registrations.some((r) => r.source === 'api') || now - lastDelivery < WEBHOOK_DELIVERY_FRESH_MS) return WEBHOOK_SAFETY_NET_MINUTES
+  }
+  return caps.polling_minutes ?? pollingMinutes()
+}
+
 /**
  * Keeps every active connection fresh: an incremental 'all' job when the
- * last sync is older than the platform's polling interval (webhook-capable
- * stores get an hourly safety net). Never more than one job per connection.
+ * last sync is older than its polling interval (pollingIntervalMinutes).
+ * Never more than one job per connection.
  */
 export async function schedulePollingJobs(db: SupabaseClient, log: Logger, now = Date.now()): Promise<number> {
-  const { data, error } = await db.from('commerce_connections').select('id, org_id, status, capabilities, last_sync_at').in('status', ['active', 'degraded']).limit(500)
+  const { data, error } = await db.from('commerce_connections').select('id, org_id, status, capabilities, webhook_config, last_sync_at').in('status', ['active', 'degraded']).limit(500)
   if (error) throw new Error(`commerce_connections read failed: ${error.message}`)
   let queued = 0
   for (const row of data ?? []) {
-    const caps = readCapabilities(row.capabilities)
-    const minutes = caps.webhooks ? 60 : (caps.polling_minutes ?? pollingMinutes())
+    const minutes = pollingIntervalMinutes(row, now)
     const last = row.last_sync_at ? Date.parse(String(row.last_sync_at)) : 0
     if (now - last < minutes * 60_000) continue
     const res = await enqueueSyncJob(db, { orgId: String(row.org_id), connectionId: String(row.id), kind: 'incremental', resource: 'all' })
@@ -227,6 +249,75 @@ export async function schedulePollingJobs(db: SupabaseClient, log: Logger, now =
   }
   if (queued) log.info('commerce.polling.queued', { queued })
   return queued
+}
+
+/** Time slice of the first import run right after a connect (a worker slice: SYNC_SLICE_MS in ./worker). */
+export const KICK_SLICE_MS = 20_000
+
+/**
+ * Runs the first slice of a new connection's queued import right away
+ * instead of at the next cron tick (up to 5 minutes later). The job is
+ * claimed by id with a compare-and-set on its status and attempt count, the
+ * lease a worker claim takes (commerce_claim_sync_jobs), so a tick running at
+ * the same moment never runs it twice; whatever the slice leaves pending
+ * continues on the next ticks as usual. Returns null when there was nothing
+ * to claim (a worker got there first, or no job is due).
+ */
+export async function kickInitialSync(db: SupabaseClient, connectionId: string, log: Logger, opts: { owner?: string; sliceMs?: number; now?: () => number } = {}): Promise<SyncOutcome | null> {
+  const now = opts.now ?? Date.now
+  const owner = opts.owner ?? `kick:${crypto.randomUUID()}`
+  const { data: job, error } = await db
+    .from('commerce_sync_jobs')
+    .select(SYNC_JOB_COLUMNS)
+    .eq('connection_id', connectionId)
+    .eq('status', 'pending')
+    .lte('run_after', new Date(now()).toISOString())
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(`commerce_sync_jobs read failed: ${error.message}`)
+  if (!job) return null
+  const pending = job as SyncJobRow
+  const claim = {
+    status: 'running',
+    lease_owner: owner,
+    lease_until: new Date(now() + SYNC_LEASE_SECONDS * 1000).toISOString(),
+    attempts: pending.attempts + 1,
+    started_at: pending.started_at ?? new Date(now()).toISOString(),
+  }
+  const { data: claimed, error: claimErr } = await db
+    .from('commerce_sync_jobs')
+    .update(claim)
+    .eq('id', pending.id)
+    .eq('status', 'pending')
+    .eq('attempts', pending.attempts)
+    .select(SYNC_JOB_COLUMNS)
+  if (claimErr) throw new Error(`commerce_sync_jobs claim failed: ${claimErr.message}`)
+  const row = (claimed ?? [])[0] as SyncJobRow | undefined
+  if (!row) return null
+  log.info('commerce.sync.kicked', { connectionId, jobId: row.id, kind: row.kind })
+  return runSyncJob(db, row, log, { owner, sliceMs: opts.sliceMs ?? KICK_SLICE_MS, now })
+}
+
+/**
+ * Schedules kickInitialSync after the response of a connect request
+ * (next/server after(), kept alive by the platform). Outside a request
+ * (scripts, tests) nothing runs: the next cron tick imports as before.
+ */
+export function scheduleInitialSyncKick(db: SupabaseClient, connectionId: string, log: Logger): void {
+  const kick = async () => {
+    try {
+      await kickInitialSync(db, connectionId, log)
+    } catch (err) {
+      // The job stays queued (or its lease expires): the worker's next tick runs it.
+      log.error('commerce.sync.kick_failed', err, { connectionId })
+    }
+  }
+  try {
+    after(kick)
+  } catch (err) {
+    log.debug('commerce.sync.kick_unavailable', { reason: err instanceof Error ? err.message : String(err) })
+  }
 }
 
 export { listConnections }

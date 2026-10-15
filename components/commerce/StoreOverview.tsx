@@ -38,6 +38,7 @@ interface StoreOverviewProps {
 const QUEUE_LABEL: Array<{ key: keyof CommerceOverviewDto['queue']; label: string }> = [
   { key: 'eligible', label: 'Eligible' },
   { key: 'scheduled', label: 'Scheduled' },
+  { key: 'retrying', label: 'Retrying' },
   { key: 'calling', label: 'Calling' },
   { key: 'completed', label: 'Completed' },
   { key: 'suppressed', label: 'Suppressed' },
@@ -176,7 +177,7 @@ export function StoreOverview({ overview, isLoading, error, onRetry, onAutomatio
       <section aria-labelledby="overview-queue">
         <SectionHeading as="h2" title={<span id="overview-queue">Call queue</span>} description="The automated calls, by status." />
         <Card className="gap-0 py-0">
-          <CardContent className="grid grid-cols-2 gap-3 py-5 sm:grid-cols-3 lg:grid-cols-6">
+          <CardContent className="grid grid-cols-2 gap-3 py-5 sm:grid-cols-4 xl:grid-cols-7">
             {QUEUE_LABEL.map(({ key, label }) => (
               <StatTile key={key} size="sm" label={label} value={formatCount(queue[key])} />
             ))}

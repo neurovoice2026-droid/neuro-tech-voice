@@ -58,7 +58,7 @@ export async function buildOverview(db: SupabaseClient, org: { id: string; plan:
   return {
     connection: connection ? await connectionDto(db, connection) : null,
     automations,
-    queue: { eligible: queue.eligible, scheduled: queue.scheduled, calling: queue.calling, completed: queue.completed, suppressed: queue.suppressed, failed: queue.failed },
+    queue: { eligible: queue.eligible, scheduled: queue.scheduled, retrying: queue.retry_waiting, calling: queue.calling, completed: queue.completed, suppressed: queue.suppressed, failed: queue.failed },
     recent_runs: ((recent.data ?? []) as RunRow[]).map(runDto),
     problems,
   }

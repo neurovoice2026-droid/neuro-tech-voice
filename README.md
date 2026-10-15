@@ -22,7 +22,7 @@ npm run dev                    # http://localhost:3000
 ```
 
 Database: apply the SQL files in `supabase/migrations/` in order (001 → 021,
-then 023, 024, 025, 026, 027 and 028; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+then 023, 024, 025, 026, 027, 028, 029 and 030; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
 SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
 ships it, apply `022_security_performance_hardening.sql`: it is the former

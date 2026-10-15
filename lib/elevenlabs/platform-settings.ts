@@ -144,8 +144,10 @@ export const PII_REDACTION_ENTITIES = ['financial_id.payment_card'] as const
  * privacy.conversation_history_redaction: payment card numbers (number,
  * expiry, CVV) are redacted from what ElevenLabs stores, even though the
  * prompt already forbids taking them. Enterprise-only at ElevenLabs: when the
- * workspace rejects it, the adapter retries without it (see adapters.ts) and
- * diagnostics report it. ELEVENLABS_PII_REDACTION=false turns it off.
+ * workspace rejects it, the adapter retries without it (see adapters.ts), the
+ * refusal is remembered for a day across instances
+ * (lib/voice-providers/pii-redaction.ts) and diagnostics report it.
+ * ELEVENLABS_PII_REDACTION=false turns it off.
  */
 export function piiRedactionConfig(env: Env = process.env) {
   const enabled = flag(env.ELEVENLABS_PII_REDACTION, true)

@@ -141,8 +141,8 @@ export function SuppressionsPage() {
             <TableRow>
               <TableHead scope="col">Customer</TableHead>
               <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">Phone</TableHead>
-              <TableHead scope="col">Source</TableHead>
-              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Since</TableHead>
+              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Source</TableHead>
+              <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Since</TableHead>
               <TableHead scope="col" className="text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -152,20 +152,28 @@ export function SuppressionsPage() {
             {list.items.map((customer) => (
               <TableRow key={customer.id}>
                 <TableCell className="py-2.5">
-                  <span className="block text-sm font-medium text-foreground">{customer.name || 'Unnamed customer'}</span>
-                  <span className="mt-0.5 block text-xs leading-4 text-muted-foreground tabular-nums @min-[560px]/records:hidden">{maskedOrDash(customer.phone_masked)}</span>
+                  {/* On a narrow panel: the panel width less the icon-only remove button; phone (560 px) and source (760 px) fold in here. */}
+                  <div className="max-w-[calc(100cqw-112px)] min-w-0 @min-[560px]/records:max-w-[32ch]">
+                    <span className="block truncate text-sm font-medium text-foreground" title={customer.name || undefined}>{customer.name || 'Unnamed customer'}</span>
+                    <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground tabular-nums @min-[560px]/records:hidden">{maskedOrDash(customer.phone_masked)}</span>
+                    <span className="mt-1.5 block @min-[760px]/records:hidden">
+                      <StatusChip tone={customer.do_not_call_source === 'customer_opt_out' ? 'danger' : 'neutral'} dot>
+                        {suppressionSourceLabel(customer.do_not_call_source)}
+                      </StatusChip>
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell className="hidden tabular-nums @min-[560px]/records:table-cell">{maskedOrDash(customer.phone_masked)}</TableCell>
-                <TableCell>
+                <TableCell className="hidden @min-[760px]/records:table-cell">
                   <StatusChip tone={customer.do_not_call_source === 'customer_opt_out' ? 'danger' : 'neutral'} dot>
                     {suppressionSourceLabel(customer.do_not_call_source)}
                   </StatusChip>
                 </TableCell>
-                <TableCell className="hidden text-muted-foreground tabular-nums @min-[760px]/records:table-cell">{formatDateTime(customer.do_not_call_at)}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="outline" size="xs" className="tap-44" onClick={() => setRemoving(customer)} aria-label={`Remove ${customer.name || 'the customer'} from the do-not-call list`}>
+                <TableCell className="hidden text-muted-foreground tabular-nums @min-[900px]/records:table-cell">{formatDateTime(customer.do_not_call_at)}</TableCell>
+                <TableCell className="pl-1 text-right">
+                  <Button variant="outline" size="xs" className="tap-44" onClick={() => setRemoving(customer)} aria-label={`Remove ${customer.name || 'the customer'} from the do-not-call list`} title="Remove from list">
                     <Undo2 aria-hidden="true" />
-                    Remove from list
+                    <span className="hidden @min-[1000px]/records:inline">Remove from list</span>
                   </Button>
                 </TableCell>
               </TableRow>

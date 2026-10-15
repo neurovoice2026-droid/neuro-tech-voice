@@ -103,6 +103,18 @@ export const AUTH = {
 } as const;
 
 /**
+ * The one address the site is published at, with no trailing slash.
+ *
+ * The sitemap and robots.txt need absolute URLs and read this. The root
+ * layout's `metadataBase` and the proxy's alias redirect write the same
+ * origin out by hand rather than importing it, because this module would
+ * bring the whole of the marketing copy into the layout and the proxy;
+ * tests/proxy-canonical-host.test.ts and tests/seo-routes.test.ts fail the
+ * moment either copy differs from this one.
+ */
+export const SITE_URL = "https://www.neurotechvoice.com";
+
+/**
  * The company's own timezone — what "now" and "today" mean on this site.
  *
  * Shared rather than repeated so the hero's clock and the calendar panel
@@ -2059,12 +2071,19 @@ export type HeaderNavEntry =
   | { kind: "menu"; id: "product" | "solutions"; label: string }
   | { kind: "link"; id: string; label: string; href: string };
 
+/**
+ * Every link here resolves; tests/site-links.test.ts holds it to that.
+ *
+ * "Case Studies" went: there are none to show, and /case-studies was a 404
+ * linked from the bar of every page. "Contact" rings the sales line, the
+ * same contact every "Talk to us" on the site uses, because /contact was
+ * never built and the company has no monitored address yet (COMPANY.email).
+ */
 export const HEADER_NAV: HeaderNavEntry[] = [
   { kind: "menu", id: "product", label: "Product" },
   { kind: "menu", id: "solutions", label: "Solutions" },
   { kind: "link", id: "pricing", label: "Pricing", href: "/#pricing" },
-  { kind: "link", id: "case-studies", label: "Case Studies", href: "/case-studies" },
-  { kind: "link", id: "contact", label: "Contact", href: "/contact" },
+  { kind: "link", id: "contact", label: "Contact", href: AUTH.contactSales },
 ];
 
 export const SITE_HEADER = {
@@ -2113,6 +2132,20 @@ export type CallMoment = {
 export type ProductItem = NavItem & { lens: NavLens; moment?: CallMoment };
 
 export type NavGroup = { id: "agents" | "voice"; label: string; items: ProductItem[] };
+
+/**
+ * Where the four Voice rows go until each has a page of its own.
+ *
+ * /product/voice-library, /voice-cloning, /text-to-speech and
+ * /speech-to-text were never built, and the menu linked all four into a
+ * 404. The AI Agents page is the written page that covers them: its
+ * platform section auditions voices by accent, pitch and pace and clones
+ * one from a single recording, its sample calls are spoken in generated
+ * voices, and it promises a transcript of every conversation. When one of
+ * those pages ships, its row takes that page's path back. No hash: the
+ * mobile sheet cannot follow one from inside its scroll lock.
+ */
+const VOICE_PAGE = "/product/ai-agents";
 
 export const PRODUCT_GROUPS: NavGroup[] = [
   {
@@ -2179,7 +2212,7 @@ export const PRODUCT_GROUPS: NavGroup[] = [
         label: "Voice Library",
         description: "Pick a voice by accent and pace.",
         icon: LibraryBig,
-        href: "/product/voice-library",
+        href: VOICE_PAGE,
         lens: "voices",
         moment: { context: "Voice library", turns: [], outcome: "" },
       },
@@ -2188,7 +2221,7 @@ export const PRODUCT_GROUPS: NavGroup[] = [
         label: "Voice Cloning",
         description: "Your own voice, from one recording.",
         icon: MicVocal,
-        href: "/product/voice-cloning",
+        href: VOICE_PAGE,
         lens: "call",
         moment: {
           context: "Your cloned voice · outbound reminder",
@@ -2209,7 +2242,7 @@ export const PRODUCT_GROUPS: NavGroup[] = [
         label: "Text to Speech",
         description: "Turn any script into lifelike speech.",
         icon: Speech,
-        href: "/product/text-to-speech",
+        href: VOICE_PAGE,
         lens: "call",
         moment: {
           context: "Text to speech",
@@ -2228,7 +2261,7 @@ export const PRODUCT_GROUPS: NavGroup[] = [
         label: "Speech to Text",
         description: "Live transcripts, even on a noisy line.",
         icon: Captions,
-        href: "/product/speech-to-text",
+        href: VOICE_PAGE,
         lens: "transcribe",
         // The turns are read from a real trade's own words; these are the
         // two lines around them.
@@ -2656,9 +2689,11 @@ export const FOOTER = {
       title: "Product",
       // Flattened across both menu groups, in menu order: the footer has
       // no room for the Agents/Voice split and no pointer to explain it.
+      // One link per page: the Voice rows share AI Agents' page for now
+      // (VOICE_PAGE), and five links to one page is not a sitemap.
       links: PRODUCT_GROUPS.flatMap((g) =>
         g.items.map((i) => ({ label: i.label, href: i.href })),
-      ),
+      ).filter((link, at, all) => all.findIndex((l) => l.href === link.href) === at),
     },
     {
       title: "Industries",
@@ -2676,9 +2711,9 @@ export const FOOTER = {
       links: [
         // Rooted, so they still land on the homepage's sections from a
         // subpage — which is now the common case, not the exception.
+        // No Case Studies and no Contact: neither page exists, and the
+        // imprint does not print the phone (the header's Contact rings it).
         { label: "Pricing", href: "/#pricing" },
-        { label: "Case Studies", href: "/case-studies" },
-        { label: "Contact", href: "/contact" },
         { label: "Sign in", href: AUTH.signin },
       ],
     },

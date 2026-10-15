@@ -5,8 +5,10 @@
 // no wait that can last forever (the connection poll has a hard limit).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { create } from 'zustand'
+import { unavailablePlatforms } from '@/hooks/useCommerceConnections'
 import { useCommerceOnboardingStore, type CommerceOnboardingStateDto } from '@/store/useCommerceOnboardingStore'
-import type { ConnectionDto } from '@/lib/commerce/types'
+import type { CommerceConfigSummary, CommercePlatform, ConnectionDto } from '@/lib/commerce/types'
 import { commerceErrorMessage, isAbort, requestJson } from './api'
 
 const STATE_LOAD_FAILED = 'Your store setup could not be loaded.'
@@ -19,6 +21,13 @@ interface StateLoad {
   error: string | null
 }
 
+/**
+ * The platforms this deployment cannot connect yet (the state's `config`,
+ * booleans only), kept beside the store mirror: steps 2 and 3 show them as
+ * unavailable instead of sending the merchant off to fail after a redirect.
+ */
+export const usePlatformAvailability = create<{ unavailable: ReadonlySet<CommercePlatform> }>(() => ({ unavailable: new Set() }))
+
 /** Reads the server state into the store on mount (and on refetch). The store is the single mirror. */
 export function useCommerceOnboardingState() {
   const hydrate = useCommerceOnboardingStore((s) => s.hydrate)
@@ -27,13 +36,14 @@ export function useCommerceOnboardingState() {
 
   useEffect(() => {
     const ctrl = new AbortController()
-    requestJson<CommerceOnboardingStateDto>('/api/commerce/onboarding/state', {
+    requestJson<CommerceOnboardingStateDto & { config?: CommerceConfigSummary }>('/api/commerce/onboarding/state', {
       signal: ctrl.signal,
       fallback: STATE_LOAD_FAILED,
     })
       .then((dto) => {
         if (ctrl.signal.aborted) return
         hydrate(dto)
+        usePlatformAvailability.setState({ unavailable: unavailablePlatforms(dto.config) })
         setLoad({ loaded: true, error: null })
       })
       .catch((err: unknown) => {

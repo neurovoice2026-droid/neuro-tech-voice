@@ -14,7 +14,9 @@ import type { StatusTone } from '@/components/shared/StatusChip'
 import { SCRIPT_VARIABLES as SCRIPT_VARIABLE_NAMES, type ScriptVariable } from '@/lib/commerce/prompt'
 import type {
   AutomationType,
+  CommercePlatform,
   CommerceProblemCode,
+  ConnectionDto,
   ConnectionStatus,
   CustomerListDto,
   FinancialStatus,
@@ -180,6 +182,40 @@ export const SYNC_RESOURCE_LABEL: Record<SyncResource | 'all', string> = {
   customers: 'customers',
   orders: 'orders',
   carts: 'carts',
+}
+
+/**
+ * Under the webhook address (ConnectionDto.webhook_url, set only for these
+ * platforms): what the store's own code sends there and how it is signed.
+ */
+export const WEBHOOK_ADDRESS_HINT: Partial<Record<CommercePlatform, string>> = {
+  custom: 'Your store sends its events here (order.created, order.updated, product.updated, customer.updated, cart.updated), signed with the webhook secret you entered (X-NTV-Signature).',
+  woocommerce: 'For abandoned carts: the code on your store sends ntv.cart.updated events here, signed like the WooCommerce webhooks this connection created (their secret is in WooCommerce → Settings → Advanced → Webhooks).',
+}
+
+/**
+ * True when the store's own code sends every event (custom connector): nothing
+ * is registered on our side, so the webhook state is whether a verified event
+ * has arrived. WooCommerce shows its address too (cart events), but its order
+ * webhooks are registered through its API: no topics there means the
+ * registration failed (reconnect), not that the store has yet to send.
+ */
+export function awaitsStoreSentEvents(c: Pick<ConnectionDto, 'platform' | 'capabilities' | 'webhook_url'>): boolean {
+  return c.platform === 'custom' && c.capabilities.webhooks && !!c.webhook_url
+}
+
+/** Singular and plural of each synced resource, for counts ("1 customer", "2 customers"). */
+export const SYNC_RESOURCE_NOUN: Record<SyncResource, readonly [one: string, many: string]> = {
+  products: ['product', 'products'],
+  customers: ['customer', 'customers'],
+  orders: ['order', 'orders'],
+  carts: ['cart', 'carts'],
+}
+
+/** "1 customer", "1,240 orders"; a key the UI does not know reads as itself. `format` renders the number. */
+export function resourceCount(resource: string, n: number, format: (n: number) => string = (v) => v.toLocaleString('en-US')): string {
+  const noun = Object.hasOwn(SYNC_RESOURCE_NOUN, resource) ? SYNC_RESOURCE_NOUN[resource as SyncResource][n === 1 ? 0 : 1] : resource
+  return `${format(n)} ${noun}`
 }
 
 /**
@@ -471,8 +507,39 @@ export function stockStatusTone(value: string | null | undefined): StatusTone {
   return value && Object.hasOwn(STOCK_STATUS_TONE, value) ? STOCK_STATUS_TONE[value as StockStatus] : 'muted'
 }
 
+// ─── Run references (RunDto.reference is bare: no '#', no "cart") ─────────────
+
+type RunReference = { reference: string; reference_kind: 'order' | 'cart' }
+
+/** The run's short reference in a table cell: "#10482", or "Cart …sfvoyz" for an abandoned cart. */
+export function runReferenceLabel(run: RunReference): string {
+  return run.reference_kind === 'cart' ? `Cart …${run.reference}` : `#${run.reference}`
+}
+
+/** The run's subject in a sentence: "Order #10482", or "Cart …sfvoyz". */
+export function runSubjectLabel(run: RunReference): string {
+  return run.reference_kind === 'cart' ? `Cart …${run.reference}` : `Order #${run.reference}`
+}
+
 /** "Automated call · COD confirmation · Order #1234 · Confirmed" (the call sheet's one-line summary). */
-export function runSummaryLine(run: { automation_type: string; reference: string; outcome: string | null; status: string }): string {
+export function runSummaryLine(run: RunReference & { automation_type: string; outcome: string | null; status: string }): string {
   const result = runOutcomeLabel(run.outcome) ?? runStatusLabel(run.status)
-  return ['Automated call', automationTypeLabel(run.automation_type), `Order #${run.reference}`, result].join(' · ')
+  return ['Automated call', automationTypeLabel(run.automation_type), runSubjectLabel(run), result].join(' · ')
+}
+
+/** The "When" column's label for a finished run: its own end state, never "Completed" for a run that was not. */
+const RUN_ENDED_LABEL: Partial<Record<RunStatus, string>> = {
+  completed: 'Completed',
+  cancelled: 'Canceled',
+  suppressed: 'Skipped',
+  skipped: 'Skipped',
+  failed: 'Failed',
+}
+
+/** When the run matters to the merchant: the scheduled slot while it waits, otherwise its last activity. */
+export function runWhen(run: { status: RunStatus; scheduled_for: string | null; completed_at: string | null; last_attempt_at: string | null; created_at: string }): { label: string; iso: string | null } {
+  if ((run.status === 'scheduled' || run.status === 'retry_waiting') && run.scheduled_for) return { label: 'Scheduled', iso: run.scheduled_for }
+  if (run.completed_at) return { label: RUN_ENDED_LABEL[run.status] ?? 'Ended', iso: run.completed_at }
+  if (run.last_attempt_at) return { label: 'Last attempt', iso: run.last_attempt_at }
+  return { label: 'Created', iso: run.created_at }
 }

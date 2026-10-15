@@ -17,7 +17,9 @@ import 'server-only'
 //   runQuotaMonitor()      maintenance step `elevenlabs_quota`, hourly from a
 //                          stored last run: error/warn logs, a provider event
 //                          (health_check / quota_snapshot) and the snapshot
-//                          kept in maintenance_state for diagnostics.
+//                          kept in maintenance_state for diagnostics. A tier
+//                          change also clears a remembered transcript-redaction
+//                          refusal (./pii-redaction.ts).
 //   quotaDiagnostics()     admin diagnostics: last snapshot (live with ?probe=1)
 //                          and key health (auth / permission / quota failures
 //                          of the last 24 h, last health probe).
@@ -32,6 +34,7 @@ import { isConfigured } from '@/lib/elevenlabs/client'
 import { BLOCKING_SUBSCRIPTION_STATUSES, getSubscription, type ELSubscription } from '@/lib/elevenlabs/api/subscription'
 import { isProviderError } from './errors'
 import { runIfDue } from './maintenance-state'
+import { refreshPiiRedactionCapability } from './pii-redaction'
 import type { ConfigProblem } from './config'
 
 export const QUOTA_STATE_KEY = 'elevenlabs_quota'
@@ -214,6 +217,8 @@ export async function runQuotaMonitor(log: Logger, opts: { force?: boolean; now?
   const run = async () => {
     const snapshot = await quotaSnapshot(log, opts.now)
     await recordQuotaSnapshot(snapshot, log)
+    // An upgraded workspace may accept transcript redaction now: ask again on the next write.
+    await refreshPiiRedactionCapability(snapshot.tier, log, opts.now)
     return { status: snapshot.status, problems: snapshot.problems.map((p) => p.code) }
   }
   return opts.force ? run() : runIfDue(`${QUOTA_STATE_KEY}_check`, quotaCheckMinutes() * 60_000, log, run, opts.now)

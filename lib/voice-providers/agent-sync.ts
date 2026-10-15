@@ -190,9 +190,10 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
         config_hash: synced.configHash,
         details: { ...(row.details ?? {}), ...synced.details },
       }
+      const previousDetails = row.details ?? {}
       await writeRow(db, row.id, lease.token, patch)
       row = { ...row, ...patch }
-      reportReadBack(synced.details, log)
+      reportReadBack(synced.details, previousDetails, log)
       if (provider === 'elevenlabs') {
         const { error } = await db.from('agents').update({ elevenlabs_agent_id: synced.externalId }).eq('id', agentId)
         if (error) log.error('agent_sync.compat_column_failed', error)
@@ -240,17 +241,25 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
   return result
 }
 
-/** Logs what the provider read-back revealed (flags stay in details for diagnostics/reconcile). */
-function reportReadBack(details: Record<string, unknown>, log: Logger) {
-  if (details.analysis_items_migrated === true) {
-    // Our legacy evaluation/data_collection may no longer be the source the
-    // provider reads: success criteria and extracted fields can silently stop.
-    log.error('agent_sync.analysis_items_migrated', undefined, { hint: 'remote agent has non-null platform_settings.analysis_items' })
+/**
+ * Logs what the provider read-back revealed (flags stay in details for
+ * diagnostics/reconcile). A state the row already carried was logged when it
+ * appeared: repeating it on every sync of the same agent is noise.
+ */
+function reportReadBack(details: Record<string, unknown>, previous: Record<string, unknown>, log: Logger) {
+  // Rows written before the shape was recorded carry only the old flag, set for any non-null value.
+  const migratedBefore = previous.analysis_items_migrated === true && previous.analysis_items !== undefined
+  if (details.analysis_items_migrated === true && !migratedBefore) {
+    // User analysis items are attached at the provider (a dashboard edit): our
+    // legacy evaluation/data_collection may no longer be the source it reads,
+    // so the tenant's success criteria and fields can silently stop.
+    log.error('agent_sync.analysis_items_migrated', undefined, { analysis_items: details.analysis_items ?? null })
   }
   const stale = details.stale_keys as Record<string, unknown[]> | undefined
   const counts = stale ? Object.fromEntries(Object.entries(stale).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])) : {}
   if (Object.values(counts).some((n) => n > 0)) log.warn('agent_sync.stale_keys', counts)
-  if (details.pii_redaction === 'rejected') log.warn('agent_sync.pii_redaction_skipped')
+  // The workspace-wide refusal is warned about once by ./pii-redaction.ts.
+  if (details.pii_redaction === 'rejected' && previous.pii_redaction !== 'rejected') log.info('agent_sync.pii_redaction_skipped')
 }
 
 export interface SyncOptions {

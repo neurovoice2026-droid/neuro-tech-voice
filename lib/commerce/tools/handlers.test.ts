@@ -140,6 +140,16 @@ describe('store tools: identification and tenancy', () => {
     expect(db.tables.commerce_audit_log.some((a) => a.action === 'callback.requested' && String((a.metadata as Record<string, unknown>).detail).includes('mâine după 14'))).toBe(true)
   })
 
+  it('record_callback_request labels the preferred time in English for the merchant, keeping the customer\'s words', async () => {
+    const db = seed({ campaign: true })
+    const res = await recordCallbackRequestTool(ctx(db), { reason: 'Vrea să schimbe adresa', preferred_time: 'mâine după 14' }, log)
+    expect(res.ok).toBe(true)
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ outcome: 'callback_requested', outcome_detail: 'Vrea să schimbe adresa · Preferred time: mâine după 14' })
+    const audit = db.tables.commerce_audit_log.find((a) => a.action === 'callback.requested')
+    expect((audit?.metadata as Record<string, unknown>).detail).toBe('Vrea să schimbe adresa · Preferred time: mâine după 14')
+    expect(JSON.stringify(db.tables)).not.toContain('Preferă')
+  })
+
   it('answers safely when the organization has no store', async () => {
     const db = seed()
     db.tables.commerce_connections = []

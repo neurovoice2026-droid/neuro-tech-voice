@@ -221,6 +221,8 @@ describe('useCommerceOnboardingStore', () => {
     status: 'active',
     capabilities: { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: false, customer_phone: true, polling_minutes: null, notes: [] },
     webhook_topics: ['order.created'],
+    webhook_url: null,
+    webhook_last_delivery_at: null,
     last_sync_at: null,
     last_successful_sync_at: null,
     error_code: null,
@@ -293,7 +295,7 @@ describe('useCommerceOnboardingStore', () => {
       script: { template: '', tone: 'friendly' as const, brand_name: null, transfer_number: null, return_policy_url: null },
       consent_confirmed_at: null,
       consent_version: null,
-      stats: { eligible: 0, scheduled: 0, calling: 0, completed: 0, suppressed: 0, failed: 0 },
+      stats: { eligible: 0, scheduled: 0, retrying: 0, calling: 0, completed: 0, suppressed: 0, failed: 0 },
       created_at: '',
       updated_at: '',
     }

@@ -29,6 +29,35 @@ describe('webhook ingestion', () => {
     expect(db.tables.commerce_webhook_events ?? []).toHaveLength(0)
   })
 
+  it('never lets an unverified delivery write to the connection or raise a webhook failure', async () => {
+    adapterState.adapter = fakeAdapter()
+    const config = { registrations: [{ topic: 'order.created', externalId: '7', source: 'api' }], last_error: null, last_error_at: null, last_delivery_at: '2026-10-13T07:00:00Z' }
+    const db = commerceDb({ commerce_connections: [connectionRow({ webhook_public_id: `${PUBLIC_ID_A}${n}`, webhook_config: config })] })
+    for (let i = 0; i < 3; i++) {
+      expect((await ingestWebhook(asClient(db), { platform: 'woocommerce', publicId: `${PUBLIC_ID_A}${n}`, request: req(body({ id: i })) }, log)).status).toBe(401)
+    }
+    expect(db.tables.commerce_connections[0].webhook_config).toEqual(config)
+    expect(db.log.filter((c) => c.table === 'commerce_connections' && c.op !== 'select')).toHaveLength(0)
+  })
+
+  it('notes a verified delivery without overwriting a connect that changed the row meanwhile', async () => {
+    const db = commerceDb({ commerce_connections: [connectionRow({ webhook_public_id: `${PUBLIC_ID_A}${n}`, webhook_config: { registrations: [], last_delivery_at: null } })] })
+    adapterState.adapter = fakeAdapter({ verify: () => ({ ok: true, topic: 'order.created', deliveryId: 'd-1', externalResourceId: '1', payload: {} }) })
+    await ingestWebhook(asClient(db), { platform: 'woocommerce', publicId: `${PUBLIC_ID_A}${n}`, request: req(body({ id: 1 })) }, log)
+    expect(db.tables.commerce_connections[0].webhook_config).toEqual({ registrations: [], last_delivery_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) })
+
+    // A reconnect lands between the connection read and the note: its registrations survive.
+    const fresh = { registrations: [{ topic: 'order.created', externalId: '9', source: 'api' }], last_error: null, last_error_at: null, last_delivery_at: null }
+    adapterState.adapter = fakeAdapter({
+      verify: () => {
+        Object.assign(db.tables.commerce_connections[0], { webhook_config: fresh, updated_at: '2099-01-01T00:00:00.000Z' })
+        return { ok: true, topic: 'order.created', deliveryId: 'd-2', externalResourceId: '1', payload: {} }
+      },
+    })
+    expect((await ingestWebhook(asClient(db), { platform: 'woocommerce', publicId: `${PUBLIC_ID_A}${n}`, request: req(body({ id: 2 })) }, log)).body).toMatchObject({ accepted: true })
+    expect(db.tables.commerce_connections[0].webhook_config).toEqual(fresh)
+  })
+
   it('stores one idempotency row per delivery and acknowledges duplicates without a second row', async () => {
     adapterState.adapter = fakeAdapter({ verify: (raw) => ({ ok: true, topic: 'order.created', deliveryId: 'd-1', externalResourceId: '1001', payload: JSON.parse(new TextDecoder().decode(raw)) }) })
     const db = commerceDb({ commerce_connections: [connectionRow({ webhook_public_id: `${PUBLIC_ID_A}${n}` })] })

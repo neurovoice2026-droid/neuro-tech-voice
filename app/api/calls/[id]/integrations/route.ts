@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { google } from 'googleapis'
 import { requireOrg } from '@/lib/api/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { legacySentimentFromVerdict } from '@/lib/calls/legacy-sentiment'
 import {
   apiError,
@@ -118,7 +119,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // ── Google actions need a connected integration with a refresh token ────
-    const { data: integration, error: integrationError } = await supabase
+    // Service role, scoped to the owner's org: tenants cannot read the token
+    // column or write integrations (migration 030).
+    const db = createAdminClient()
+    const { data: integration, error: integrationError } = await db
       .from('integrations')
       .select('google_refresh_token, is_active, config')
       .eq('org_id', org.id)
@@ -166,7 +170,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             valueInputOption: 'RAW',
             requestBody: { values: [['Date', 'Caller', 'Direction', 'Duration (s)', 'Handled by', 'Sentiment', 'Summary']] },
           })
-          const { error: cfgError } = await supabase
+          const { error: cfgError } = await db
             .from('integrations')
             .update({ config: { ...cfg, call_log_spreadsheet_id: spreadsheetId } })
             .eq('org_id', org.id)

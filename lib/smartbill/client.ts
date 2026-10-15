@@ -6,6 +6,10 @@
 
 const BASE = 'https://ws.smartbill.ro/SBORO/api'
 
+// The billing webhook awaits the emission before answering Stripe: a slow
+// SmartBill must not hold it until Stripe gives up and delivers again.
+const REQUEST_TIMEOUT_MS = 10_000
+
 /** True when SmartBill credentials + issuing config are all present. */
 export function isConfigured(): boolean {
   return (
@@ -20,7 +24,13 @@ export class SmartBillError extends Error {
   constructor(
     public status: number,
     public body: string,
-    public path: string
+    public path: string,
+    /**
+     * SmartBill answered and refused the request (an HTTP 4xx, or an
+     * errorText), so nothing was issued. False for a 5xx or an unreadable
+     * answer: the request may have gone through.
+     */
+    public refused: boolean = status >= 400 && status < 500
   ) {
     super(`SmartBill API error ${status} on ${path}: ${body}`)
     this.name = 'SmartBillError'
@@ -42,6 +52,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       Accept: 'application/json',
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
 
   const text = await res.text()
@@ -54,12 +65,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   try {
     json = text ? JSON.parse(text) : {}
   } catch {
-    throw new SmartBillError(res.status, text, path)
+    throw new SmartBillError(res.status, text, path, false)
   }
 
   const errorText = (json as { errorText?: string }).errorText
   if (errorText) {
-    throw new SmartBillError(res.status, errorText, path)
+    throw new SmartBillError(res.status, errorText, path, true)
   }
 
   return json as T

@@ -31,7 +31,15 @@ const display = Inter_Tight({
 })
 
 export const metadata: Metadata = {
+  // The same origin as lib/site.ts SITE_URL (tests/seo-routes.test.ts),
+  // written out so the root layout does not load the marketing copy.
   metadataBase: new URL('https://www.neurotechvoice.com'),
+  // './' is each page's own path, so every page names itself on www (on
+  // the vercel.app alias or a preview too) instead of inheriting "/",
+  // which would tell a crawler that /privacy is a copy of the homepage.
+  // A page that sets its own canonical (the product, solution and
+  // industry pages) still wins.
+  alternates: { canonical: './' },
   title: {
     default: 'Neuro Tech Voice — Your AI agent turns missed calls into booked meetings',
     template: '%s — Neuro Tech Voice',

@@ -110,6 +110,7 @@ export function AutomationCard({ automation, onChanged, className }: AutomationC
       {configured && automation.available && (
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs leading-4 text-muted-foreground tabular-nums">
           <div className="flex gap-1"><dt>Scheduled</dt><dd className="font-medium text-foreground">{formatCount(stats.scheduled)}</dd></div>
+          {stats.retrying > 0 && <div className="flex gap-1"><dt>Retrying</dt><dd className="font-medium text-foreground">{formatCount(stats.retrying)}</dd></div>}
           <div className="flex gap-1"><dt>Completed</dt><dd className="font-medium text-foreground">{formatCount(stats.completed)}</dd></div>
           <div className="flex gap-1"><dt>Failed</dt><dd className="font-medium text-foreground">{formatCount(stats.failed)}</dd></div>
         </dl>

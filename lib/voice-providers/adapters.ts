@@ -27,6 +27,7 @@ import { forgetPlatformResource, tryPlatformResource } from './platform-resource
 import { TRANSFER_TOOL_DEGRADED, ensurePlatformTool, invalidatePlatformToolMemo, storedPlatformToolId } from './platform-tools'
 import { composeSystemPrompt } from './prompt'
 import { invalidateBusinessToolMemo, resolveBusinessToolIds, resolveCommerceToolIds, withAttachedBusinessTools, withAttachedCommerceTools } from './business-tools'
+import { isPiiRedactionRejection, piiRedactionRejected, rememberPiiRedactionRejected, resetPiiRedactionMemo } from './pii-redaction'
 
 export interface SyncedAgent extends ExternalAgentRef {
   configHash: string
@@ -177,39 +178,31 @@ async function confirmAgentMissing(externalId: string, ctx: { orgId: string; age
   })
 }
 
-/** Transcript redaction rejected by the workspace (enterprise-only): skip it for an hour on this instance. */
-const PII_REJECTION_MEMO_MS = 3_600_000
-let piiRedactionRejectedAt = 0
-
-function isPiiRedactionRejection(err: unknown): boolean {
-  return isProviderError(err) && ['validation', 'permission', 'quota'].includes(err.code) && /redact/i.test(err.detail ?? '')
-}
-
 /**
  * Sends `body` with `send`. Payment-card redaction is enterprise-only at
  * ElevenLabs: when the workspace rejects it, the same write is repeated once
  * without it, so every tenant's sync keeps working (diagnostics report it).
+ * The refusal is remembered for the whole workspace (./pii-redaction.ts), so
+ * later writes on any instance leave the field out instead of repeating it.
  * The config hash stays that of the intended body: nothing re-syncs in a loop.
  */
 async function sendWithRedactionFallback<T>(body: AgentBody, send: (b: AgentBody) => Promise<T>): Promise<{ result: T; pii: 'applied' | 'rejected' | 'disabled' }> {
   const privacy = body.platform_settings.privacy as { conversation_history_redaction?: { enabled?: boolean } } | undefined
   const wanted = privacy?.conversation_history_redaction?.enabled === true
   if (!wanted) return { result: await send(body), pii: 'disabled' }
-  if (Date.now() - piiRedactionRejectedAt < PII_REJECTION_MEMO_MS) return { result: await send(withoutPiiRedaction(body)), pii: 'rejected' }
+  const log = createLogger({ component: 'elevenlabs_lifecycle' })
+  if (await piiRedactionRejected(log)) return { result: await send(withoutPiiRedaction(body)), pii: 'rejected' }
   try {
     return { result: await send(body), pii: 'applied' }
   } catch (err) {
     if (!isPiiRedactionRejection(err)) throw err
-    piiRedactionRejectedAt = Date.now()
-    createLogger({ component: 'elevenlabs_lifecycle' }).error('agent_sync.pii_redaction_rejected', err)
+    await rememberPiiRedactionRejected(err, log)
     return { result: await send(withoutPiiRedaction(body)), pii: 'rejected' }
   }
 }
 
 /** Test helper: forget a remembered redaction rejection. */
-export function resetPiiRedactionMemo(): void {
-  piiRedactionRejectedAt = 0
-}
+export { resetPiiRedactionMemo }
 
 /** Non-sensitive facts about the write, merged into agent_provider_resources.details. */
 function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | null, pii: string, appTransfer: AppTransfer): Record<string, unknown> {
@@ -228,6 +221,8 @@ function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | n
     paused: !spec.active,
     pii_redaction: pii,
     analysis_items_migrated: report.analysisItemsMigrated,
+    // Keys and counts of the read-back analysis_items (null: absent), never item ids.
+    analysis_items: report.analysisItems,
     stale_keys: report.staleKeys,
   }
 }

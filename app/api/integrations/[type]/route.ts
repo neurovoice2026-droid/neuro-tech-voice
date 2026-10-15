@@ -1,11 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger } from '@/lib/observability/logger'
 import { scheduleCalendarResync } from '@/lib/voice-tools/calendar-resync'
-
-const VALID_TYPES = [
-  'google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive', 'webhook',
-]
+import { isGoogleIntegrationType } from '@/lib/google/scopes'
 
 type Params = { params: Promise<{ type: string }> }
 
@@ -38,11 +36,17 @@ export async function GET(_request: NextRequest, { params }: Params) {
   return NextResponse.json({ connected: !!data?.is_active, integration: data ?? null })
 }
 
-// Connect/configure an integration. Used for the webhook type (Google types use
-// the OAuth connect/callback routes instead).
+// Connect/configure the webhook integration. Google types are connected only
+// by the OAuth connect/callback routes, which store the refresh token: marking
+// one active here would show "Connected" for an integration that cannot work.
+// Tenants have no write privileges on integrations (migration 030), so the
+// row is written with the service role, scoped to the owner's organization.
 export async function POST(request: NextRequest, { params }: Params) {
   const { type } = await params
-  if (!VALID_TYPES.includes(type)) {
+  if (isGoogleIntegrationType(type)) {
+    return NextResponse.json({ error: 'Google integrations are connected through Google sign-in' }, { status: 400 })
+  }
+  if (type !== 'webhook') {
     return NextResponse.json({ error: 'Invalid integration type' }, { status: 400 })
   }
 
@@ -53,11 +57,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   const body = (await request.json().catch(() => ({}))) as { config?: Record<string, unknown> }
   const config = body.config ?? {}
 
-  if (type === 'webhook' && !config.url) {
+  if (!config.url) {
     return NextResponse.json({ error: 'Webhook URL is required' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await createAdminClient()
     .from('integrations')
     .upsert(
       { org_id: ctx.orgId, type, config, is_active: true, connected_at: new Date().toISOString() },
@@ -70,14 +74,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   return NextResponse.json({ connected: true, integration: data })
 }
 
-// Disconnect an integration.
+// Disconnect an integration (service role, scoped to the owner's organization).
 export async function DELETE(_request: NextRequest, { params }: Params) {
   const { type } = await params
   const supabase = await createClient()
   const ctx = await resolveOrgId(supabase)
   if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
 
-  const { error } = await supabase
+  const { error } = await createAdminClient()
     .from('integrations')
     .delete()
     .eq('org_id', ctx.orgId)

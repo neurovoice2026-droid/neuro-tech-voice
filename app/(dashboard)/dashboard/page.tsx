@@ -27,9 +27,10 @@ export default async function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Named columns: the token column is not readable by the owner's session (030).
     supabase
       .from('integrations')
-      .select('*')
+      .select('id, org_id, type, config, is_active, connected_at, created_at')
       .eq('org_id', org.id),
     supabase
       .from('phone_numbers')

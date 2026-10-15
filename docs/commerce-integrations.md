@@ -91,13 +91,21 @@ before the credentials were validated against the platform.
    secret))` over the exact bytes; the creation "ping" (`webhook_id=…`, no
    signature) is answered 200 and ignored; the dedupe key combines the
    delivery id with a hash of the body (WooCommerce delivery ids repeat within
-   a second). WooCommerce disables a webhook after 5 failed deliveries: the
-   connection shows the last rejection and the dashboard lists it as a
-   problem; reconnecting re-registers.
+   a second). WooCommerce disables a webhook after 5 failed deliveries;
+   reconnecting re-registers. A delivery that fails verification is only
+   logged (`commerce.webhook.rejected`): an unverified request never writes
+   to the connection or raises a dashboard problem, so whoever learns the URL
+   cannot fake a webhook failure. The connection keeps the time of the last
+   verified delivery instead (`webhook_config.last_delivery_at`).
 4. Abandoned carts: the standard REST API has no cart resource. A companion
-   WordPress plugin (or any code on the store) must POST to the connection's
-   webhook URL with topic `ntv.cart.updated` and the same signature scheme,
-   body `{cart_id, customer: {phone, email, first_name, last_name}, items:
+   WordPress plugin (or any code on the store; none ships with the platform)
+   must POST to the connection's webhook URL with topic `ntv.cart.updated`
+   and the same signature scheme. The URL is shown, with a copy button, on
+   the connection card (Store → Connections, onboarding step 3) when the key
+   may manage webhooks; the secret is the one of the webhooks this
+   connection created in WooCommerce → Settings → Advanced → Webhooks (the
+   platform never displays it). The body
+   is `{cart_id, customer: {phone, email, first_name, last_name}, items:
    [{name, quantity}], total, currency, abandoned_at, status}` (`status` one
    of `open | abandoned | recovered | expired`; only `abandoned` carts are
    called, `open` means the checkout is still in progress). Until such a
@@ -121,8 +129,13 @@ before the credentials were validated against the platform.
   encrypted token, webhook subscriptions through the GraphQL Admin API, first
   import). Tokens never appear in URLs, logs or responses.
 * Webhooks are verified with `X-Shopify-Hmac-Sha256 = base64(HMAC-SHA256(raw
-  body, client secret))`; `X-Shopify-Event-Id` (else the webhook id) is the
-  dedupe key.
+  body, client secret))`; `X-Shopify-Webhook-Id` (one per delivery), else
+  `X-Shopify-Event-Id`, combined with a hash of the body, is the dedupe key.
+* Until `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` are set, the Shopify
+  card of the connect page and of onboarding step 2 is shown disabled with
+  "Not available yet" (`GET /api/commerce/connections` and
+  `GET /api/commerce/onboarding/state` return `config.shopify`, booleans
+  only), instead of failing after the redirect to Shopify.
 * **Protected customer data.** Shopify redacts names, addresses, phones and
   e-mails (also in webhooks) until the app is approved for protected customer
   data (Level 2 for phone). Without it the connection reports
@@ -186,6 +199,11 @@ connection's webhook URL with `X-NTV-Signature: sha256=<hex HMAC-SHA256(raw
 body, secret)>`, `X-NTV-Event-Id` (unique), `X-NTV-Topic`
 (`order.created|order.updated|product.updated|customer.updated|cart.updated`),
 `X-NTV-Timestamp` (unix seconds, ±5 minutes), body `{ data: <record> }`.
+The webhook URL is shown, with a copy button, on the connection card (Store →
+Connections, onboarding step 3), with "Waiting for the first event" until a
+verified delivery arrives. Until then, and whenever no verified delivery
+arrived in the last 24 hours, the store keeps being polled every 15 minutes;
+only then does it fall back to the hourly safety net (§7).
 
 The connection test calls `GET /health` and the first page of `/orders`.
 
@@ -198,6 +216,15 @@ Three templates per connection (`commerce_automations`, one row per type):
 | `cod_confirmation` | order created/updated whose payment method is cash on delivery (`cod`, `cashondelivery`, `ps_cashondelivery`, titles matching *ramburs / cash on delivery / plata la livrare*, plus the merchant's list) and still open (not cancelled, paid, refunded or shipped) | 15 min | 09:00–20:00 Mon–Sat, store time zone | 50/day per automation, 1/day per customer, 2 dials per order, retry after 120 min |
 | `abandoned_cart` | a cart/checkout event the store reports as `abandoned`, with the contact phone (platform capability); `open` carts (checkout in progress) and `expired` ones are never called | 60 min, never under 30 | same | one run per cart; cancelled when the customer orders, the cart is recovered or it is still open at dial time |
 | `order_follow_up` | the order reaches the configured status (`fulfilled` = shipped/delivered or completed) | 24 h | same | same |
+
+Enabling (`PUT /api/commerce/automations/[type]`) needs the consent
+confirmation, the platform capability, a usable connection, the encryption
+key and, once the organization has launched, an active agent and a number
+that can place calls. Before launch (store onboarding step 4) the agent is
+not active yet and no number can exist, so the automation is saved enabled
+without those two; it starts calling once both exist, because dispatch
+refuses every call while the agent is paused or no number can dial (a run
+due before that ends `skipped` with the reason).
 
 Eligibility (`lib/commerce/automations/eligibility.ts`, pure, re-checked at
 dispatch): automation enabled **and** merchant consent confirmed; the
@@ -226,7 +253,7 @@ definite dispatch failure (retried up to `max_attempts`); a run whose dispatch c
 call id exists is settled as failed by the recovery sweep. A retry unlinks
 the previous attempt's call before dialing. Preconditions the merchant must
 fix (paused agent, no outbound number, used-up minutes) end the run as
-`skipped` with the reason; provider failures retry up to `max_attempts` and
+`skipped` with the reason (`startOutboundCall` refuses them); provider failures retry up to `max_attempts` and
 the run shows a generic Romanian message (the provider's or database's text
 stays in the server log).
 
@@ -324,11 +351,22 @@ within `COMMERCE_WORKER_BUDGET_MS` (default 45 s):
    next tick; the per-resource watermark of every finished resource reaches
    the connection's `sync_cursor` (merged key by key) when the job succeeds;
 4. queues an incremental `all` job for every active connection whose last
-   sync is older than its polling interval (hourly safety net for
-   webhook-capable stores), settles dispatches whose lease expired without a
+   sync is older than its polling interval (an hourly safety net only for
+   stores whose webhooks are known to work: registered through the platform
+   API, or a verified merchant-sent delivery within the last 24 hours;
+   otherwise the platform's interval, 15 minutes by default), settles
+   dispatches whose lease expired without a
    call id, reconciles calls whose post-call event was lost, re-wraps
    credentials still under a previous key version, and once a day
    runs retention.
+
+The first import does not wait for a tick: right after a connect (keys or
+the Shopify callback) the route runs one slice of the queued job after its
+response (`next/server` `after()`, `kickInitialSync` in `lib/commerce/sync.ts`).
+It claims the job by id with the same lease a worker claim takes (a
+compare-and-set on status and attempt count), so a tick running at the same
+moment never runs it twice; what the slice leaves pending continues on the
+next ticks.
 
 Backoff: transient failures retry with 1, 2, 4… minutes (±20 %, max 60) up to
 `max_attempts`; invalid credentials, forbidden scopes and malformed mappings
@@ -338,7 +376,7 @@ uses `FOR UPDATE SKIP LOCKED`, so overlapping cron runs never process the
 same row twice.
 
 Monitoring: the store overview lists problems with links (expired
-credentials, webhook rejections, sync errors, missing number, no consent,
+credentials, webhook registration failures, sync errors, missing number, no consent,
 paused agent, exhausted minutes, encryption not configured); the audit log
 (`/api/commerce/audit`) records connect/disconnect/sync/enable/queue/suppress
 and every call start and result; logs use the `commerce.*` events with
@@ -366,7 +404,7 @@ org/connection/run ids and never a number in the clear.
 |---|---|---|
 | Connection `error` | overview problems, audit `sync.failed` | reconnect with new keys / re-authorize Shopify |
 | Connection `degraded` | `error_message`, `commerce_sync_jobs` | transient; retried with backoff; check the store's availability |
-| Webhook rejected | `webhook_config.last_error` | secret rotated on the store? reconnect; WooCommerce disables after 5 failures |
+| Webhooks not arriving | logs `commerce.webhook.rejected` (reason), `webhook_config.last_delivery_at`, `last_error` (registration) | secret rotated on the store? reconnect; WooCommerce disables after 5 failures |
 | Runs stay `scheduled` | the cron runs? `maintenance_state`, Vercel/pg_cron logs | schedule the maintenance (§7); check the call window/time zone |
 | Runs `skipped` | `error_code` (`no_phone_number`, `agent_inactive`, `minutes_exhausted`) | fix the precondition; the next eligible event creates a new run |
 | Run `failed` with `dispatch_uncertain` | audit `run.failed` | check Calls for a call to that number before any manual re-dial |

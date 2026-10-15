@@ -21,8 +21,10 @@ const LIVE = new Set(['ringing', 'in-progress'])
 // GET /api/dashboard/metrics — dashboard KPIs from the `calls` table (both
 // providers, test sessions excluded). "Today" and "this month" use the org's
 // time zone; success_rate is the ANSWERED rate (share of finished calls that
-// completed); ai_success_rate is the AI resolution rate from call_successful
-// (success / (success + failure)); outcome_breakdown counts calls.outcome.
+// completed; finished_calls and completed_calls are the denominators of the
+// answered rate and the average duration); ai_success_rate is the AI
+// resolution rate from call_successful (success / (success + failure));
+// outcome_breakdown counts calls.outcome.
 // sentiment_breakdown counts calls.sentiment, which is no longer derived from
 // the AI verdict (older rows only). extra_balance is the purchased minutes
 // left; total_left adds the period's included minutes left (the hard cap of
@@ -96,6 +98,9 @@ export async function GET(request: Request) {
       sentiment_breakdown: sentiment,
       peak_hour: peak > 0 ? hourCounts.indexOf(peak) : 0,
       success_rate: finished > 0 ? Math.round((completed / finished) * 100) : 0,
+      // The two denominators: with none, the tiles show "—" rather than 0 % and 0s.
+      finished_calls: finished,
+      completed_calls: completed,
       minutes_used: Number(usage.data?.minutes_used ?? 0),
       minutes_limit: Number(usage.data?.minutes_limit ?? 0),
       // Purchased minutes left, and everything left (included left + purchased).

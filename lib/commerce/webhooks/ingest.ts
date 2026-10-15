@@ -82,8 +82,9 @@ export async function ingestWebhook(
   const adapter = adapterFor(connection.platform)
   const verified = await adapter.verifyWebhook(input.request, adapterConn)
   if (!verified.ok) {
+    // Logged only: whoever sends an unverified request (anyone who learned the URL) must not be able
+    // to write to the connection or make the dashboard report a webhook failure.
     l.warn('commerce.webhook.rejected', { reason: verified.reason })
-    await noteDelivery(db, connection, { ok: false, reason: verified.reason }, l)
     return { status: verified.status, body: { ok: false, error: verified.reason === 'not_supported' ? 'webhooks are not supported for this connection' : 'verification failed' } }
   }
   const dedupeKey = dedupeKeyFor(verified.deliveryId, input.request.rawBody, verified.topic)
@@ -105,22 +106,22 @@ export async function ingestWebhook(
     }
     throw new Error(`commerce_webhook_events insert failed: ${error.message}`)
   }
-  await noteDelivery(db, connection, { ok: true }, l)
+  await noteDelivery(db, connection, l)
   l.info('commerce.webhook.accepted', { topic: verified.topic })
   return { status: 200, body: { ok: true, accepted: true } }
 }
 
-/** Keeps the connection's last delivery / last rejection for the dashboard (best effort). */
-async function noteDelivery(db: SupabaseClient, connection: ConnectionRow, result: { ok: true } | { ok: false; reason: string }, log: Logger): Promise<void> {
-  const cfg = connection.webhook_config && typeof connection.webhook_config === 'object' ? { ...(connection.webhook_config as Record<string, unknown>) } : {}
-  const now = new Date().toISOString()
-  if (result.ok) {
-    cfg.last_delivery_at = now
-  } else {
-    cfg.last_error = result.reason === 'bad_signature' ? 'A webhook signature was rejected.' : `Webhook rejected (${result.reason}).`
-    cfg.last_error_at = now
-  }
-  const { error } = await db.from('commerce_connections').update({ webhook_config: cfg }).eq('id', connection.id)
+/**
+ * Keeps the connection's last verified delivery for the dashboard and the
+ * polling interval (best effort). webhook_config is written whole, so the
+ * write only lands while the row is still the one read at the start of this
+ * request (same updated_at): a connect or reconnect that changed it meanwhile
+ * (new registrations) is never overwritten, and the next delivery notes it.
+ */
+async function noteDelivery(db: SupabaseClient, connection: ConnectionRow, log: Logger): Promise<void> {
+  const cfg = connection.webhook_config && typeof connection.webhook_config === 'object' && !Array.isArray(connection.webhook_config) ? { ...(connection.webhook_config as Record<string, unknown>) } : {}
+  cfg.last_delivery_at = new Date().toISOString()
+  const { error } = await db.from('commerce_connections').update({ webhook_config: cfg }).eq('id', connection.id).eq('updated_at', connection.updated_at)
   if (error) log.error('commerce.webhook.note_failed', error)
 }
 

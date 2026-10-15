@@ -3,10 +3,10 @@ import { randomBytes } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { getGoogleOAuthUrl } from '@/lib/google/client'
 import { oauthReturnKey, oauthStateCookieValue } from '@/lib/google/oauth-return'
+import { isGoogleIntegrationType } from '@/lib/google/scopes'
 
-const GOOGLE_TYPES = ['google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive']
-
-// Starts the Google OAuth flow for a given integration type.
+// Starts the Google OAuth flow for a given integration type, asking only for
+// that type's scopes (lib/google/scopes.ts).
 // ?return_to= picks the page the callback returns to; only allow-listed
 // same-origin paths are kept (lib/google/oauth-return.ts), default /integrations.
 export async function GET(request: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   }
 
   const type = request.nextUrl.searchParams.get('type') ?? 'google_calendar'
-  if (!GOOGLE_TYPES.includes(type)) {
+  if (!isGoogleIntegrationType(type)) {
     return NextResponse.redirect(new URL('/integrations?error=invalid_type', request.url))
   }
 
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
   const state = `${type}.${nonce}`
   const returnKey = oauthReturnKey(request.nextUrl.searchParams.get('return_to'))
 
-  const res = NextResponse.redirect(getGoogleOAuthUrl(state))
+  const res = NextResponse.redirect(getGoogleOAuthUrl(type, state))
   res.cookies.set('g_oauth_state', oauthStateCookieValue(nonce, returnKey), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

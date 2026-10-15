@@ -26,6 +26,25 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => state.admin })
 vi.mock('@/lib/smartbill/emit', () => ({ emitInvoiceForStripePayment: vi.fn() }))
 vi.mock('@/lib/email/client', () => ({ sendEmail: vi.fn() }))
 vi.mock('@/lib/phone/provision', () => ({ provisionPhoneNumber: vi.fn() }))
+// Releasing a cancelled number (lib/phone/release.ts) runs for real against mocked providers.
+const providers = vi.hoisted(() => ({ twilioRemove: vi.fn(), twilioSids: [] as string[], elDelete: vi.fn(), ctDelete: vi.fn() }))
+vi.mock('@/lib/twilio/client', () => ({
+  isTwilioConfigured: () => true,
+  getTwilioClient: () => ({
+    incomingPhoneNumbers: (sid: string) => {
+      providers.twilioSids.push(sid)
+      return { remove: () => providers.twilioRemove(sid) }
+    },
+  }),
+}))
+vi.mock('@/lib/elevenlabs/client', () => ({
+  isConfigured: () => true,
+  phoneNumbers: { get: async () => ({ label: null }), delete: (...a: unknown[]) => providers.elDelete(...a) },
+}))
+vi.mock('@/lib/cartesia/client', () => ({
+  isConfigured: () => true,
+  telephony: { deleteNumber: (...a: unknown[]) => providers.ctDelete(...a) },
+}))
 
 import { POST } from '@/app/api/billing/webhook/route'
 import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
@@ -572,5 +591,178 @@ describe('billing webhook: paid invoices', () => {
     expect(sendEmail).not.toHaveBeenCalled()
     await deliver('invoice.payment_failed', subscriptionInvoice({ amount_due: 24900 }))
     expect(vi.mocked(sendEmail).mock.calls[0]?.[0].subject).toBe('Action needed: your payment failed')
+  })
+})
+
+// ─── Signature failures, unmatched organizations, cancelled numbers, receipts ──
+
+/** The structured logger's JSON lines among a console spy's calls (plain console calls are skipped). */
+function logLines(spy: { mock: { calls: unknown[][] } }): Array<Record<string, unknown>> {
+  return spy.mock.calls
+    .map((c) => String(c[0]))
+    .filter((text) => text.startsWith('{"level"'))
+    .map((text) => JSON.parse(text) as Record<string, unknown>)
+}
+
+describe('billing webhook: a failed signature check', () => {
+  it('answers 400 and logs only the error type, never the payload or the error object', async () => {
+    vi.stubEnv('LOG_LEVEL', 'info')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    stripe.webhooks.constructEvent.mockImplementation(() => {
+      throw Object.assign(new Error('No signatures found matching the expected signature for payload'), {
+        type: 'StripeSignatureVerificationError',
+        payload: '{"customer_email":"owner@example.com","customer_tax_ids":[{"value":"RO12345678"}]}',
+        header: 't=1,v1=abc',
+      })
+    })
+    const res = await POST(new Request('http://localhost/api/billing/webhook', {
+      method: 'POST',
+      headers: { 'stripe-signature': 'sig_bad' },
+      body: '{"customer_email":"owner@example.com"}',
+    }))
+    expect(res.status).toBe(400)
+    expect(error).not.toHaveBeenCalled()
+    const lines = logLines(warn)
+    expect(lines).toEqual([expect.objectContaining({ event: 'billing.webhook_signature_invalid', errorType: 'StripeSignatureVerificationError' })])
+    const written = warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n')
+    expect(written).not.toContain('owner@example.com')
+    expect(written).not.toContain('RO12345678')
+    expect(written).not.toContain('v1=abc')
+  })
+})
+
+describe('billing webhook: an update that matches no organization', () => {
+  beforeEach(() => {
+    vi.stubEnv('LOG_LEVEL', 'info')
+  })
+
+  it('is logged as a warning with the organization, customer and subscription ids only', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    state.admin = fakeDb((c) => (c.table === 'organizations' && c.op === 'update' ? { data: [], error: null } : { data: null, error: null }))
+    const res = await deliver('customer.subscription.updated', subscription({ priceId: 'price_pro_month', metadata: {} }))
+    expect(res.status).toBe(200)
+    const lines = logLines(warn).filter((l) => l.event === 'billing.org_unmatched')
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ orgId: null, customerId: 'cus_1', subscriptionId: 'sub_1' })
+    expect(Object.keys(lines[0]).filter((k) => !['level', 'event', 'ts', 'component'].includes(k)).sort()).toEqual(['customerId', 'orgId', 'subscriptionId'])
+  })
+
+  it('a guarded write that skipped an organization recording another subscription is not a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const info = vi.spyOn(console, 'log').mockImplementation(() => {})
+    state.admin = fakeDb((c) => {
+      if (c.table !== 'organizations') return { data: null, error: null }
+      if (c.op === 'update') return { data: [], error: null }
+      return { data: [{ id: ORG }], error: null }
+    })
+    await deliver('customer.subscription.deleted', { ...subscription({ priceId: 'price_pro_month', status: 'canceled' }), id: 'sub_old' })
+    expect(logLines(warn).filter((l) => l.event === 'billing.org_unmatched')).toHaveLength(0)
+    expect(logLines(info)).toEqual(expect.arrayContaining([expect.objectContaining({ event: 'billing.org_update_skipped_other_subscription', orgId: ORG })]))
+
+    // Nobody there at all: a warning.
+    state.admin = fakeDb((c) => (c.table === 'organizations' ? { data: [], error: null } : { data: null, error: null }))
+    await deliver('customer.subscription.deleted', { ...subscription({ priceId: 'price_pro_month', status: 'canceled' }), id: 'sub_old' })
+    expect(logLines(warn).filter((l) => l.event === 'billing.org_unmatched')).toEqual([expect.objectContaining({ orgId: ORG, customerId: 'cus_1', subscriptionId: 'sub_old' })])
+  })
+
+  it('a write that matched its organization logs nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    state.admin = fakeDb((c) => (c.table === 'organizations' && c.op === 'update' ? { data: [{ id: ORG }], error: null } : { data: null, error: null }))
+    await deliver('customer.subscription.updated', subscription({ priceId: 'price_pro_month' }))
+    expect(orgUpdate()).toMatchObject({ plan: 'pro' })
+    expect(logLines(warn)).toHaveLength(0)
+  })
+})
+
+describe('billing webhook: a cancelled phone-number subscription', () => {
+  const PN_SID = 'PN0123456789abcdef0123456789abcdef'
+  const numberRow = (over: Record<string, unknown> = {}) => ({
+    id: 'num-1',
+    org_id: ORG,
+    number: '+14155550100',
+    is_active: true,
+    twilio_sid: PN_SID,
+    elevenlabs_phone_number_id: 'phnum_1',
+    cartesia_phone_number_id: null,
+    ...over,
+  })
+  const phoneSubscription = () => ({ ...subscription({ priceId: 'price_number', status: 'canceled', metadata: { org_id: ORG, type: 'phone_number' } }), id: 'sub_num' })
+  const phoneUpdates = () => state.admin!.calls.filter((c: FakeCall) => c.table === 'phone_numbers' && c.op === 'update')
+  const phoneDeletes = () => state.admin!.calls.filter((c: FakeCall) => c.table === 'phone_numbers' && c.op === 'delete')
+
+  beforeEach(() => {
+    providers.twilioSids = []
+    providers.twilioRemove.mockReset().mockResolvedValue(true)
+    providers.elDelete.mockReset().mockResolvedValue(undefined)
+    providers.ctDelete.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('releases the number on Twilio (after its import) and deletes its row, as a dashboard release does; the plan is untouched', async () => {
+    state.admin = fakeDb((c) => (c.table === 'phone_numbers' && c.op === 'select' ? { data: numberRow(), error: null } : { data: null, error: null }))
+    const res = await deliver('customer.subscription.deleted', phoneSubscription())
+    expect(res.status).toBe(200)
+    const read = state.admin.calls.find((c: FakeCall) => c.table === 'phone_numbers' && c.op === 'select')
+    expect(read?.filters).toEqual([['eq', 'stripe_subscription_id', 'sub_num']])
+    expect(providers.elDelete).toHaveBeenCalledWith('phnum_1', { orgId: ORG })
+    expect(providers.twilioSids).toEqual([PN_SID])
+    expect(phoneUpdates().map((c) => c.payload)).toEqual([{ is_active: false }])
+    // No row is left holding the number (phone_numbers.number is UNIQUE), so it can be bought again.
+    expect(phoneDeletes().map((c) => c.filters)).toEqual([[['eq', 'id', 'num-1'], ['eq', 'org_id', ORG]]])
+    expect(orgUpdate()).toBeUndefined()
+  })
+
+  it('a repeated event finds no row left and calls no provider', async () => {
+    state.admin = fakeDb(() => ({ data: null, error: null }))
+    expect((await deliver('customer.subscription.deleted', phoneSubscription())).status).toBe(200)
+    expect(providers.twilioRemove).not.toHaveBeenCalled()
+    expect(phoneUpdates()).toHaveLength(0)
+    expect(phoneDeletes()).toHaveLength(0)
+  })
+
+  it('a Twilio failure answers 500 so Stripe delivers it again; the row stays inactive with its Twilio sid', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    providers.twilioRemove.mockRejectedValue(Object.assign(new Error('Service unavailable'), { status: 503 }))
+    state.admin = fakeDb((c) => (c.table === 'phone_numbers' && c.op === 'select' ? { data: numberRow(), error: null } : { data: null, error: null }))
+    expect((await deliver('customer.subscription.deleted', phoneSubscription())).status).toBe(500)
+    expect(phoneUpdates().map((c) => c.payload)).toEqual([{ is_active: false }])
+    expect(phoneDeletes()).toHaveLength(0)
+  })
+
+  it('a failed read answers 500; a number already removed from the dashboard is only a warning', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    state.admin = fakeDb((c) => (c.table === 'phone_numbers' ? { data: null, error: { message: 'connection reset' } } : { data: null, error: null }))
+    expect((await deliver('customer.subscription.deleted', phoneSubscription())).status).toBe(500)
+
+    state.admin = fakeDb(() => ({ data: null, error: null }))
+    expect((await deliver('customer.subscription.deleted', phoneSubscription())).status).toBe(200)
+    expect(providers.twilioRemove).not.toHaveBeenCalled()
+  })
+})
+
+describe('billing webhook: the payment e-mail', () => {
+  beforeEach(() => {
+    vi.mocked(sendEmail).mockReset()
+  })
+
+  it('is not sent for a 0.00 invoice (the first invoice of the free days)', async () => {
+    orgRow({ id: ORG, stripe_subscription_id: 'sub_1' })
+    withRpc(() => ({ data: true, error: null }))
+    await deliver('invoice.paid', subscriptionInvoice({ billing_reason: 'subscription_create', amount_paid: 0 }))
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('a prorated upgrade invoice names the new plan, not the unused time of the old one', async () => {
+    stripe.prices.retrieve.mockResolvedValueOnce({ id: 'price_starter_auto', metadata: { ntv_plan: 'starter' }, lookup_key: 'ntv_starter_month' })
+    const lines = {
+      data: [
+        { amount: -2450, description: 'Unused time on Starter', pricing: { price_details: { price: 'price_starter_auto' } } },
+        { amount: 12450, description: 'Remaining time on Pro', pricing: { price_details: { price: 'price_pro_month' } } },
+      ],
+    }
+    await deliver('invoice.paid', invoice({ billing_reason: 'subscription_update', amount_paid: 10000, lines }))
+    const html = vi.mocked(sendEmail).mock.calls[0]?.[0].html ?? ''
+    expect(html).toContain('for the <strong>Pro</strong> plan')
+    expect(html).not.toContain('Starter')
   })
 })

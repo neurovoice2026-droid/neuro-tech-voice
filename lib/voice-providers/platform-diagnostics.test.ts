@@ -42,16 +42,30 @@ describe('agentStateProblems', () => {
     const db = memoryDb({
       agent_provider_resources: [
         { provider: 'elevenlabs', status: 'ready', org_id: 'org-secret-1', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION } },
-        { provider: 'elevenlabs', status: 'ready', org_id: 'org-secret-2', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION, analysis_items_migrated: true, stale_keys: { data_collection: ['x'] }, pii_redaction: 'rejected', paused: true } },
+        { provider: 'elevenlabs', status: 'ready', org_id: 'org-secret-2', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION, analysis_items_migrated: true, analysis_items: { keys: ['data_collection'], evaluation_criteria: 0, data_collection: 1, user_items: 1 }, stale_keys: { data_collection: ['x'] }, pii_redaction: 'rejected', paused: true } },
         { provider: 'elevenlabs', status: 'ready', org_id: 'org-secret-3', details: {} },
+        { provider: 'elevenlabs', status: 'ready', org_id: 'org-secret-4', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION, analysis_items_migrated: false, analysis_items: { keys: [], evaluation_criteria: 0, data_collection: 0, user_items: 0 } } },
         { provider: 'cartesia', status: 'ready', details: { analysis_items_migrated: true } },
       ],
     })
     const { problems, counts } = await agentStateProblems(db as never, log)
-    expect(counts).toEqual({ agents: 3, analysis_items_migrated: 1, stale_keys: 1, pii_redaction_rejected: 1, outdated_platform_config: 1, paused: 1 })
-    expect(problems.find((p) => p.key === 'agent_sync.analysis_items')?.severity).toBe('error')
+    expect(counts).toEqual({ agents: 4, analysis_items_present: 2, analysis_items_migrated: 1, analysis_items_unchecked: 0, stale_keys: 1, pii_redaction_rejected: 1, outdated_platform_config: 1, paused: 1 })
+    // Attached user items can silently replace the tenant's criteria and fields: the only error here.
+    expect(problems.filter((p) => p.severity === 'error').map((p) => p.key)).toEqual(['agent_sync.analysis_items'])
     expect(problems.map((p) => p.key)).toEqual(['agent_sync.analysis_items', 'agent_sync.stale_keys', 'ELEVENLABS_PII_REDACTION', 'config_rollout'])
     expect(JSON.stringify(problems)).not.toContain('org-secret')
+  })
+
+  it('does not report rows flagged by the old any-value check as migrated until their next sync records the shape', async () => {
+    const db = memoryDb({
+      agent_provider_resources: [
+        { provider: 'elevenlabs', status: 'ready', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION, analysis_items_migrated: true } },
+        { provider: 'elevenlabs', status: 'ready', details: { platform_version: PLATFORM_AGENT_CONFIG_VERSION, analysis_items_migrated: true } },
+      ],
+    })
+    const { problems, counts } = await agentStateProblems(db as never, log)
+    expect(counts).toMatchObject({ agents: 2, analysis_items_migrated: 0, analysis_items_unchecked: 2 })
+    expect(problems).toEqual([])
   })
 
   it('degrades to a warning when the table cannot be read', async () => {

@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireOrg } from '@/lib/api/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { apiError } from '@/lib/api/http'
 import * as ct from '@/lib/cartesia/client'
 import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
@@ -67,9 +68,12 @@ export async function GET(request: Request) {
     const agent = (data as AgentRow | null) ?? null
     const language = q.language ?? normalizeAgentLanguage(agent?.language)
 
+    // The spec is built with the service role, like every agent sync: it reads
+    // the calendar connection's token column, which the owner's session cannot
+    // (migration 030). The agent row above was read under the owner's RLS.
     const [voices, current] = await Promise.all([
       listFallbackVoices(language),
-      currentFallback(supabase, agent, language, log),
+      currentFallback(createAdminClient(), agent, language, log),
     ])
     return NextResponse.json(
       { voices, current },

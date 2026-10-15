@@ -147,3 +147,74 @@ describe('syncAgent: written without a platform tool (slice B1)', () => {
     expect(state.db!.tables.agent_provider_resources[0]).toMatchObject({ status: 'ready', last_error_code: null, last_error: null, attempt_count: 0, next_retry_at: null })
   })
 })
+
+describe('syncAgent: read-back flags are logged once per agent', () => {
+  function recorder() {
+    const calls: string[] = []
+    const l: Record<string, unknown> = {
+      debug: () => {},
+      info: (event: string) => calls.push(`info:${event}`),
+      warn: (event: string) => calls.push(`warn:${event}`),
+      error: (event: string) => calls.push(`error:${event}`),
+    }
+    l.child = () => l
+    return { log: l as unknown as import('@/lib/observability/logger').Logger, calls }
+  }
+  const withDetails = (extra: Record<string, unknown>) => async (_id: string, spec: AgentSpec) => ({ ...synced(spec), details: { ...synced(spec).details, ...extra } })
+
+  it('logs an error when user analysis items first appear, then stays quiet while the row already records them', async () => {
+    const migrated = { analysis_items_migrated: true, analysis_items: { keys: ['data_collection'], evaluation_criteria: 0, data_collection: 1, user_items: 1 } }
+    seed({ external_id: 'el_1', details: {} })
+    lifecycle.update.mockImplementation(withDetails(migrated))
+    const first = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: first.log })
+    // Attached user items can silently replace the tenant's criteria and fields: an error, once.
+    expect(first.calls.filter((c) => c.includes('analysis_items'))).toEqual(['error:agent_sync.analysis_items_migrated'])
+    expect(state.db!.tables.agent_provider_resources[0].details).toMatchObject(migrated)
+
+    const second = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: second.log })
+    expect(second.calls.filter((c) => c.includes('analysis_items'))).toEqual([])
+  })
+
+  it('stays quiet for analysis items without user items, and re-checks rows that carry only the old flag', async () => {
+    seed({ external_id: 'el_1', details: {} })
+    lifecycle.update.mockImplementation(withDetails({ analysis_items_migrated: false, analysis_items: { keys: [], evaluation_criteria: 0, data_collection: 0, user_items: 0 } }))
+    const quiet = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: quiet.log })
+    expect(quiet.calls.filter((c) => c.includes('analysis_items'))).toEqual([])
+
+    // Written before the shape was recorded (any non-null value was flagged): the new check decides.
+    seed({ external_id: 'el_1', details: { analysis_items_migrated: true } })
+    lifecycle.update.mockImplementation(withDetails({ analysis_items_migrated: false, analysis_items: { keys: ['evaluation_criteria'], evaluation_criteria: 1, data_collection: 0, user_items: 0 } }))
+    const system = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: system.log })
+    expect(system.calls.filter((c) => c.includes('analysis_items') || c.startsWith('error:'))).toEqual([])
+
+    seed({ external_id: 'el_1', details: { analysis_items_migrated: true } })
+    lifecycle.update.mockImplementation(withDetails({ analysis_items_migrated: true, analysis_items: { keys: ['evaluation_criteria'], evaluation_criteria: 1, data_collection: 0, user_items: 1 } }))
+    const legacy = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: legacy.log })
+    expect(legacy.calls).toContain('error:agent_sync.analysis_items_migrated')
+  })
+
+  it('notes skipped transcript redaction once per agent, at info', async () => {
+    seed({ external_id: 'el_1', details: {} })
+    lifecycle.update.mockImplementation(withDetails({ pii_redaction: 'rejected' }))
+    const first = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: first.log })
+    expect(first.calls).toContain('info:agent_sync.pii_redaction_skipped')
+    const second = recorder()
+    await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: second.log })
+    expect(second.calls.filter((c) => c.includes('pii_redaction'))).toEqual([])
+  })
+
+  it('a failed sync is still logged as an error', async () => {
+    seed({ external_id: 'el_1', details: { analysis_items_migrated: true } })
+    lifecycle.update.mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'upstream', operation: 'agents.update', status: 502 }))
+    const failed = recorder()
+    const [res] = await syncAgent(AGENT, { providers: ['elevenlabs'], force: true, log: failed.log })
+    expect(res.status).toBe('degraded')
+    expect(failed.calls).toContain('error:agent_sync.failed')
+  })
+})

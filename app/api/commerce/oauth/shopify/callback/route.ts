@@ -10,9 +10,13 @@ import { commerceRoute, requireCommerceOrg } from '@/lib/commerce/api'
 import { exchangeAccessToken, verifyOAuthCallback } from '@/lib/commerce/adapters/shopify-oauth'
 import { shopifyAppConfig } from '@/lib/commerce/config'
 import { connectStore } from '@/lib/commerce/connections'
+import { scheduleInitialSyncKick } from '@/lib/commerce/sync'
 import { SHOPIFY_STATE_COOKIE, oauthReturnUrl, parseShopifyState, type ShopifyOAuthState } from '@/lib/commerce/shopify-state'
 
 const MAX_SKEW_S = 5 * 60
+
+// Room for the connect itself plus the first import slice (lib/commerce/sync.ts KICK_SLICE_MS) run after the redirect.
+export const maxDuration = 120
 
 function cookieValue(request: Request): ShopifyOAuthState | null {
   const raw = request.headers.get('cookie') ?? ''
@@ -53,7 +57,8 @@ export async function GET(request: Request) {
       return back({ ok: false, code: 'token_exchange_failed' })
     }
     try {
-      await connectStore(ctx.db, { orgId: ctx.org.id, userId: ctx.user.id, platform: 'shopify', storeUrl: `https://${verified.shop}`, displayName: null, secrets: { access_token: token.accessToken, scope: token.scope } }, ctx.log)
+      const row = await connectStore(ctx.db, { orgId: ctx.org.id, userId: ctx.user.id, platform: 'shopify', storeUrl: `https://${verified.shop}`, displayName: null, secrets: { access_token: token.accessToken, scope: token.scope } }, ctx.log)
+      scheduleInitialSyncKick(ctx.db, row.id, ctx.log)
     } catch (err) {
       const reason = err instanceof RequestError ? ((err.details as { reason?: string } | undefined)?.reason ?? err.code) : 'connect_failed'
       log.warn('commerce.oauth.shopify.connect_failed', { reason })

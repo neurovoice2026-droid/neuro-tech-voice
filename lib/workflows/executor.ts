@@ -6,6 +6,7 @@ import { callTemplateVars } from './call-vars'
 import { createLogger } from '@/lib/observability/logger'
 import { callerMessageSms } from '@/lib/sms/templates'
 import { sendTransactionalSms, type SmsFailure } from '@/lib/sms/sender'
+import { isWebhookMethod, sendWorkflowRequest } from './outbound'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,10 @@ async function executeSendWebhook(
 ): Promise<ActionResult> {
   const url = interpolate(config.url ?? '', ctx)
   if (!url) return { action_id: '', action_type: 'send_webhook', success: false, message: 'No webhook URL configured' }
+  const method = String(config.method ?? 'POST').toUpperCase()
+  if (!isWebhookMethod(method)) {
+    return { action_id: '', action_type: 'send_webhook', success: false, message: 'Webhook error: the method must be POST, PUT or PATCH' }
+  }
 
   try {
     const payload = {
@@ -120,12 +125,9 @@ async function executeSendWebhook(
       timestamp: new Date().toISOString(),
     }
 
-    const method = (config.method ?? 'POST').toUpperCase()
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    // The URL is tenant-supplied (and interpolated): SSRF guard, timeout and size cap.
+    const res = await sendWorkflowRequest('send_webhook', url, payload, { method })
+    if (res.kind === 'error') return { action_id: '', action_type: 'send_webhook', success: false, message: `Webhook error: ${res.message}` }
 
     return {
       action_id: '',
@@ -333,11 +335,9 @@ async function executeNotifySlack(config: Record<string, string>, ctx: CallConte
 
   try {
     const text = interpolate(config.message ?? defaultSlackTemplate(ctx), ctx, { escape: escapeSlackText })
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
+    // Only https://hooks.slack.com/…, through the same SSRF guard as webhooks.
+    const res = await sendWorkflowRequest('notify_slack', url, { text })
+    if (res.kind === 'error') return { ...base, success: false, message: `Slack error: ${res.message}` }
     return { ...base, success: res.ok, message: res.ok ? 'Slack notified' : `Slack failed (${res.status})` }
   } catch (err) {
     return { ...base, success: false, message: `Slack error: ${err instanceof Error ? err.message : 'unknown'}` }

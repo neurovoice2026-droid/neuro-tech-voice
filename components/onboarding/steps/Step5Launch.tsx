@@ -19,7 +19,7 @@ import { AppPlanTierCard, PlanTierRadio, PlanTiers, appJumpChips } from '@/compo
 import { isPickPlan, TRIAL_TIER } from '@/components/pricing/plan-tier-view'
 import { ContactSalesNote, ContactSalesPlanCard } from '@/components/onboarding/commerce/ContactSalesPlanCard'
 import { startWebsiteImportInBackground, type WebsiteImportStart } from '@/hooks/useKnowledgeWebsite'
-import { useOnboardingStore } from '@/store/useOnboardingStore'
+import { useOnboardingStore, type OnboardingCompany } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import { includedMinutesFor } from '@/lib/billing/stripe-trial'
 import { toast } from 'sonner'
@@ -302,6 +302,24 @@ interface CompleteResponse {
 /** Longest wait for the website import's answer before redirecting to checkout. */
 const WEBSITE_IMPORT_WAIT_MS = 4000
 
+/**
+ * The launch request. No agent fields: steps 1-3 saved the agent on the server, and the launch
+ * pushes what is saved. After a reload or a return from a cancelled Checkout this store starts at
+ * its defaults (no name, English, no prompt or greeting), which would otherwise overwrite them.
+ */
+export function launchRequestBody(plan: Plan, annual: boolean, company: OnboardingCompany) {
+  return {
+    plan,
+    annual,
+    company: {
+      name: company.name,
+      industry: company.industry,
+      website: company.website,
+      description: company.description,
+    },
+  }
+}
+
 type LaunchOutcome =
   | { kind: 'live'; planNotice: PlanNotice | null }
   | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null; planNotice: PlanNotice | null }
@@ -325,22 +343,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       const res = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan,
-          annual,
-          company: {
-            name: company.name,
-            industry: company.industry,
-            website: company.website,
-            description: company.description,
-          },
-          agent: {
-            name: agent.name,
-            language: agent.language,
-            system_prompt: agent.system_prompt,
-            first_message: agent.first_message,
-          },
-        }),
+        body: JSON.stringify(launchRequestBody(plan, annual, company)),
       })
       const data = (await res.json().catch((err: unknown) => {
         console.error('Onboarding: unreadable response', err)

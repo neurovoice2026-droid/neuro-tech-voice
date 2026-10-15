@@ -19,8 +19,9 @@ import { PLATFORM_CATALOG } from '@/lib/commerce/platforms'
 import type { CommerceCapabilities, ConnectionDto } from '@/lib/commerce/types'
 import { cn } from '@/lib/utils'
 import { formatCount, formatDateTime, relativeTime } from './format'
-import { SYNC_KIND_LABEL, SYNC_RESOURCE_LABEL, SYNC_STATUS_LABEL } from './labels'
+import { SYNC_KIND_LABEL, SYNC_RESOURCE_LABEL, SYNC_STATUS_LABEL, WEBHOOK_ADDRESS_HINT, awaitsStoreSentEvents, resourceCount } from './labels'
 import { ConnectionStatusChip } from './StatusChips'
+import { WebhookAddress } from './WebhookAddress'
 
 const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
 
@@ -213,7 +214,7 @@ export function ConnectionCard({ connection, onChanged, onReconnect, syncTimedOu
           </MetaItem>
           <MetaItem label="Synced data">
             <span className="tabular-nums">
-              {formatCount(connection.counts.orders)} orders · {formatCount(connection.counts.customers)} customers · {formatCount(connection.counts.products)} products
+              {(['orders', 'customers', 'products'] as const).map((key) => resourceCount(key, connection.counts[key], formatCount)).join(' · ')}
             </span>
           </MetaItem>
         </dl>
@@ -236,7 +237,7 @@ export function ConnectionCard({ connection, onChanged, onReconnect, syncTimedOu
               </p>
               {syncCounts.length > 0 && (
                 <p className="mt-0.5 text-muted-foreground tabular-nums">
-                  {syncCounts.map(([key, n]) => `${formatCount(n)} ${SYNC_RESOURCE_LABEL[key as keyof typeof SYNC_RESOURCE_LABEL] ?? key}`).join(' · ')}
+                  {syncCounts.map(([key, n]) => resourceCount(key, n, formatCount)).join(' · ')}
                 </p>
               )}
               {sync.error_message && <p className="mt-0.5">{sync.error_message}</p>}
@@ -292,12 +293,30 @@ export function ConnectionCard({ connection, onChanged, onReconnect, syncTimedOu
                 </li>
               ))}
             </ul>
+          ) : awaitsStoreSentEvents(connection) ? (
+            // Merchant-sent deliveries (custom connector): nothing is registered on our side, so the state is
+            // whether a verified event has arrived yet.
+            <p className="mt-2.5 text-[13px] leading-[19px] text-muted-foreground">
+              {connection.webhook_last_delivery_at ? (
+                <>
+                  Last event received <When iso={connection.webhook_last_delivery_at} />.
+                </>
+              ) : (
+                'Waiting for the first event from your store. Until one arrives, the data refreshes periodically.'
+              )}
+            </p>
           ) : (
             <p className="mt-2.5 text-[13px] leading-[19px] text-muted-foreground">
               {connection.capabilities.webhooks
                 ? 'No webhook registered yet; run a sync or reconnect the store.'
                 : 'The platform does not send events; the data refreshes periodically.'}
             </p>
+          )}
+          {connection.webhook_url && (
+            <div className="mt-3">
+              <h5 className={OVERLINE}>Webhook address</h5>
+              <WebhookAddress url={connection.webhook_url} hint={WEBHOOK_ADDRESS_HINT[connection.platform]} className="mt-1.5" />
+            </div>
           )}
           <p className="mt-3 flex items-start gap-1.5 text-xs leading-[18px] text-muted-foreground">
             <KeyRound className="mt-px size-3.5 shrink-0" aria-hidden="true" />

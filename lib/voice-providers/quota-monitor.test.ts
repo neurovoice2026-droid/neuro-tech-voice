@@ -21,6 +21,7 @@ import { setProviderEventSink, type ProviderEvent } from '@/lib/observability/te
 import type { ELSubscription } from '@/lib/elevenlabs/api/subscription'
 import { ProviderError } from './errors'
 import { gradeSubscription, quotaDiagnostics, quotaSnapshot, recordQuotaSnapshot, runQuotaMonitor, QUOTA_STATE_KEY } from './quota-monitor'
+import { PII_REDACTION_STATE_KEY } from './pii-redaction'
 
 const NOW = Date.parse('2026-10-07T12:00:00Z')
 
@@ -153,6 +154,23 @@ describe('runQuotaMonitor', () => {
     expect(calls.find((c) => c.level === 'warn')?.args[0]).toBe('quota.warning')
     due.value = false
     expect(await runQuotaMonitor(log, { now: NOW })).toEqual({ skipped: 'not_due' })
+  })
+
+  it('records the tier with a remembered transcript-redaction refusal and clears the refusal when the tier changes', async () => {
+    const refusal = () => state.db?.tables.maintenance_state.find((r) => r.key === PII_REDACTION_STATE_KEY)
+    state.db?.tables.maintenance_state.push({ key: PII_REDACTION_STATE_KEY, last_run_at: new Date(NOW - 3_600_000).toISOString(), details: { status: 'rejected', code: 'feature_not_available', tier: null } })
+    sub.get.mockResolvedValue(subscription({ tier: 'business' }))
+    const { log, calls } = logger()
+    await runQuotaMonitor(log, { now: NOW })
+    expect(refusal()?.details).toEqual({ status: 'rejected', code: 'feature_not_available', tier: 'business' })
+    // Same tier: the refusal stands (it still expires after a day).
+    await runQuotaMonitor(log, { now: NOW })
+    expect(refusal()?.details).toMatchObject({ tier: 'business' })
+    // An upgrade: the next agent write asks for redaction again.
+    sub.get.mockResolvedValue(subscription({ tier: 'enterprise' }))
+    await runQuotaMonitor(log, { now: NOW })
+    expect(refusal()).toBeUndefined()
+    expect(calls.find((c) => c.args[0] === 'pii_redaction.recheck')).toEqual({ level: 'info', args: ['pii_redaction.recheck', { from_tier: 'business', to_tier: 'enterprise' }] })
   })
 })
 

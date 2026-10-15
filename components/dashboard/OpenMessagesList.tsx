@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { StatusChip } from '@/components/shared/StatusChip'
 import type { CallMessageView } from '@/lib/voice-tools/message-view'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatPhoneNumber } from '@/lib/utils'
 import { relativeTime } from './relative-time'
 
 export interface MessagesResponse {
@@ -128,7 +128,8 @@ export function OpenMessagesList({ messages, busyId, onDone }: OpenMessagesListP
                 className="mt-1 inline-flex items-center gap-1 rounded-sm text-xs font-medium text-foreground tabular-nums underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 <Phone className="size-3" aria-hidden="true" />
-                {m.callback_number}
+                {/* Same readable form as the calls lists beside this card. */}
+                {formatPhoneNumber(m.callback_number)}
               </a>
             )}
             {m.notify_error && NOTIFY_PROBLEM[m.notify_error] && (

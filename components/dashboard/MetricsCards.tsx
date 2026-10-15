@@ -53,6 +53,10 @@ export function MetricsCards({ metrics, loading = false }: MetricsCardsProps) {
   const meterTone = minutesMeterTone(minutesPct, extraMinutes)
   // No metrics after loading = the request failed (the insights card explains and retries).
   const missing = !loading && !metrics
+  // Nothing to divide by yet: "—", like the AI resolution rate without verdicts, not 0 % and 0s.
+  // An API without the denominators (an older deploy mid-rollout) is read from total_calls.
+  const noFinished = !!metrics && (metrics.finished_calls ?? metrics.total_calls) === 0
+  const noCompleted = !!metrics && (metrics.completed_calls ?? metrics.total_calls) === 0
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -66,17 +70,21 @@ export function MetricsCards({ metrics, loading = false }: MetricsCardsProps) {
       <StatTile
         label="Avg call duration"
         loading={loading}
-        value={missing ? '—' : formatDuration(avgDuration)}
-        hint="completed calls"
+        value={missing || noCompleted ? '—' : formatDuration(avgDuration)}
+        hint={noCompleted ? 'No completed calls yet' : 'completed calls'}
       />
       <StatTile
         label="Answered rate"
         loading={loading}
-        value={missing ? '—' : `${successRate}%`}
+        value={missing || noFinished ? '—' : `${successRate}%`}
         hint={
-          <span title="Share of finished calls that were answered and completed (not the AI's verdict)">
-            of finished calls
-          </span>
+          noFinished ? (
+            'No finished calls yet'
+          ) : (
+            <span title="Share of finished calls that were answered and completed (not the AI's verdict)">
+              of finished calls
+            </span>
+          )
         }
       />
       <StatTile

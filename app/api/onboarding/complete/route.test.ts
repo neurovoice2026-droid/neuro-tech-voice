@@ -160,6 +160,55 @@ describe('POST /api/onboarding/complete', () => {
     expect(syncAgentProviders).not.toHaveBeenCalled()
   })
 
+  // Steps 1-3 save the agent on the server; the wizard's store is the page's only. After a reload,
+  // or the return from a cancelled Checkout (cancel_url /onboarding, which reopens the launch step),
+  // the store is at its defaults: the launch must push the saved agent, never those defaults.
+  describe('a launch from a wizard at its defaults keeps the saved agent', () => {
+    const savedAgent = { ...baseAgent, language: 'ro', system_prompt: 'Ești recepționera clinicii.', first_message: 'Bună ziua!', metadata: { personality: 'friendly' } }
+    /** What an earlier client sent from a store at its defaults. */
+    const defaultsAgent = { name: '', language: 'en', system_prompt: '', first_message: '' }
+    const company = { name: 'Acme', industry: 'healthcare', website: '', description: 'A clinic.' }
+    /** Every agents write but the activation. */
+    const agentEdits = () =>
+      state.user!.calls.filter((c: FakeCall) => c.table === 'agents' && c.op === 'update' && !('is_active' in (c.payload as object)))
+
+    beforeEach(() => {
+      ensureAgent.mockResolvedValue({ ...savedAgent })
+    })
+
+    it.each([
+      ['without agent fields (the wizard now)', { plan: 'trial', annual: false, company }],
+      ['with the store defaults (an earlier wizard)', { plan: 'trial', annual: false, company, agent: defaultsAgent }],
+    ])('reload, then launch on the trial %s: prompt, greeting, language and personality untouched', async (_label, body) => {
+      const res = await (await complete(body)).json()
+      expect(res).toMatchObject({ success: true, activated: true })
+      expect(agentEdits()).toEqual([])
+      // Onboarding is not complete: the saved agent is still pushed and switched on.
+      expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ agentId: AGENT, bump: true }))
+      expect(activations()).toHaveLength(1)
+    })
+
+    it.each([
+      ['without agent fields (the wizard now)', { plan: 'pro', annual: false, company }],
+      ['with the store defaults (an earlier wizard)', { plan: 'pro', annual: false, company, agent: defaultsAgent }],
+    ])('back from a cancelled Checkout, launch again %s: the saved agent is pushed and Checkout reopens', async (_label, body) => {
+      // The first launch created the customer and left onboarding open at the launch step.
+      stripe.configured = true
+      state.org = { ...state.org, stripe_customer_id: 'cus_1', stripe_subscription_id: null, onboarding_completed: false }
+      const res = await (await complete(body)).json()
+      expect(res).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      expect(agentEdits()).toEqual([])
+      expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ agentId: AGENT, bump: true }))
+      expect(orgUpdates()[0]).toEqual(expect.objectContaining({ onboarding_completed: false, onboarding_step: 4 }))
+      expect(stripe.client.customers.create).not.toHaveBeenCalled()
+    })
+
+    it('an agent the client does hold (it has a name) is still saved as sent', async () => {
+      await complete({ plan: 'trial', agent: { name: 'Maria', language: 'es', system_prompt: '', first_message: 'Hola!' } })
+      expect(agentEdits().map((c) => c.payload)).toEqual([{ name: 'Maria', language: 'es', system_prompt: null, first_message: 'Hola!' }])
+    })
+  })
+
   it('rate limited → 429 before anything is written', async () => {
     enforceRateLimit.mockRejectedValue(new RequestError('rate_limited', 'Too many launch attempts.', 429))
     const res = await complete({ plan: 'trial', company: { name: 'Other' }, agent: sameAgent })

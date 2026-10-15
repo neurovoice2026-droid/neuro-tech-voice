@@ -11,7 +11,7 @@ import { adapterFor } from './adapters'
 import { ConnectionError, type ConnectionSecrets, type ValidatedStore } from './adapters/types'
 import { CommerceCryptoError, commerceCryptoConfigured, currentKeyVersion } from './crypto'
 import { StoreHttpError, UnsafeUrlError } from './safe-fetch'
-import { CONNECTION_COLUMNS, type ConnectionRow, type WebhookConfig, encryptedSecretsFor, enqueueSyncJob, loadConnection, newWebhookPublicId, readWebhookConfig, toAdapterConnection, webhookUrlFor, writeAudit } from './store'
+import { CONNECTION_COLUMNS, type ConnectionRow, type WebhookConfig, encryptedSecretsFor, enqueueSyncJob, loadConnection, newWebhookPublicId, readWebhookConfig, toAdapterConnection, writeAudit } from './store'
 import type { CommercePlatform } from './types'
 
 /** Maps an adapter/network failure to a merchant-facing 4xx/5xx (never the raw provider body). */
@@ -187,11 +187,6 @@ export async function deleteStore(db: SupabaseClient, row: ConnectionRow, userId
   const { error } = await db.from('commerce_connections').delete().eq('id', row.id).eq('org_id', row.org_id)
   if (error) throw new Error(`commerce_connections delete failed: ${error.message}`)
   await writeAudit(db, { orgId: row.org_id, actor: 'user', actorUserId: userId, action: 'connection.deleted', metadata: { platform: row.platform, domain: row.store_domain } }, log)
-}
-
-/** Where a platform must send webhooks (shown to merchants of platforms with manual registration). */
-export function publicWebhookUrl(row: ConnectionRow): string | null {
-  return webhookUrlFor(row.platform, row.webhook_public_id)
 }
 
 /**

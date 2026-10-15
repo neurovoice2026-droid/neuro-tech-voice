@@ -27,6 +27,9 @@ vi.mock('@/lib/elevenlabs/llm-selection', () => ({
 vi.mock('@/lib/voice-providers/webhook-health', () => ({
   resolvePostCallWebhookId: vi.fn(async () => null),
 }))
+// maintenance_state holds the workspace's transcript-redaction refusal (./pii-redaction.ts).
+const store = vi.hoisted(() => ({ db: null as unknown }))
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => store.db }))
 
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
@@ -37,6 +40,8 @@ import { effectiveAgentLlm, type LlmSelection } from '@/lib/elevenlabs/llm-selec
 import { cartesiaLifecycle, elevenLabsLifecycle, lifecycleFor, resetPiiRedactionMemo, resolveFallbackVoice } from './adapters'
 import { ProviderError } from './errors'
 import { makeAgentSpec } from '@/tests/helpers/agent-spec'
+import { memoryDb, type MemoryDb } from '@/tests/helpers/memory-db'
+import { PII_REDACTION_STATE_KEY } from './pii-redaction'
 
 const NOW = Date.UTC(2026, 9, 5, 12, 0, 0)
 
@@ -66,6 +71,7 @@ beforeEach(() => {
   vi.mocked(invalidatePlatformToolMemo).mockReset()
   vi.mocked(effectiveAgentLlm).mockResolvedValue(selection())
   resetPiiRedactionMemo()
+  store.db = memoryDb({ maintenance_state: [] }, { unique: { maintenance_state: [['key']] } })
   vi.mocked(el.isConfigured).mockReturnValue(true)
   vi.mocked(ct.isConfigured).mockReturnValue(true)
 })
@@ -156,13 +162,62 @@ describe('elevenLabsLifecycle.update: versioning, privacy and read-back', () => 
     expect(res.configHash).toBe(await elevenLabsLifecycle.hash(makeAgentSpec()))
   })
 
+  it('remembers the refusal for the whole workspace: a cold instance leaves redaction out from its first write, and asks again after a day', async () => {
+    const rejected = new ProviderError({ system: 'elevenlabs', code: 'permission', operation: 'agents.update', detail: 'feature_not_available - Conversation history redaction is not available for this workspace', providerCode: 'feature_not_available' })
+    vi.mocked(el.agents.update).mockReset().mockRejectedValueOnce(rejected).mockResolvedValue(remote())
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubEnv('LOG_LEVEL', 'warn')
+    try {
+      await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+      const row = (store.db as MemoryDb).tables.maintenance_state.find((r) => r.key === PII_REDACTION_STATE_KEY)
+      expect(row?.details).toEqual({ status: 'rejected', code: 'feature_not_available', tier: null })
+      // One warning for the refusal, never an error.
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes('agent_sync.pii_redaction_rejected'))).toHaveLength(1)
+      expect(error).not.toHaveBeenCalled()
+
+      // A fresh instance (no memory of its own) reads the stored refusal.
+      resetPiiRedactionMemo()
+      const cold = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+      const sent = vi.mocked(el.agents.update).mock.calls.map((c) => c[1] as { platform_settings: { privacy: Record<string, unknown> } })
+      expect(sent).toHaveLength(3)
+      expect(sent[2].platform_settings.privacy).not.toHaveProperty('conversation_history_redaction')
+      expect(cold.details.pii_redaction).toBe('rejected')
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes('agent_sync.pii_redaction_rejected'))).toHaveLength(1)
+
+      // A day later the workspace is asked again (it may have been upgraded).
+      vi.setSystemTime(NOW + 24 * 3_600_000 + 1)
+      const later = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+      expect(vi.mocked(el.agents.update).mock.calls[3][1]).toMatchObject({ platform_settings: { privacy: { conversation_history_redaction: { enabled: true } } } })
+      expect(later.details.pii_redaction).toBe('applied')
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('never sends redaction when ELEVENLABS_PII_REDACTION=false, and never reads the stored refusal for it', async () => {
+    vi.stubEnv('ELEVENLABS_PII_REDACTION', 'false')
+    const from = vi.fn()
+    store.db = { from }
+    try {
+      vi.mocked(el.agents.update).mockReset().mockResolvedValue(remote())
+      const res = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+      expect(res.details.pii_redaction).toBe('disabled')
+      expect(from).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('does not retry other failures', async () => {
     vi.mocked(el.agents.update).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'validation', operation: 'agents.update', detail: 'invalid_parameters - bad voice' }))
     await expect(elevenLabsLifecycle.update('agent_1', makeAgentSpec())).rejects.toMatchObject({ code: 'validation' })
     expect(vi.mocked(el.agents.update).mock.calls).toHaveLength(1)
   })
 
-  it('flags analysis_items and stale map keys from the PATCH response', async () => {
+  it('records the analysis_items shape (migrated only with user items) and stale map keys from the PATCH response', async () => {
     vi.mocked(el.agents.update).mockResolvedValue(
       remote({
         platform_settings: { analysis_items: { items: [] }, data_collection: { caller_name: {}, old_field: {} } },
@@ -170,10 +225,14 @@ describe('elevenLabsLifecycle.update: versioning, privacy and read-back', () => 
       }),
     )
     const res = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
-    expect(res.details.analysis_items_migrated).toBe(true)
+    // A non-null analysis_items without attached user items: shape recorded, not migrated.
+    expect(res.details.analysis_items_migrated).toBe(false)
+    expect(res.details.analysis_items).toEqual({ keys: ['items'], evaluation_criteria: 0, data_collection: 0, user_items: 0 })
     expect(res.details.stale_keys).toMatchObject({ data_collection: ['old_field'], dynamic_variable_placeholders: ['removed_var'] })
+    vi.mocked(el.agents.update).mockResolvedValue(remote({ platform_settings: { analysis_items: { evaluation_criteria: [{ source: 'user', analysis_item_id: 'a1' }] } } }))
+    expect((await elevenLabsLifecycle.update('agent_1', makeAgentSpec())).details).toMatchObject({ analysis_items_migrated: true, analysis_items: { user_items: 1 } })
     vi.mocked(el.agents.update).mockResolvedValue(remote({ platform_settings: { analysis_items: null } }))
-    expect((await elevenLabsLifecycle.update('agent_1', makeAgentSpec())).details.analysis_items_migrated).toBe(false)
+    expect((await elevenLabsLifecycle.update('agent_1', makeAgentSpec())).details).toMatchObject({ analysis_items_migrated: false, analysis_items: null })
   })
 })
 

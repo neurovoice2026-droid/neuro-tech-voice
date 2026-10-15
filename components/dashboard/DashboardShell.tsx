@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
@@ -26,6 +26,7 @@ import { OrbInline } from '@/components/shared/OrbLoader'
 import { signOut } from '@/lib/auth/actions'
 import { MinutesBanner } from '@/components/dashboard/MinutesBanner'
 import { minutesMeterTone, showsMinutesBanner, type MinutesBannerState } from '@/components/billing/minutes-logic'
+import { planBadgeText, planDisplayName } from '@/components/dashboard/plan-label'
 import { cn } from '@/lib/utils'
 import type { Organization, Agent } from '@/types'
 
@@ -107,41 +108,103 @@ function isActive(pathname: string, href: string) {
   return pathname === href || (!EXACT_MATCH_PAGES.includes(href) && pathname.startsWith(href))
 }
 
-function NavLinks({ pathname, groups, onNavigate }: { pathname: string; groups: NavGroup[]; onNavigate?: () => void }) {
+/**
+ * Whether a scroll box has links out of view above / below (the sidebar nav's scroll cue). The
+ * observer's first callback takes the first measure; it runs again when the window or the list
+ * changes height, and every scroll updates it.
+ */
+function useScrollCue() {
+  const ref = useRef<HTMLElement>(null)
+  const [cue, setCue] = useState({ above: false, below: false })
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => {
+      const above = el.scrollTop > 1
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+      setCue((c) => (c.above === above && c.below === below ? c : { above, below }))
+    }
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    if (el.firstElementChild) observer.observe(el.firstElementChild)
+    el.addEventListener('scroll', update, { passive: true })
+    return () => {
+      observer.disconnect()
+      el.removeEventListener('scroll', update)
+    }
+  }, [])
+
+  return { ref, ...cue }
+}
+
+function NavLinks({ pathname, groups, dense = false, onNavigate }: {
+  pathname: string
+  groups: NavGroup[]
+  /** Tighter rows on the desktop sidebar (the store org's longer list); the phone sheet keeps 36 px rows. */
+  dense?: boolean
+  onNavigate?: () => void
+}) {
+  const { ref, above, below } = useScrollCue()
+  const activeRef = useRef<HTMLAnchorElement>(null)
+
+  // On a short screen the current page's link can sit below the fold (Settings, Billing): bring it in.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [pathname])
+
   return (
-    <nav aria-label="Main" className="mt-1 flex-1 overflow-y-auto px-3 pb-3">
-      {groups.map((group, i) => (
-        <div key={group.label ?? i}>
-          {group.label && (
-            <p className="px-2.5 pt-5 pb-1.5 text-[11px] leading-4 text-muted-foreground">{group.label}</p>
-          )}
-          <ul className="flex flex-col gap-0.5">
-            {group.items.map(({ href, label, icon: Icon }) => {
-              const active = isActive(pathname, href)
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-[13.5px] transition-[background-color,color] duration-200 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring',
-                      active
-                        ? 'bg-secondary font-medium text-foreground'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                    <span className="min-w-0 truncate">{label}</span>
-                    {active && <CornerDot className="ml-auto size-2 shrink-0 text-brand" />}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+    <div className="relative mt-1 flex min-h-0 flex-1 flex-col">
+      <nav ref={ref} aria-label="Main" className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div>
+          {groups.map((group, i) => (
+            <div key={group.label ?? i}>
+              {group.label && (
+                <p className={cn('px-2.5 pt-5 pb-1.5 text-[11px] leading-4 text-muted-foreground', dense && 'lg:pt-3.5')}>{group.label}</p>
+              )}
+              <ul className="flex flex-col gap-0.5">
+                {group.items.map(({ href, label, icon: Icon }) => {
+                  const active = isActive(pathname, href)
+                  return (
+                    <li key={href}>
+                      <Link
+                        ref={active ? activeRef : undefined}
+                        href={href}
+                        onClick={onNavigate}
+                        aria-current={active ? 'page' : undefined}
+                        className={cn(
+                          // scroll-my keeps a link brought into view clear of the fades.
+                          'flex h-9 scroll-my-8 items-center gap-2.5 rounded-[10px] px-2.5 text-[13.5px] transition-[background-color,color] duration-200 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring',
+                          dense && 'lg:h-8',
+                          active
+                            ? 'bg-secondary font-medium text-foreground'
+                            : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                        <span className="min-w-0 truncate">{label}</span>
+                        {active && <CornerDot className="ml-auto size-2 shrink-0 text-brand" />}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
-      ))}
-    </nav>
+      </nav>
+      {/* Scroll cue: a fade over the edge where links sit out of view (short laptop screens, phones). */}
+      <div
+        aria-hidden="true"
+        data-scroll-cue="above"
+        className={cn('pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-white to-transparent transition-opacity duration-200', above ? 'opacity-100' : 'opacity-0')}
+      />
+      <div
+        aria-hidden="true"
+        data-scroll-cue="below"
+        className={cn('pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-white to-transparent transition-opacity duration-200', below ? 'opacity-100' : 'opacity-0')}
+      />
+    </div>
   )
 }
 
@@ -180,7 +243,7 @@ function WorkspaceMenu({ org, userEmail, onNavigate }: { org: Organization; user
             <p className="truncate text-sm font-medium text-foreground">{orgName}</p>
             <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
             <Badge variant="secondary" className="mt-2">
-              <span className="capitalize">{org.plan}</span> plan
+              {planBadgeText(org.plan)}
             </Badge>
           </div>
         </DropdownMenuGroup>
@@ -216,14 +279,16 @@ function UsageTile({ org }: { org: Organization }) {
   // Prepaid extra minutes keep calls going past the included ones: the meter warns instead of alarming.
   const extra = Math.max(0, Math.floor(org.extra_minutes_balance ?? 0))
   const tone = minutesMeterTone(pct, extra)
+  // The plan's display name, not its id; "min" after the figures leaves the name the row's width.
+  const planName = planDisplayName(org.plan)
   return (
     <div className="rounded-2xl bg-secondary p-3">
       <div className="flex items-center justify-between gap-2 text-xs leading-4">
-        <span className="min-w-0 truncate text-muted-foreground">
-          Minutes · <span className="capitalize">{org.plan}</span>
+        <span className="min-w-0 truncate text-muted-foreground" title={planName}>
+          {planName}
         </span>
         <span className="shrink-0 text-foreground tabular-nums">
-          {org.minutes_used.toLocaleString('en-US')} / {org.minutes_limit.toLocaleString('en-US')}
+          {org.minutes_used.toLocaleString('en-US')} / {org.minutes_limit.toLocaleString('en-US')} min
         </span>
       </div>
       <Progress
@@ -261,7 +326,12 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
 
       <WorkspaceMenu org={org} userEmail={userEmail} onNavigate={() => setMobileOpen(false)} />
 
-      <NavLinks pathname={pathname} groups={navGroupsFor(org)} onNavigate={() => setMobileOpen(false)} />
+      <NavLinks
+        pathname={pathname}
+        groups={navGroupsFor(org)}
+        dense={org.business_type === 'ecommerce'}
+        onNavigate={() => setMobileOpen(false)}
+      />
 
       <div className="p-3">
         <UsageTile org={org} />

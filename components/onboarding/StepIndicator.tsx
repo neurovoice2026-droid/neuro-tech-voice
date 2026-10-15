@@ -29,17 +29,24 @@ interface StepIndicatorProps {
   ariaLabel?: string
   /** Screen-reader suffix of a completed step. */
   doneLabel?: string
+  /**
+   * Long lists (the store's six steps): below xl only the current step shows its label, the
+   * others their number or check (the label stays for screen readers), so the row fits the bar.
+   */
+  compact?: boolean
   className?: string
 }
 
 /**
  * Text step list for the onboarding top bar: `01 Company · 02 Agent · 03 Voice · 04 Launch`.
  * Done steps are ink with a check, the current one sits on a tinted pill, upcoming ones are muted.
+ * Labels never wrap and the list keeps its own width (w-max): centred absolutely in the bar, it
+ * would otherwise shrink to half the bar and break labels over three lines.
  */
-export function StepIndicator({ currentStep, steps = ONBOARDING_STEPS, ariaLabel = 'Onboarding progress', doneLabel = '(done)', className }: StepIndicatorProps) {
+export function StepIndicator({ currentStep, steps = ONBOARDING_STEPS, ariaLabel = 'Onboarding progress', doneLabel = '(done)', compact = false, className }: StepIndicatorProps) {
   return (
     <nav aria-label={ariaLabel} className={className}>
-      <ol className="flex items-center gap-1">
+      <ol className="flex w-max items-center gap-1">
         {steps.map((step, idx) => {
           const isCompleted = step.num < currentStep
           const isCurrent = step.num === currentStep
@@ -57,7 +64,7 @@ export function StepIndicator({ currentStep, steps = ONBOARDING_STEPS, ariaLabel
               <span
                 aria-current={isCurrent ? 'step' : undefined}
                 className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] leading-4 font-medium tracking-[0.12em] uppercase transition-colors duration-200',
+                  'flex h-7 items-center gap-1.5 rounded-full px-3 text-[11px] leading-4 font-medium tracking-[0.12em] whitespace-nowrap uppercase transition-colors duration-200',
                   isCurrent && 'bg-secondary text-foreground',
                   isCompleted && 'text-foreground',
                   !isCurrent && !isCompleted && 'text-muted-foreground'
@@ -68,7 +75,7 @@ export function StepIndicator({ currentStep, steps = ONBOARDING_STEPS, ariaLabel
                 ) : (
                   <span className="tabular-nums">{String(step.num).padStart(2, '0')}</span>
                 )}
-                {step.label}
+                <span className={cn(compact && !isCurrent && 'sr-only xl:not-sr-only')}>{step.label}</span>
                 {isCompleted && <span className="sr-only">{doneLabel}</span>}
               </span>
             </li>

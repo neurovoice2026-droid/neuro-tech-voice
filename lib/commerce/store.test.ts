@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => { throw new Er
 
 import { CONN_A, CONN_B, ORG_A, ORG_B, asClient, commerceDb, connectionRow, normalizedOrder } from '@/tests/helpers/commerce'
 import { parsePostgrestList } from '@/tests/helpers/memory-db'
-import { connectionDto, decodeCursor, encodeCursor, encryptedSecretsFor, isCodPayment, isPhoneSuppressed, markDoNotCall, toAdapterConnection, upsertCustomers, upsertOrders } from './store'
+import { type RunRow, connectionDto, decodeCursor, encodeCursor, encryptedSecretsFor, isCodPayment, isPhoneSuppressed, markDoNotCall, publicWebhookUrl, runDto, toAdapterConnection, upsertCustomers, upsertOrders } from './store'
 
 const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => log, context: {} }
 void log
@@ -146,7 +146,9 @@ describe('connection DTO and credentials', () => {
     const row = { ...base, ...encryptedSecretsFor({ id: base.id, org_id: base.org_id }, secrets), webhook_config: { registrations: [{ topic: 'order.created', externalId: 'wh_77', source: 'api' }] }, sync_cursor: { orders: { modifiedAfter: 'x' } } }
     const db = commerceDb({ commerce_connections: [row], commerce_orders: [{ id: 'o1', connection_id: CONN_A, org_id: ORG_A, updated_at: 'x' }] })
     const dto = await connectionDto(asClient(db), row as never)
-    const text = JSON.stringify(dto)
+    // The public id appears only inside the webhook address the store's own code must send to (WooCommerce cart events).
+    expect(dto.webhook_url).toBe(`https://app.example.com/api/commerce/webhooks/woocommerce/${row.webhook_public_id}`)
+    const text = JSON.stringify({ ...dto, webhook_url: null })
     for (const needle of ['ck_live_1', 'cs_live_2', 'whs_3', 'encrypted', 'wh_77', 'sync_cursor', 'webhook_public_id', row.webhook_public_id]) expect(text).not.toContain(needle)
     expect(dto.webhook_topics).toEqual(['order.created'])
     expect(dto.counts.orders).toBe(1)
@@ -155,5 +157,41 @@ describe('connection DTO and credentials', () => {
     expect(adapterConn.webhookUrl).toBe(`https://app.example.com/api/commerce/webhooks/woocommerce/${row.webhook_public_id}`)
     // A blob moved to another connection does not decrypt.
     expect(() => toAdapterConnection({ ...row, id: CONN_B } as never)).toThrow()
+  })
+})
+
+describe('webhook address for merchant-sent deliveries', () => {
+  it('is shown for the custom connector and WooCommerce only, never for a disconnected store or without a public origin', async () => {
+    const custom = connectionRow({ platform: 'custom', webhook_config: { registrations: [], last_delivery_at: '2026-10-13T07:00:00Z' } })
+    expect(publicWebhookUrl(custom as never)).toBe(`https://app.example.com/api/commerce/webhooks/custom/${custom.webhook_public_id}`)
+    const dto = await connectionDto(asClient(commerceDb({ commerce_connections: [custom] })), custom as never)
+    expect(dto).toMatchObject({ webhook_url: publicWebhookUrl(custom as never), webhook_last_delivery_at: '2026-10-13T07:00:00Z' })
+    for (const platform of ['shopify', 'magento', 'prestashop']) expect(publicWebhookUrl(connectionRow({ platform }) as never), platform).toBeNull()
+    expect(publicWebhookUrl(connectionRow({ platform: 'custom', status: 'disconnected' }) as never)).toBeNull()
+    // No webhook secret: the custom store's deliveries could not be verified, so no address is offered.
+    expect(publicWebhookUrl(connectionRow({ platform: 'custom', capabilities: { ...custom.capabilities, webhooks: false, polling_minutes: 15 } }) as never)).toBeNull()
+    // A WooCommerce key without webhook permission created no webhooks: there is no secret to sign cart events with.
+    expect(publicWebhookUrl(connectionRow({ platform: 'woocommerce' }) as never)).toBe(`https://app.example.com/api/commerce/webhooks/woocommerce/${custom.webhook_public_id}`)
+    expect(publicWebhookUrl(connectionRow({ platform: 'woocommerce', capabilities: { ...custom.capabilities, webhooks: false, polling_minutes: 15 } }) as never)).toBeNull()
+    vi.stubEnv('VOICE_PUBLIC_BASE_URL', '')
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', '')
+    expect(publicWebhookUrl(custom as never)).toBeNull()
+  })
+})
+
+describe('run DTO reference', () => {
+  const run = (over: Partial<RunRow>): RunRow => ({
+    id: 'r1', org_id: ORG_A, automation_id: 'a1', connection_id: CONN_A, automation_type: 'cod_confirmation', order_id: 'o1', customer_id: null, cart_id: null,
+    external_ref: 'gid-order-10482', event_key: 'k', idempotency_key: 'i', status: 'completed', eligibility_reason: null, to_phone_e164: '+40722123456',
+    scheduled_for: null, attempt: 1, max_attempts: 2, lease_owner: null, lease_until: null, call_id: null, provider_call_ref: null, dispatch_uncertain: false,
+    outcome: null, outcome_detail: null, summary: null, error_code: null, error_message: null, last_attempt_at: null, completed_at: null, created_at: 'x', updated_at: 'x', ...over,
+  })
+
+  it('sends the bare order number (the UI adds the single #) and names a cart as a cart', () => {
+    expect(runDto(run({ commerce_orders: { order_number: '10482' } }))).toMatchObject({ reference: '10482', reference_kind: 'order' })
+    expect(runDto(run({ commerce_orders: [{ order_number: '10483' }] }))).toMatchObject({ reference: '10483', reference_kind: 'order' })
+    expect(runDto(run({ commerce_orders: null }))).toMatchObject({ reference: 'er-10482', reference_kind: 'order' })
+    expect(runDto(run({ automation_type: 'abandoned_cart', order_id: null, cart_id: 'c1', external_ref: 'cart-abc123sfvoyz', commerce_orders: null }))).toMatchObject({ reference: 'sfvoyz', reference_kind: 'cart' })
+    for (const r of [run({ commerce_orders: { order_number: '10482' } }), run({ commerce_orders: null })]) expect(runDto(r).reference).not.toContain('#')
   })
 })

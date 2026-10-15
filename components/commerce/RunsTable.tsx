@@ -12,13 +12,32 @@ import { cancelRun, isCancellable } from '@/hooks/useCommerceRuns'
 import type { RunDto } from '@/lib/commerce/types'
 import { cn } from '@/lib/utils'
 import { formatDateTime, maskedOrDash, relativeTime } from './format'
-import { automationTypeLabel, runStatusReason } from './labels'
+import { automationTypeLabel, runReferenceLabel, runStatusReason, runSubjectLabel, runWhen } from './labels'
 import { RunOutcomeChip, RunStatusChip } from './StatusChips'
 import { LoadMoreFooter, RecordsPanel } from './ListScaffold'
 
 // One table for every list of automation runs (overview, automation history,
 // order detail). "View call" opens the same CallDetailSheet the Calls page
 // uses, in place, so the person never lands on a list that ignores the id.
+// Like the calls table, the columns follow the panel's width, not the
+// page's (the same table sits in the 600px order sheet): what a narrow panel
+// hides (status, phone, outcome, when) is folded under the reference, and the
+// row actions shrink to icon buttons, so nothing leaves the panel.
+
+/**
+ * When each column joins, by the panel's width (container queries on the
+ * RecordsPanel). Below its breakpoint a column's content is folded under the
+ * reference in the first cell; the action buttons keep only their icon
+ * (aria-label and title name them) until the panel is wide enough for all.
+ */
+const COL = {
+  status: 'hidden @min-[640px]/records:table-cell',
+  phone: 'hidden @min-[800px]/records:table-cell',
+  automation: 'hidden @min-[960px]/records:table-cell',
+  outcome: 'hidden @min-[1060px]/records:table-cell',
+  when: 'hidden @min-[1100px]/records:table-cell',
+  actionLabel: 'hidden @min-[1200px]/records:inline',
+} as const
 
 interface RunsTableProps {
   runs: RunDto[]
@@ -46,14 +65,6 @@ interface RunsTableProps {
   className?: string
 }
 
-/** When the run matters to the merchant: the scheduled slot while it waits, otherwise its last activity. */
-function runWhen(run: RunDto): { label: string; iso: string | null } {
-  if ((run.status === 'scheduled' || run.status === 'retry_waiting') && run.scheduled_for) return { label: 'Scheduled', iso: run.scheduled_for }
-  if (run.completed_at) return { label: 'Completed', iso: run.completed_at }
-  if (run.last_attempt_at) return { label: 'Last attempt', iso: run.last_attempt_at }
-  return { label: 'Created', iso: run.created_at }
-}
-
 export function RunsTable({
   runs, isLoading, error, onRetry, onRunChanged, showAutomation = true, cancellable = false,
   emptyTitle = 'No automated calls yet', emptyDescription, filtered = false, pagination, footerLink, className,
@@ -66,7 +77,7 @@ export function RunsTable({
     try {
       const next = await cancelRun(run.id)
       onRunChanged?.(next)
-      toast.success('Call canceled', { description: `Order #${run.reference} will no longer be called by this automation.` })
+      toast.success('Call canceled', { description: `${runSubjectLabel(run)} will no longer be called by this automation.` })
     } catch (err) {
       toast.error('The call could not be canceled', { description: commerceErrorMessage(err, 'Try again.') })
     } finally {
@@ -115,11 +126,11 @@ export function RunsTable({
           <TableHeader>
             <TableRow>
               <TableHead scope="col">Order</TableHead>
-              {showAutomation && <TableHead scope="col" className="hidden @min-[640px]/records:table-cell">Automation</TableHead>}
-              <TableHead scope="col" className="hidden @min-[520px]/records:table-cell">Phone</TableHead>
-              <TableHead scope="col">Status</TableHead>
-              <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Outcome</TableHead>
-              <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">When</TableHead>
+              {showAutomation && <TableHead scope="col" className={COL.automation}>Automation</TableHead>}
+              <TableHead scope="col" className={COL.phone}>Phone</TableHead>
+              <TableHead scope="col" className={COL.status}>Status</TableHead>
+              <TableHead scope="col" className={COL.outcome}>Outcome</TableHead>
+              <TableHead scope="col" className={COL.when}>When</TableHead>
               <TableHead scope="col" className="text-right">
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -130,51 +141,84 @@ export function RunsTable({
               const when = runWhen(run)
               const reason = runStatusReason(run)
               const canCancel = cancellable && isCancellable(run)
+              const subject = runSubjectLabel(run).toLowerCase()
               return (
                 <TableRow key={run.id}>
                   <TableCell className="py-2.5">
-                    <span className="block text-sm font-medium text-foreground tabular-nums">#{run.reference}</span>
-                    <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">
-                      {showAutomation && <span className="@min-[640px]/records:hidden">{automationTypeLabel(run.automation_type)} · </span>}
-                      <span className="tabular-nums">
-                        attempt {run.attempt}/{run.max_attempts}
+                    {/* The panel width less the actions cell: the folded details truncate instead of widening the table. */}
+                    <div className="max-w-[calc(100cqw-144px)] min-w-0 @min-[640px]/records:max-w-[28ch]">
+                      <span className="block truncate text-sm font-medium text-foreground tabular-nums">{runReferenceLabel(run)}</span>
+                      <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground">
+                        {showAutomation && <span className="@min-[960px]/records:hidden">{automationTypeLabel(run.automation_type)} · </span>}
+                        <span className="tabular-nums">
+                          attempt {run.attempt}/{run.max_attempts}
+                        </span>
                       </span>
-                    </span>
-                    {run.outcome && (
-                      <span className="mt-1.5 block @min-[760px]/records:hidden">
-                        <RunOutcomeChip outcome={run.outcome} />
+                      {run.to_phone_masked && (
+                        <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground tabular-nums @min-[800px]/records:hidden">{run.to_phone_masked}</span>
+                      )}
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5 @min-[640px]/records:hidden">
+                        <RunStatusChip status={run.status} />
                       </span>
-                    )}
+                      {reason && (
+                        <span className="mt-1 block truncate text-xs leading-4 text-muted-foreground @min-[640px]/records:hidden" title={reason}>
+                          {reason}
+                        </span>
+                      )}
+                      {run.status === 'failed' && run.error_message && (
+                        <span className="mt-1 block truncate text-xs leading-4 text-destructive @min-[640px]/records:hidden" title={run.error_message}>
+                          {run.error_message}
+                        </span>
+                      )}
+                      {run.outcome && (
+                        <span className="mt-1.5 block @min-[1060px]/records:hidden">
+                          <RunOutcomeChip outcome={run.outcome} />
+                        </span>
+                      )}
+                      {run.outcome_detail && (
+                        <span className="mt-1 block truncate text-xs leading-4 text-muted-foreground @min-[1060px]/records:hidden" title={run.outcome_detail}>
+                          {run.outcome_detail}
+                        </span>
+                      )}
+                      {when.iso && (
+                        <span className="mt-1 block truncate text-xs leading-4 text-muted-foreground @min-[1100px]/records:hidden">
+                          {when.label}{' '}
+                          <time dateTime={when.iso} title={formatDateTime(when.iso)} className="tabular-nums">
+                            {relativeTime(when.iso)}
+                          </time>
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   {showAutomation && (
-                    <TableCell className="hidden @min-[640px]/records:table-cell">{automationTypeLabel(run.automation_type)}</TableCell>
+                    <TableCell className={COL.automation}>{automationTypeLabel(run.automation_type)}</TableCell>
                   )}
-                  <TableCell className="hidden text-muted-foreground tabular-nums @min-[520px]/records:table-cell">
+                  <TableCell className={cn('text-muted-foreground tabular-nums', COL.phone)}>
                     {maskedOrDash(run.to_phone_masked)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className={COL.status}>
                     <RunStatusChip status={run.status} />
                     {/* Why it is held back, waiting (e.g. out of minutes) or skipped. */}
                     {reason && (
-                      <span className="mt-1 block max-w-[28ch] truncate text-xs leading-4 text-muted-foreground" title={reason}>
+                      <span className="mt-1 block max-w-[24ch] truncate text-xs leading-4 text-muted-foreground" title={reason}>
                         {reason}
                       </span>
                     )}
                     {run.status === 'failed' && run.error_message && (
-                      <span className="mt-1 block max-w-[28ch] truncate text-xs leading-4 text-destructive" title={run.error_message}>
+                      <span className="mt-1 block max-w-[24ch] truncate text-xs leading-4 text-destructive" title={run.error_message}>
                         {run.error_message}
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden @min-[760px]/records:table-cell">
+                  <TableCell className={COL.outcome}>
                     <RunOutcomeChip outcome={run.outcome} />
                     {run.outcome_detail && (
-                      <span className="mt-1 block max-w-[32ch] truncate text-xs leading-4 text-muted-foreground" title={run.outcome_detail}>
+                      <span className="mt-1 block max-w-[24ch] truncate text-xs leading-4 text-muted-foreground" title={run.outcome_detail}>
                         {run.outcome_detail}
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="hidden text-muted-foreground @min-[900px]/records:table-cell">
+                  <TableCell className={cn('text-muted-foreground', COL.when)}>
                     <span className="block text-xs leading-4">{when.label}</span>
                     {when.iso ? (
                       <time dateTime={when.iso} title={formatDateTime(when.iso)} className="block text-sm text-foreground tabular-nums">
@@ -184,7 +228,7 @@ export function RunsTable({
                       <span>—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="pl-1 text-right">
                     <span className="inline-flex items-center justify-end gap-1">
                       {run.call_id && (
                         <Button
@@ -192,10 +236,11 @@ export function RunsTable({
                           size="xs"
                           className="tap-44"
                           onClick={() => setOpenCallId(run.call_id)}
-                          aria-label={`View the call for order #${run.reference}`}
+                          aria-label={`View the call for ${subject}`}
+                          title="View call"
                         >
                           <PhoneCall aria-hidden="true" />
-                          <span className="hidden @min-[520px]/records:inline">View call</span>
+                          <span className={COL.actionLabel}>View call</span>
                         </Button>
                       )}
                       {canCancel && (
@@ -206,10 +251,11 @@ export function RunsTable({
                           loading={cancellingId === run.id}
                           disabled={cancellingId !== null && cancellingId !== run.id}
                           onClick={() => void handleCancel(run)}
-                          aria-label={`Cancel the call for order #${run.reference}`}
+                          aria-label={`Cancel the call for ${subject}`}
+                          title="Cancel"
                         >
                           <Ban aria-hidden="true" />
-                          <span className="hidden @min-[520px]/records:inline">Cancel</span>
+                          <span className={COL.actionLabel}>Cancel</span>
                         </Button>
                       )}
                     </span>

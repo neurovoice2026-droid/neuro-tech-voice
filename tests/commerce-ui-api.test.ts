@@ -12,7 +12,8 @@ import {
   readCommerceError,
 } from '@/hooks/useCommerceApi'
 import { enableBlocked } from '@/hooks/useCommerceAutomations'
-import { isSyncInProgress, pickCurrentConnection, shopifyStartUrl } from '@/hooks/useCommerceConnections'
+import { isSyncInProgress, pickCurrentConnection, shopifyStartUrl, unavailablePlatforms } from '@/hooks/useCommerceConnections'
+import { PLATFORM_UNAVAILABLE_NOTE } from '@/lib/commerce/platforms'
 import { isCancellable } from '@/hooks/useCommerceRuns'
 import type { ConnectionDto } from '@/lib/commerce/types'
 
@@ -144,6 +145,8 @@ function connection(over: Partial<ConnectionDto>): ConnectionDto {
     status: 'active',
     capabilities: { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: false, customer_phone: true, polling_minutes: null, notes: [] },
     webhook_topics: [],
+    webhook_url: null,
+    webhook_last_delivery_at: null,
     last_sync_at: null,
     last_successful_sync_at: null,
     error_code: null,
@@ -158,6 +161,15 @@ function connection(over: Partial<ConnectionDto>): ConnectionDto {
 }
 
 describe('connection helpers', () => {
+  it('marks Shopify unavailable only when the server says its app is not configured', () => {
+    expect([...unavailablePlatforms({ encryption: true, shopify: false, publicBaseUrl: true })]).toEqual(['shopify'])
+    expect(unavailablePlatforms({ encryption: true, shopify: true, publicBaseUrl: true }).size).toBe(0)
+    // An answer without `config` (older server) blocks nothing.
+    expect(unavailablePlatforms(undefined).size).toBe(0)
+    expect(PLATFORM_UNAVAILABLE_NOTE.shopify).toMatch(/Shopify app is not set up/)
+    expect(PLATFORM_UNAVAILABLE_NOTE.shopify).not.toMatch(ROMANIAN)
+  })
+
   it('prefers the live connection, else the first one', () => {
     const dead = connection({ id: 'dead', status: 'disconnected' })
     const live = connection({ id: 'live', status: 'degraded' })

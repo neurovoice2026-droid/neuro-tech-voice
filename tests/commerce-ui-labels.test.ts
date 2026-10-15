@@ -39,12 +39,18 @@ import {
   WEEKDAY_LABEL,
   WEEKDAY_SHORT,
   automationHref,
+  awaitsStoreSentEvents,
   connectionStatusLabel,
+  WEBHOOK_ADDRESS_HINT,
   oauthErrorMessage,
+  resourceCount,
   runOutcomeLabel,
+  runReferenceLabel,
   runStatusLabel,
   runStatusReason,
+  runSubjectLabel,
   runSummaryLine,
+  runWhen,
   suppressionSourceLabel,
 } from '@/components/commerce/labels'
 import { MINUTES_SKIP_REASON, MINUTES_WAIT_REASON } from '@/lib/commerce/automations/dispatch'
@@ -267,13 +273,67 @@ describe('commerce labels are total', () => {
     expect(suppressionSourceLabel(null)).toBe('Unknown')
   })
 
-  it('builds the call sheet summary line', () => {
-    expect(runSummaryLine({ automation_type: 'cod_confirmation', reference: '1234', outcome: 'confirmed', status: 'completed' })).toBe(
-      'Automated call · COD confirmation · Order #1234 · Confirmed',
+  it('builds the call sheet summary line from the bare reference the server sends (one #, carts read as carts)', () => {
+    // runDto (lib/commerce/store.ts) sends the order number without '#'.
+    expect(runSummaryLine({ automation_type: 'cod_confirmation', reference: '10487', reference_kind: 'order', outcome: 'confirmed', status: 'completed' })).toBe(
+      'Automated call · COD confirmation · Order #10487 · Confirmed',
     )
-    expect(runSummaryLine({ automation_type: 'abandoned_cart', reference: 'C-9', outcome: null, status: 'scheduled' })).toBe(
-      'Automated call · Abandoned cart · Order #C-9 · Scheduled',
+    expect(runSummaryLine({ automation_type: 'abandoned_cart', reference: 'sfvoyz', reference_kind: 'cart', outcome: null, status: 'scheduled' })).toBe(
+      'Automated call · Abandoned cart · Cart …sfvoyz · Scheduled',
     )
+  })
+
+  it('labels a run reference once, as an order or a cart', () => {
+    expect(runReferenceLabel({ reference: '10491', reference_kind: 'order' })).toBe('#10491')
+    expect(runSubjectLabel({ reference: '10491', reference_kind: 'order' })).toBe('Order #10491')
+    expect(runReferenceLabel({ reference: 'sfvoyz', reference_kind: 'cart' })).toBe('Cart …sfvoyz')
+    expect(runSubjectLabel({ reference: 'sfvoyz', reference_kind: 'cart' })).toBe('Cart …sfvoyz')
+    for (const label of [runReferenceLabel({ reference: '10491', reference_kind: 'order' }), runSubjectLabel({ reference: '10491', reference_kind: 'order' })]) {
+      expect(label).not.toContain('##')
+    }
+  })
+
+  it('labels the When column with the run\'s own end state', () => {
+    const base = { scheduled_for: null, last_attempt_at: '2026-10-14T09:00:00Z', completed_at: '2026-10-14T09:05:00Z', created_at: '2026-10-14T08:00:00Z' }
+    expect(runWhen({ ...base, status: 'completed' })).toEqual({ label: 'Completed', iso: base.completed_at })
+    expect(runWhen({ ...base, status: 'cancelled' })).toEqual({ label: 'Canceled', iso: base.completed_at })
+    expect(runWhen({ ...base, status: 'suppressed' })).toEqual({ label: 'Skipped', iso: base.completed_at })
+    expect(runWhen({ ...base, status: 'skipped' })).toEqual({ label: 'Skipped', iso: base.completed_at })
+    expect(runWhen({ ...base, status: 'failed' })).toEqual({ label: 'Failed', iso: base.completed_at })
+    expect(runWhen({ ...base, status: 'retry_waiting', scheduled_for: '2026-10-14T11:00:00Z' })).toEqual({ label: 'Scheduled', iso: '2026-10-14T11:00:00Z' })
+    expect(runWhen({ ...base, status: 'calling', completed_at: null })).toEqual({ label: 'Last attempt', iso: base.last_attempt_at })
+  })
+
+  it('pluralises synced counts', () => {
+    expect(resourceCount('customers', 1)).toBe('1 customer')
+    expect(resourceCount('customers', 2)).toBe('2 customers')
+    expect(resourceCount('orders', 0)).toBe('0 orders')
+    expect(resourceCount('products', 1)).toBe('1 product')
+    expect(resourceCount('carts', 1)).toBe('1 cart')
+    expect(resourceCount('orders', 1240)).toBe('1,240 orders')
+    expect(resourceCount('widgets', 3)).toBe('3 widgets')
+    expect(['3 orders', '1 customer', '1 product', '1 cart'].join(' · ')).toBe(
+      (['orders', 'customers', 'products', 'carts'] as const).map((k, i) => resourceCount(k, [3, 1, 1, 1][i])).join(' · '),
+    )
+  })
+
+  it('waits for store-sent events only on the custom connector, never on a WooCommerce store whose registration failed', () => {
+    const caps = { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: true, customer_phone: true, polling_minutes: null, notes: [] }
+    const url = 'https://app.example.com/api/commerce/webhooks/x/abc'
+    expect(awaitsStoreSentEvents({ platform: 'custom', capabilities: caps, webhook_url: url })).toBe(true)
+    // WooCommerce shows its address for cart events, but its order webhooks are registered through its API:
+    // no topics there means "reconnect", not "waiting for your store".
+    expect(awaitsStoreSentEvents({ platform: 'woocommerce', capabilities: caps, webhook_url: url })).toBe(false)
+    expect(awaitsStoreSentEvents({ platform: 'custom', capabilities: caps, webhook_url: null })).toBe(false)
+    expect(awaitsStoreSentEvents({ platform: 'custom', capabilities: { ...caps, webhooks: false }, webhook_url: url })).toBe(false)
+  })
+
+  it('explains the webhook address in English for the platforms that show it', () => {
+    expect(Object.keys(WEBHOOK_ADDRESS_HINT).sort()).toEqual(['custom', 'woocommerce'])
+    for (const hint of Object.values(WEBHOOK_ADDRESS_HINT)) {
+      expect(hint).not.toMatch(ROMANIAN)
+      expect(hint).not.toMatch(BRITISH)
+    }
   })
 })
 

@@ -12,11 +12,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { OptionCard } from '@/components/shared/OptionCard'
-import { PLATFORM_CATALOG, PLATFORM_ORDER, platformName } from '@/lib/commerce/platforms'
+import { PLATFORM_CATALOG, PLATFORM_ORDER, PLATFORM_UNAVAILABLE_NOTE, platformName } from '@/lib/commerce/platforms'
 import type { CommercePlatform } from '@/lib/commerce/types'
 import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
 import { StepActions, StepBody } from '../../StepIndicator'
-import { isLiveConnection } from '../hooks'
+import { isLiveConnection, usePlatformAvailability } from '../hooks'
 import { useCommerceNavigation } from '../navigation'
 import { CommerceStepHeader } from '../shared'
 
@@ -50,11 +50,14 @@ export function PlatformStep() {
   const platform = useCommerceOnboardingStore((s) => s.platform)
   const setPlatform = useCommerceOnboardingStore((s) => s.setPlatform)
   const { goTo } = useCommerceNavigation()
-  const [selected, setSelected] = useState<CommercePlatform | null>(platform)
+  const unavailable = usePlatformAvailability((s) => s.unavailable)
+  const [picked, setSelected] = useState<CommercePlatform | null>(platform)
 
   // A live connection pins its platform: another store is connected from Store → Connections
   // after disconnecting this one (step 3 offers that). A draft or disconnected row pins nothing.
   const live = isLiveConnection(connection)
+  // A pick of a platform this deployment cannot connect is not kept (a live store of it still is).
+  const selected = picked && (!unavailable.has(picked) || (live && connection?.platform === picked)) ? picked : null
   const descriptor = selected ? PLATFORM_CATALOG[selected] : null
 
   function handleContinue() {
@@ -86,6 +89,8 @@ export function PlatformStep() {
           <div role="radiogroup" aria-labelledby="platform-label" className="grid gap-2 sm:grid-cols-2">
             {PLATFORM_ORDER.map((id) => {
               const p = PLATFORM_CATALOG[id]
+              // Said up front (Shopify without the platform's app), instead of failing after the redirect to Shopify.
+              const note = unavailable.has(id) ? (PLATFORM_UNAVAILABLE_NOTE[id] ?? 'Not available on this platform yet.') : null
               return (
                 <OptionCard
                   key={id}
@@ -93,9 +98,9 @@ export function PlatformStep() {
                   onSelect={() => setSelected(id)}
                   icon={ICONS[id]}
                   title={p.name}
-                  description={p.tagline}
-                  badge={<Badge variant="secondary">{p.connectMode === 'oauth' ? 'OAuth install' : 'API keys'}</Badge>}
-                  disabled={live && connection?.platform !== id}
+                  description={note ?? p.tagline}
+                  badge={<Badge variant="secondary">{note ? 'Not available yet' : p.connectMode === 'oauth' ? 'OAuth install' : 'API keys'}</Badge>}
+                  disabled={(live && connection?.platform !== id) || (!!note && !(live && connection?.platform === id))}
                   className={id === 'custom' ? 'sm:col-span-2' : undefined}
                 />
               )

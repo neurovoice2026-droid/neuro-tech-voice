@@ -90,25 +90,35 @@ export function ProductsPage() {
               <TableRow>
                 <TableHead scope="col">Product</TableHead>
                 <TableHead scope="col" className="hidden @min-[560px]/records:table-cell">SKU</TableHead>
-                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Status</TableHead>
-                <TableHead scope="col" className="text-right">Price</TableHead>
-                <TableHead scope="col">Stock</TableHead>
-                <TableHead scope="col" className="hidden text-right @min-[900px]/records:table-cell">Updated</TableHead>
+                <TableHead scope="col" className="hidden @min-[900px]/records:table-cell">Status</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[760px]/records:table-cell">Price</TableHead>
+                <TableHead scope="col" className="hidden @min-[760px]/records:table-cell">Stock</TableHead>
+                <TableHead scope="col" className="hidden text-right @min-[1000px]/records:table-cell">Updated</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {products.items.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell className="py-2.5">
-                    <span className="block max-w-[36ch] truncate text-sm font-medium text-foreground" title={product.name}>
-                      {product.name}
-                    </span>
-                    {product.sku && <span className="mt-0.5 block font-mono text-xs text-muted-foreground @min-[560px]/records:hidden">{product.sku}</span>}
+                    {/* On a narrow panel the row is this one cell (40 px = its padding); price and stock fold in under the name until their columns fit. */}
+                    <div className="max-w-[calc(100cqw-40px)] min-w-0 @min-[560px]/records:max-w-[28ch] @min-[900px]/records:max-w-[36ch]">
+                      <span className="block truncate text-sm font-medium text-foreground" title={product.name}>
+                        {product.name}
+                      </span>
+                      {product.sku && <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground @min-[560px]/records:hidden">{product.sku}</span>}
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5 @min-[760px]/records:hidden">
+                        <span className="text-sm font-medium text-foreground tabular-nums">{formatMoney(product.price, product.currency)}</span>
+                        <StockStatusChip status={product.stock_status} />
+                        {typeof product.stock_quantity === 'number' && (
+                          <span className="text-xs leading-4 text-muted-foreground tabular-nums">{formatCount(product.stock_quantity)} units</span>
+                        )}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="hidden font-mono text-xs text-muted-foreground @min-[560px]/records:table-cell">{product.sku ?? '—'}</TableCell>
-                  <TableCell className="hidden text-muted-foreground @min-[760px]/records:table-cell">{PRODUCT_STATUS_LABEL[product.status] ?? product.status}</TableCell>
-                  <TableCell className="text-right font-medium text-foreground tabular-nums">{formatMoney(product.price, product.currency)}</TableCell>
-                  <TableCell>
+                  <TableCell className="hidden text-muted-foreground @min-[900px]/records:table-cell">{PRODUCT_STATUS_LABEL[product.status] ?? product.status}</TableCell>
+                  <TableCell className="hidden text-right font-medium text-foreground tabular-nums @min-[760px]/records:table-cell">{formatMoney(product.price, product.currency)}</TableCell>
+                  <TableCell className="hidden @min-[760px]/records:table-cell">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <StockStatusChip status={product.stock_status} />
                       {typeof product.stock_quantity === 'number' && (
@@ -116,7 +126,7 @@ export function ProductsPage() {
                       )}
                     </span>
                   </TableCell>
-                  <TableCell className="hidden text-right text-muted-foreground @min-[900px]/records:table-cell">
+                  <TableCell className="hidden text-right text-muted-foreground @min-[1000px]/records:table-cell">
                     <time dateTime={product.updated_at} title={formatDateTime(product.updated_at)} className="tabular-nums">
                       {relativeTime(product.updated_at)}
                     </time>

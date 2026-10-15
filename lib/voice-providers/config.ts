@@ -141,7 +141,10 @@ export function validateVoiceConfig(): ConfigProblem[] {
   if (!s.twilio.accountSid || !s.twilio.authToken) err('TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN', 'Twilio is not configured: no inbound routing, request validation or outbound calls.')
   if (!s.elevenlabs.apiKey) err('ELEVENLABS_API_KEY', 'ElevenLabs (primary provider) is not configured.')
   if (s.elevenlabs.apiKey && !s.elevenlabs.webhookSecret) err('ELEVENLABS_WEBHOOK_SECRET', 'Post-call webhooks will be rejected (signature cannot be verified).')
-  if (s.elevenlabs.apiKey && !s.elevenlabs.postCallWebhookId) warn('ELEVENLABS_POST_CALL_WEBHOOK_ID', 'Agents will rely on the workspace-level post-call webhook setting.')
+  // ELEVENLABS_POST_CALL_WEBHOOK_ID is optional: without it the webhook pointing
+  // at our receiver is discovered and kept in platform_resources, which this
+  // env-only check cannot see. webhook-health reports webhook_missing when
+  // neither yields an id (hourly maintenance and admin diagnostics).
   if (!s.security.voiceTokenSecret) err('VOICE_TOKEN_SECRET', 'Missing or shorter than 32 chars: call tokens (transfer tool, stream fallback) cannot be signed.')
   if (s.routing.fallbackEnabled) {
     if (!s.cartesia.apiKey) warn('CARTESIA_API_KEY', 'Cartesia fallback is enabled but not configured: calls fail over to the apology/human path only.')

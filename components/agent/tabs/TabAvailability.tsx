@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -56,6 +56,21 @@ function timeZoneOptions(current: string): string[] {
 function browserTimeZone(): string | null {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
   return typeof tz === 'string' && tz ? tz : null
+}
+
+const subscribeNever = () => () => {}
+
+/**
+ * The browser's zone, null in the server HTML and while React hydrates it: the server's own zone
+ * (UTC on Vercel) is not the visitor's, and a "Use …" button drawn from it would not match.
+ */
+function useBrowserTimeZone(): string | null {
+  return useSyncExternalStore(subscribeNever, browserTimeZone, () => null)
+}
+
+/** false in the server HTML and while React hydrates it, true afterwards: the clock is read on the client only. */
+function useHydrated(): boolean {
+  return useSyncExternalStore(subscribeNever, () => true, () => false)
 }
 
 /** "UTC+03:00"-style offset of a zone right now (for the selected value only). */
@@ -233,8 +248,9 @@ function AvailabilityForm({ agent, initialTimezone, onUpdate, onTimezoneSaved, i
   const saved = useMemo(() => draftFrom(agent, savedTimezone), [agent, savedTimezone])
   const [draft, setDraft] = useState<Draft>(saved)
   const [showErrors, setShowErrors] = useState(false)
+  const hydrated = useHydrated()
   const [now, setNow] = useState(() => new Date())
-  const [browserZone] = useState(browserTimeZone)
+  const browserZone = useBrowserTimeZone()
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 30_000)
@@ -247,7 +263,8 @@ function AvailabilityForm({ agent, initialTimezone, onUpdate, onTimezoneSaved, i
   const visibleErrors: FieldErrors = showErrors ? errors : {}
 
   const verdict = evaluateWorkingHours(previewHours(draft), draft.timezone, { enabled: draft.afterHoursEnabled }, now)
-  const offset = zoneOffsetLabel(verdict.timeZone, now)
+  // Time-dependent text waits for the browser, so the server HTML is the same at any minute.
+  const offset = hydrated ? zoneOffsetLabel(verdict.timeZone, now) : null
 
   const setDay = (day: Weekday, patch: Partial<DayDraft>) =>
     setDraft((d) => ({ ...d, days: { ...d.days, [day]: { ...d.days[day], ...patch } } }))
@@ -346,14 +363,22 @@ function AvailabilityForm({ agent, initialTimezone, onUpdate, onTimezoneSaved, i
         {/* Live indicator */}
         {timezoneKnown && (
           <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-xl bg-secondary px-4 py-3">
-            <LiveDot active={verdict.open} tone={verdict.open ? 'success' : 'warning'} className="mt-[5px]" />
+            <LiveDot
+              active={hydrated && verdict.open}
+              tone={!hydrated ? 'idle' : verdict.open ? 'success' : 'warning'}
+              className="mt-[5px]"
+            />
             <div className="min-w-0 text-[13px] leading-[19px] text-muted-foreground">
-              <p>
-                <strong className="font-medium text-foreground">Right now: {verdict.open ? 'Open' : 'Closed'}</strong>{' '}
-                <span className="tabular-nums">(local time {verdict.localTime}, {verdict.timeZone})</span>
-                {!draft.afterHoursEnabled && ' — working hours are not applied, so every call is answered.'}
-                {draft.afterHoursEnabled && verdict.reason === 'no_schedule' && ' — no open days are set, so every call is answered.'}
-              </p>
+              {hydrated ? (
+                <p>
+                  <strong className="font-medium text-foreground">Right now: {verdict.open ? 'Open' : 'Closed'}</strong>{' '}
+                  <span className="tabular-nums">(local time {verdict.localTime}, {verdict.timeZone})</span>
+                  {!draft.afterHoursEnabled && ' — working hours are not applied, so every call is answered.'}
+                  {draft.afterHoursEnabled && verdict.reason === 'no_schedule' && ' — no open days are set, so every call is answered.'}
+                </p>
+              ) : (
+                <p>Checking the local time…</p>
+              )}
               {isDirty && <p className="mt-0.5 text-xs leading-4">Preview with your unsaved changes.</p>}
             </div>
           </div>

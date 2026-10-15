@@ -7,7 +7,7 @@ vi.mock('./adapters', () => ({ adapterFor: () => adapterState.adapter, isCommerc
 
 import { CONN_A, ORG_A, asClient, commerceDb, connectionRow, fakeAdapter, normalizedOrder, orgRow } from '@/tests/helpers/commerce'
 import { ConnectionError } from './adapters/types'
-import { backoffMs, claimSyncJobs, classifySyncError, runSyncJob, schedulePollingJobs } from './sync'
+import { WEBHOOK_SAFETY_NET_MINUTES, backoffMs, claimSyncJobs, classifySyncError, kickInitialSync, pollingIntervalMinutes, runSyncJob, scheduleInitialSyncKick, schedulePollingJobs } from './sync'
 
 const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => log, context: {} }
 const job = (over: Record<string, unknown> = {}) => ({ id: 'job-1', org_id: ORG_A, connection_id: CONN_A, kind: 'initial', resource: 'all', status: 'pending', attempts: 0, max_attempts: 5, run_after: '2026-10-13T07:00:00Z', lease_owner: null, lease_until: null, cursor: {}, counts: {}, error_code: null, error_message: null, started_at: null, finished_at: null, created_at: 'x', updated_at: 'x', ...over })
@@ -145,5 +145,57 @@ describe('sync jobs', () => {
     expect(backoffMs(1, () => 0.5)).toBe(60_000)
     expect(backoffMs(4, () => 0.5)).toBe(8 * 60_000)
     expect(backoffMs(20, () => 0.5)).toBe(60 * 60_000)
+  })
+})
+
+describe('polling interval', () => {
+  const caps = { products: true, customers: true, orders: true, webhooks: true, abandoned_carts: true, customer_phone: true, polling_minutes: null, notes: [] }
+  const now = Date.parse('2026-10-13T08:00:00Z')
+
+  it('keeps the hourly safety net for webhooks registered through the platform API', () => {
+    expect(pollingIntervalMinutes({ capabilities: caps, webhook_config: { registrations: [{ topic: 'order.created', externalId: '1', source: 'api' }] } }, now)).toBe(WEBHOOK_SAFETY_NET_MINUTES)
+  })
+
+  it('polls a store that only declares webhooks at the platform interval until a verified delivery arrives', () => {
+    // Custom connector: /health says webhooks and a secret is set, but nothing is registered on our side.
+    expect(pollingIntervalMinutes({ capabilities: caps, webhook_config: { registrations: [], last_delivery_at: null } }, now)).toBe(15)
+    expect(pollingIntervalMinutes({ capabilities: caps, webhook_config: { registrations: [], last_delivery_at: '2026-10-13T07:30:00Z' } }, now)).toBe(WEBHOOK_SAFETY_NET_MINUTES)
+    // A delivery older than a day no longer proves the webhooks work.
+    expect(pollingIntervalMinutes({ capabilities: caps, webhook_config: { registrations: [], last_delivery_at: '2026-10-12T07:00:00Z' } }, now)).toBe(15)
+    expect(pollingIntervalMinutes({ capabilities: { ...caps, webhooks: false, polling_minutes: 30 }, webhook_config: {} }, now)).toBe(30)
+  })
+
+  it('queues a custom store with declared but unverified webhooks after 15 minutes, not after an hour', async () => {
+    const db = commerceDb({ commerce_connections: [connectionRow({ platform: 'custom', capabilities: caps, webhook_config: { registrations: [] }, last_sync_at: '2026-10-13T07:40:00Z' })] })
+    expect(await schedulePollingJobs(asClient(db), log)).toBe(1)
+  })
+})
+
+describe('first import right after a connect', () => {
+  it('claims the queued job by id with a lease and runs one slice at once', async () => {
+    adapterState.adapter = fakeAdapter({ pages: { orders: [{ resource: 'orders', orders: [normalizedOrder()], checkpoint: { cursor: null, modifiedAfter: null, pages: 0 }, done: true }] } })
+    const db = commerceDb({ organizations: [orgRow()], commerce_connections: [connectionRow()], commerce_sync_jobs: [job({ run_after: '2026-10-13T08:00:00.000Z' })] })
+    const out = await kickInitialSync(asClient(db), CONN_A, log, { owner: 'kick:test' })
+    expect(out).toMatchObject({ status: 'succeeded' })
+    expect(db.tables.commerce_orders).toHaveLength(1)
+    expect(db.tables.commerce_sync_jobs[0]).toMatchObject({ status: 'succeeded', attempts: 1, lease_owner: null })
+  })
+
+  it('leaves a job a worker already claimed alone, and does nothing without a due job', async () => {
+    adapterState.adapter = fakeAdapter()
+    const db = commerceDb({ organizations: [orgRow()], commerce_connections: [connectionRow()], commerce_sync_jobs: [job()] })
+    const [claimed] = await claimSyncJobs(asClient(db), 'w1', 3)
+    expect(claimed.status).toBe('running')
+    expect(await kickInitialSync(asClient(db), CONN_A, log)).toBeNull()
+    expect(db.tables.commerce_sync_jobs[0]).toMatchObject({ status: 'running', lease_owner: 'w1', attempts: 1 })
+    const later = commerceDb({ commerce_connections: [connectionRow()], commerce_sync_jobs: [job({ run_after: '2026-10-13T09:00:00Z' })] })
+    expect(await kickInitialSync(asClient(later), CONN_A, log)).toBeNull()
+    expect(later.tables.commerce_sync_jobs[0]).toMatchObject({ status: 'pending', attempts: 0 })
+  })
+
+  it('does not run outside a request (the next cron tick imports) and never throws', () => {
+    const db = commerceDb({ commerce_connections: [connectionRow()], commerce_sync_jobs: [job()] })
+    expect(() => scheduleInitialSyncKick(asClient(db), CONN_A, log)).not.toThrow()
+    expect(db.tables.commerce_sync_jobs[0]).toMatchObject({ status: 'pending' })
   })
 })

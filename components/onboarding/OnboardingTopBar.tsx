@@ -6,7 +6,12 @@ import { Logo } from '@/components/shared/Logo'
 import { Button } from '@/components/ui/button'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { useCommerceOnboardingStore } from '@/store/useCommerceOnboardingStore'
-import { COMMERCE_ONBOARDING_STEPS, TOTAL_COMMERCE_ONBOARDING_STEPS, type OnboardingVariant } from '@/lib/commerce/business-type'
+import {
+  COMMERCE_ONBOARDING_STEPS,
+  TOTAL_COMMERCE_ONBOARDING_STEPS,
+  type CommerceOnboardingStepKey,
+  type OnboardingVariant,
+} from '@/lib/commerce/business-type'
 import { signOut } from '@/lib/auth/actions'
 import { ONBOARDING_STEPS, StepIndicator, TOTAL_ONBOARDING_STEPS, type OnboardingStepDef } from './StepIndicator'
 
@@ -19,12 +24,30 @@ interface OnboardingTopBarProps {
   variant?: OnboardingVariant
 }
 
+/**
+ * The store steps' words in the top bar: one short word each, so six steps fit between the logo
+ * and Exit. The step headers keep the full labels ("Step 2 · Connect your store").
+ */
+const COMMERCE_TOP_BAR_LABELS: Record<CommerceOnboardingStepKey, string> = {
+  store: 'Store',
+  platform: 'Platform',
+  access: 'Sync',
+  automations: 'Automations',
+  agent: 'Agent',
+  launch: 'Launch',
+}
+
 /** The step list and its total, per flow; the words around them are the same for both. */
-const STEP_LISTS: Record<OnboardingVariant, { steps: readonly OnboardingStepDef[]; total: number }> = {
-  services: { steps: ONBOARDING_STEPS, total: TOTAL_ONBOARDING_STEPS },
-  ecommerce: { steps: COMMERCE_ONBOARDING_STEPS, total: TOTAL_COMMERCE_ONBOARDING_STEPS },
+const STEP_LISTS: Record<OnboardingVariant, { steps: readonly OnboardingStepDef[]; total: number; compact: boolean }> = {
+  services: { steps: ONBOARDING_STEPS, total: TOTAL_ONBOARDING_STEPS, compact: false },
+  // Six steps: numbers only below xl, except the current step (see StepIndicator).
+  ecommerce: {
+    steps: COMMERCE_ONBOARDING_STEPS.map((s) => ({ num: s.num, label: COMMERCE_TOP_BAR_LABELS[s.key] })),
+    total: TOTAL_COMMERCE_ONBOARDING_STEPS,
+    compact: true,
+  },
   // The business-type screen comes before step 1 of either flow: no list, no counter.
-  choose: { steps: [], total: 0 },
+  choose: { steps: [], total: 0, compact: false },
 }
 
 export function OnboardingTopBar({ variant = 'services' }: OnboardingTopBarProps) {
@@ -33,7 +56,7 @@ export function OnboardingTopBar({ variant = 'services' }: OnboardingTopBarProps
   const commerceStep = useCommerceOnboardingStore((s) => s.currentStep)
   const [isPending, startTransition] = useTransition()
 
-  const { steps, total } = STEP_LISTS[variant]
+  const { steps, total, compact } = STEP_LISTS[variant]
   const currentStep = variant === 'ecommerce' ? commerceStep : serviceStep
   // The business-type screen shows an empty progress rule.
   const showSteps = variant !== 'choose'
@@ -56,6 +79,7 @@ export function OnboardingTopBar({ variant = 'services' }: OnboardingTopBarProps
           <StepIndicator
             currentStep={currentStep}
             steps={steps}
+            compact={compact}
             className="absolute top-1/2 left-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block"
           />
         )}

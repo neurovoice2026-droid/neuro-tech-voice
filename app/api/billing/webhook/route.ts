@@ -7,6 +7,7 @@ import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
 import { sendEmail } from '@/lib/email/client'
 import { paymentSuccessEmail, paymentFailedEmail } from '@/lib/email/templates'
 import { provisionPhoneNumber } from '@/lib/phone/provision'
+import { RELEASABLE_NUMBER_COLUMNS, releaseNumberEverywhere, type ReleasableNumber } from '@/lib/phone/release'
 import { createLogger, type Logger } from '@/lib/observability/logger'
 import { maskPhone } from '@/lib/phone/e164'
 import { isMinutePack } from '@/lib/billing/minute-packs'
@@ -59,7 +60,9 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
   } catch (err) {
-    console.error('Stripe webhook signature verification failed:', err)
+    // The error's type only: a StripeSignatureVerificationError carries the
+    // whole event body (customer e-mails, addresses, tax ids) and the header.
+    createLogger({ component: 'billing_webhook' }).warn('billing.webhook_signature_invalid', { errorType: errorTypeOf(err) })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -115,7 +118,7 @@ export async function POST(request: Request) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
         if (subscription.metadata?.type === 'phone_number') {
-          await releasePhoneNumber(supabase, subscription)
+          await releasePhoneNumber(supabase, subscription, log)
         } else {
           await downgradeToTrial(supabase, subscription)
         }
@@ -165,6 +168,13 @@ export async function POST(request: Request) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** A thrown value's Stripe error type (or class name), never its message or fields. */
+function errorTypeOf(err: unknown): string {
+  const type = (err as { type?: unknown } | null)?.type
+  if (typeof type === 'string') return type
+  return err instanceof Error ? err.name : typeof err
+}
 
 function idOf(value: string | { id: string } | null | undefined): string | null {
   if (!value) return null
@@ -355,34 +365,52 @@ async function provisionPurchasedNumber(supabase: SupabaseClient, session: Strip
 }
 
 // Phone-number subscriptions are cancelled for various reasons: the Customer
-// deliberately released the number, or Stripe gave up retrying after repeated
-// payment failures. Either way, nobody's paying for it anymore, so it's
-// deactivated here rather than left silently costing us Twilio's monthly fee
-// forever. Left in the DB (not deleted) so call history stays intact.
-async function releasePhoneNumber(supabase: SupabaseClient, subscription: Stripe.Subscription) {
-  const { data: phone } = await supabase
+// cancelled it in the Customer Portal, or Stripe gave up retrying after
+// repeated payment failures. Either way nobody pays for the number any more,
+// so it is released everywhere (lib/phone/release.ts: the provider imports,
+// then Twilio, which stops its monthly fee) and its row is deleted, as a
+// release from the dashboard (DELETE /api/phone/[id]) does; calls keep their
+// history. A failed read, write or release answers 500 and Stripe delivers the
+// event again; a repeated event, like the cancellation that follows a
+// dashboard release, finds no row left and does nothing.
+async function releasePhoneNumber(supabase: SupabaseClient, subscription: Stripe.Subscription, log: Logger) {
+  const { data: phone, error } = await supabase
     .from('phone_numbers')
-    .select('id, number')
+    .select(RELEASABLE_NUMBER_COLUMNS)
     .eq('stripe_subscription_id', subscription.id)
     .maybeSingle()
+  if (error) throw new Error(`phone_numbers read failed: ${error.message}`)
 
   if (!phone) {
-    console.warn(`Phone number subscription ${subscription.id} cancelled but no matching number found.`)
+    log.warn('billing.phone_subscription_without_number', { subscriptionId: subscription.id })
     return
   }
 
-  const { error } = await supabase
-    .from('phone_numbers')
-    .update({ is_active: false })
-    .eq('id', phone.id)
+  const row = phone as unknown as ReleasableNumber
+  const l = log.child({ orgId: row.org_id, phoneNumberId: row.id, number: maskPhone(row.number) })
+  await releaseNumberEverywhere(supabase, row, l)
+  l.info('billing.phone_number_released', { subscriptionId: subscription.id })
+}
 
-  if (error) {
-    console.error(`Failed to deactivate phone number ${phone.number} after subscription cancellation:`, error.message)
-  }
+/**
+ * The line an invoice is mostly for: the largest positive amount. An
+ * immediate upgrade's prorated invoice lists the old plan's unused time (a
+ * negative line) before the new plan's remaining time, so its first line
+ * would name the plan being left.
+ */
+function principalLine(invoice: Stripe.Invoice): Stripe.InvoiceLineItem | undefined {
+  const lines = invoice.lines?.data ?? []
+  return lines.reduce<Stripe.InvoiceLineItem | undefined>(
+    (best, line) => ((line.amount ?? 0) > (best?.amount ?? 0) ? line : best),
+    undefined,
+  ) ?? lines[0]
 }
 
 async function sendPaymentSuccess(supabase: SupabaseClient, stripe: Stripe, invoice: Stripe.Invoice) {
   if (!invoice.customer_email) return
+  // Nothing was charged (the first invoice of a subscription's free days, or
+  // one a credit balance covered): no "payment received" for 0.00.
+  if ((invoice.amount_paid ?? 0) <= 0) return
 
   // Pull the SmartBill invoice we just emitted (if any) for the email.
   let invoiceNumber: string | null = null
@@ -407,11 +435,11 @@ async function sendPaymentSuccess(supabase: SupabaseClient, stripe: Stripe, invo
   if (!itemDescription) {
     // The Stripe line item exposes the price under `price` (older) or
     // `pricing.price_details.price` (newer) — read defensively.
-    const line = invoice.lines?.data?.[0] as unknown as {
+    const line = principalLine(invoice) as unknown as {
       price?: { id?: string }
-      pricing?: { price_details?: { price?: string } }
+      pricing?: { price_details?: { price?: string | { id: string } } }
     } | undefined
-    const priceId = line?.price?.id ?? line?.pricing?.price_details?.price
+    const priceId = line?.price?.id ?? idOf(line?.pricing?.price_details?.price)
     try {
       plan = await resolvePlanFromPrice(stripe, priceId)
     } catch (err) {
@@ -573,19 +601,20 @@ async function updateOrg(
     return
   }
   // One conditional UPDATE: a concurrent switch to another subscription is never overwritten.
+  // The ids it wrote come back, so a write that matched nothing is visible.
   const write = (payload: Record<string, unknown>) => {
     const q = supabase.from('organizations').update(payload).eq(column, value)
-    return guard ? q.or(`stripe_subscription_id.is.null,stripe_subscription_id.eq.${guard}`) : q
+    return (guard ? q.or(`stripe_subscription_id.is.null,stripe_subscription_id.eq.${guard}`) : q).select('id')
   }
 
-  let { error } = await write(update)
+  let { data, error } = await write(update)
   if (error && 'billing_interval' in update && isMissingBillingIntervalColumn(error)) {
     // Deployed before migration 028: the plan and its minutes still apply,
     // only the monthly periods of an annual plan wait for the column.
     console.warn('Stripe webhook: organizations.billing_interval is missing (apply migration 028); updating without it')
     const withoutInterval = { ...update }
     delete withoutInterval.billing_interval
-    ;({ error } = await write(withoutInterval))
+    ;({ data, error } = await write(withoutInterval))
   }
   if (error) {
     // Thrown, so the webhook answers 500 and Stripe retries the delivery (for
@@ -594,4 +623,38 @@ async function updateOrg(
     // the cause is fixed, instead of billing a plan that is never granted.
     throw new Error(`organizations update failed: ${error.message}`)
   }
+  if (!Array.isArray(data) || data.length === 0) {
+    const written = update.stripe_subscription_id
+    const subscriptionId = guard ?? (typeof written === 'string' ? written : undefined)
+    await reportUnmatchedOrg(supabase, column, value, { orgId, customerId, subscriptionId, guarded: !!guard })
+  }
+}
+
+/**
+ * The update above matched no organization. Legitimate only when the
+ * subscription guard left out an organization that records another
+ * subscription; otherwise a paid subscription points at no organization (a
+ * deleted one, a subscription made in the Dashboard) and a human has to
+ * reconcile it: a warning with the Stripe and organization ids only.
+ */
+async function reportUnmatchedOrg(
+  supabase: SupabaseClient,
+  column: 'id' | 'stripe_customer_id',
+  value: string,
+  { orgId, customerId, subscriptionId, guarded }: { orgId: string | undefined; customerId: string | undefined; subscriptionId: string | undefined; guarded: boolean },
+) {
+  const log = createLogger({ component: 'billing_webhook' })
+  const ids = { orgId: orgId ?? null, customerId: customerId ?? null, subscriptionId: subscriptionId ?? null }
+  if (guarded) {
+    const { data, error } = await supabase.from('organizations').select('id').eq(column, value).limit(1)
+    if (error) {
+      log.error('billing.org_lookup_failed', error, ids)
+      return
+    }
+    if (Array.isArray(data) && data.length > 0) {
+      log.info('billing.org_update_skipped_other_subscription', ids)
+      return
+    }
+  }
+  log.warn('billing.org_unmatched', ids)
 }

@@ -5,6 +5,7 @@ import 'server-only'
 
 import { publicBaseUrl } from '@/lib/voice-providers/config'
 import { commerceCryptoConfigured } from './crypto'
+import type { CommerceConfigSummary } from './types'
 
 /** The public origin webhooks and OAuth callbacks are registered on (VOICE_PUBLIC_BASE_URL / NEXT_PUBLIC_APP_URL). */
 export function commercePublicBaseUrl(): string | null {
@@ -22,7 +23,7 @@ export interface ShopifyAppConfig {
 
 export const SHOPIFY_DEFAULT_SCOPES = 'read_orders,read_customers,read_products,read_checkouts'
 
-/** Shopify app credentials, or null when the app is not configured (the Shopify card then says so). */
+/** Shopify app credentials, or null when the app is not configured (summarizeCommerceConfig reports it; the connect cards show Shopify as unavailable). */
 export function shopifyAppConfig(): ShopifyAppConfig | null {
   const clientId = (process.env.SHOPIFY_CLIENT_ID ?? '').trim()
   const clientSecret = (process.env.SHOPIFY_CLIENT_SECRET ?? '').trim()
@@ -54,11 +55,7 @@ export function commerceWorkerBudgetMs(): number {
   return Number.isFinite(v) && v >= 5_000 && v <= 120_000 ? Math.floor(v) : 45_000
 }
 
-export interface CommerceConfigSummary {
-  encryption: boolean
-  shopify: boolean
-  publicBaseUrl: boolean
-}
+export type { CommerceConfigSummary }
 
 export function summarizeCommerceConfig(): CommerceConfigSummary {
   return { encryption: commerceCryptoConfigured(), shopify: !!shopifyAppConfig(), publicBaseUrl: !!commercePublicBaseUrl() }

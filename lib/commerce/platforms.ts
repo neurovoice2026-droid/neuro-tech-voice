@@ -43,7 +43,7 @@ export const PLATFORM_CATALOG: Record<CommercePlatform, PlatformDescriptor> = {
     howItWorks:
       'You create a REST API key pair with read/write permissions in WooCommerce. The platform reads orders, customers and products and registers signed webhooks for new orders and updates.',
     reads: ['Orders (payment method, status, total, items, contact phone)', 'Customers (name, phone, email)', 'Products (name, SKU, price, stock)'],
-    limits: ['Abandoned carts are not part of the standard WooCommerce API: the automation appears only if you install the documented companion plugin.'],
+    limits: ['Abandoned carts are not part of the standard WooCommerce API: the automation appears only once code on your store (a companion plugin) sends cart events to the connection’s webhook address, as the documentation describes.'],
     connectMode: 'credentials',
     fields: [
       { key: 'store_url', label: 'Store URL', type: 'url', placeholder: 'https://your-store.com', required: true, help: 'HTTPS only.' },
@@ -152,6 +152,15 @@ export const PLATFORM_CATALOG: Record<CommercePlatform, PlatformDescriptor> = {
 }
 
 export const PLATFORM_ORDER: readonly CommercePlatform[] = ['woocommerce', 'shopify', 'magento', 'prestashop', 'custom']
+
+/**
+ * Why a platform cannot be connected on a deployment that lacks its setup
+ * (GET /api/commerce/connections and the onboarding state report it in
+ * `config`): its card is shown disabled with this note, before any redirect.
+ */
+export const PLATFORM_UNAVAILABLE_NOTE: Partial<Record<CommercePlatform, string>> = {
+  shopify: 'The Shopify app is not set up on this platform yet. Choose another platform, or contact support.',
+}
 
 export function platformName(platform: string | null | undefined): string {
   return platform && Object.hasOwn(PLATFORM_CATALOG, platform) ? PLATFORM_CATALOG[platform as CommercePlatform].name : 'Store'
