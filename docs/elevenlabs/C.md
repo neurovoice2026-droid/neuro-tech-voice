@@ -57,12 +57,13 @@ ElevenLabs refuses to start a conversation that overrides a field the agent does
 
 ## 4. Plan minutes (`lib/telephony/quota.ts`)
 
-Plans with overage (`PLANS[plan].overage_per_min > 0`) are never refused or capped. A plan without overage (the trial) stops at `organizations.minutes_limit`:
-* **Outbound calls** (dashboard and test call) are refused with a 409 before anything is placed.
-* **App-routed inbound** calls are answered with the localized "unavailable" line, with no provider involved, after the after-hours handling. `routing_reason` is `quota_exhausted`. This is a **behaviour change**: exhausted trials used to keep receiving AI calls for free. Turn it off with `VOICE_TRIAL_MINUTES_ENFORCED=false`. `lib/calls/labels.ts` has no label for this reason (shared file), so these rows show as "Failed".
+Every plan has a hard cap (the full model is in `docs/billing.md`, sections 3 to 6). Capacity = the period's included minutes left (`minutes_limit - minutes_used`, never below 0) + the prepaid extra minutes (`extra_minutes_balance`, minute packs and auto top-up). Nothing is billed after the fact. When the capacity is 0:
+* **Outbound calls** (dashboard, test call, campaigns and store automations) are refused with a 409 before anything is placed. Store automations wait up to 24 hours for minutes, then skip the run (`docs/billing.md`, section 8).
+* **App-routed inbound** calls are answered with the localized "unavailable" line, with no provider involved, after the after-hours handling. `routing_reason` is `quota_exhausted` ("Minutes used up" in `lib/calls/labels.ts`).
 * **Native inbound** calls get the unavailable opening from the webhook (section 2).
 * Calls with minutes left are capped to them, with a 60 s minimum: Twilio `timeLimit` for app-routed outbound, the Cartesia SIP `timeLimit`, and the `max_duration_seconds` override where allowed.
-Unknown plan values and missing limits are never enforced (fail open).
+
+Unknown plan values and missing limits are never enforced (fail open). `VOICE_TRIAL_MINUTES_ENFORCED=false` is the global minute-cap switch: it turns the whole check off on every plan (the name predates the paid-plan cap).
 
 ## 5. Endpoints and fields
 
@@ -96,7 +97,7 @@ New modules: `lib/elevenlabs/api/phone-numbers.ts`, `lib/elevenlabs/api/telephon
 
 | Name | Default | Meaning |
 | --- | --- | --- |
-| `VOICE_TRIAL_MINUTES_ENFORCED` | `true` | `false` turns off the plan-minutes gate and caps for plans without overage (section 4). |
+| `VOICE_TRIAL_MINUTES_ENFORCED` | `true` | The global minute-cap switch: `false` turns off the hard cap (refusals and call caps) on every plan (section 4, `docs/billing.md`). Now listed in `.env.example`. |
 | `ELEVENLABS_TOOL_SECRET` | none | Existing (slice B1). Also required for the initiation webhook. Without it, native agents get no webhook and keep the placeholders, and the route refuses every request. |
 | `VOICE_PUBLIC_BASE_URL` | none | Existing. Must be HTTPS for the webhook to be configured. |
 

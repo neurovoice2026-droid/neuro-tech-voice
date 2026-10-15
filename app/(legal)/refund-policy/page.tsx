@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Our policy on trials, billing, cancellations, and refunds.',
 }
 
-const UPDATED = 'July 4, 2026'
+const UPDATED = 'October 15, 2026'
 
 export default function RefundPolicyPage() {
   return (
@@ -27,7 +27,14 @@ export default function RefundPolicyPage() {
           Paid plans are billed in advance, either monthly or annually depending on the billing
           interval you select. Annual billing is discounted to the equivalent of 10 months&apos;
           payment (2 months free) compared to paying monthly. Subscriptions renew automatically
-          at the end of each billing period until cancelled.
+          at the end of each billing period until canceled. An upgrade to a higher-priced plan
+          on the same billing interval takes effect right away, and the price difference for the
+          rest of the billing period is charged immediately. A downgrade, a change to a plan at
+          the same price, or a change between monthly and annual billing takes effect at the
+          end of the current billing period: nothing is charged or refunded at the time of the
+          change, and the new price is invoiced at that renewal. While a paid subscription is
+          still in its free trial period, a change takes effect right away and nothing is
+          charged until the trial ends.
         </p>
       </LegalSection>
 
@@ -62,19 +69,38 @@ export default function RefundPolicyPage() {
             investigate and issue a refund or credit if warranted; and
           </li>
           <li>
-            annual plans cancelled shortly after purchase may, at our discretion, receive a
+            annual plans canceled shortly after purchase may, at our discretion, receive a
             pro-rated refund for the unused portion of the year, minus any minutes already
             consumed.
           </li>
         </ul>
       </LegalSection>
 
-      <LegalSection title="5. Overage charges">
+      <LegalSection title="5. Included minutes and extra minute packs">
         <p>
-          If your usage exceeds the minutes included in your plan, additional minutes are billed
-          at your plan&apos;s per-minute overage rate. Overage charges reflect calls already
-          placed or received and are non-refundable.
+          Each paid plan includes a number of call minutes a month. Included minutes reset every
+          month, on annual billing too, and do not carry over. When your included minutes and any
+          extra minutes you bought are used up, calls pause until you add minutes; we do not bill
+          usage after the fact.
         </p>
+        <p>
+          On a paid plan you can buy extra minute packs. Packs are prepaid, one-time purchases,
+          charged when you buy them (or, if you turn on auto top-up, each time your remaining
+          minutes fall below the threshold you set). Purchased minutes are used only after your
+          plan&apos;s included minutes and never expire while your account exists.
+        </p>
+        <ul>
+          <li>minutes already used, from a pack or from your plan, are non-refundable;</li>
+          <li>
+            a request to refund a pack, or the unused minutes of a pack (for example, an auto
+            top-up you did not intend or a duplicate charge), is handled under section 4 above,
+            like any other refund request; and
+          </li>
+          <li>
+            you can turn auto top-up off at any time from your billing settings; a failed auto
+            top-up charge is never retried automatically.
+          </li>
+        </ul>
       </LegalSection>
 
       <LegalSection title="6. Contact us">

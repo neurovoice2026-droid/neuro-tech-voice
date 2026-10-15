@@ -254,7 +254,15 @@ describe('metrics & chart', () => {
       ], error: null, count: 3 }
     }
     const body = await (await metricsGET(req('/api/dashboard/metrics'))).json()
-    expect(body).toMatchObject({ total_calls: 3, calls_today: 3, success_rate: 50, avg_duration_seconds: 60, minutes_used: 10, minutes_limit: 150, sentiment_breakdown: { positive: 1, neutral: 0, negative: 0 } })
+    expect(body).toMatchObject({ total_calls: 3, calls_today: 3, success_rate: 50, avg_duration_seconds: 60, minutes_used: 10, minutes_limit: 150, extra_balance: 0, total_left: 140, sentiment_breakdown: { positive: 1, neutral: 0, negative: 0 } })
+  })
+  it('metrics: purchased minutes left, and everything left once the included minutes are used', async () => {
+    handler = (table) => {
+      if (table === 'organizations') return { data: { minutes_used: 180, minutes_limit: 150, extra_minutes_balance: 70 }, error: null }
+      return { data: [], error: null, count: 0 }
+    }
+    const body = await (await metricsGET(req('/api/dashboard/metrics'))).json()
+    expect(body).toMatchObject({ minutes_used: 180, minutes_limit: 150, extra_balance: 70, total_left: 70 })
   })
   it('chart', async () => {
     handler = () => ({ data: [{ status: 'completed', sentiment: null, duration_seconds: 120, started_at: new Date().toISOString(), created_at: new Date().toISOString() }], error: null, count: 1 })

@@ -16,6 +16,22 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), geolocation=(), browsing-topics=()" },
 ];
 
+// The store dashboard moved from Romanian paths (/magazin/...) to English ones
+// (/store/...). Bookmarks and links in e-mails already sent keep working: each
+// removed path answers a permanent (308) redirect to the page that replaced it.
+// Next passes the query string through. Redirects run before the proxy, so a
+// signed-out visitor lands on /store and is sent to the login from there.
+const LEGACY_STORE_REDIRECTS: ReadonlyArray<{ source: string; destination: string }> = [
+  { source: "/magazin", destination: "/store" },
+  { source: "/magazin/conexiuni", destination: "/store/connections" },
+  { source: "/magazin/comenzi", destination: "/store/orders" },
+  { source: "/magazin/clienti", destination: "/store/customers" },
+  { source: "/magazin/produse", destination: "/store/products" },
+  { source: "/magazin/automatizari", destination: "/store/automations" },
+  { source: "/magazin/nu-suna", destination: "/store/do-not-call" },
+  { source: "/magazin/setari", destination: "/store/settings" },
+];
+
 const nextConfig: NextConfig = {
   // Don't advertise the framework.
   poweredByHeader: false,
@@ -27,6 +43,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
+  },
+
+  async redirects() {
+    return LEGACY_STORE_REDIRECTS.map((r) => ({ ...r, permanent: true }));
   },
 
   async headers() {

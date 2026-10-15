@@ -33,7 +33,8 @@ code, docs and merchant-facing UI are English.
   `create_deployment` with `gitSource`).
 - Supabase project `acqqacynjzzwwackjizu` (MCP: `apply_migration`,
   `execute_sql`, `get_advisors`, `list_migrations`). Migrations 001 through
-  025 are applied. pg_cron job `ntv-voice-maintenance` calls
+  026 are applied; 027 and 028 are NOT applied yet (remaining step 3 applies
+  them, before the push). pg_cron job `ntv-voice-maintenance` calls
   `/api/cron/voice-maintenance` every 5 minutes with `CRON_SECRET`.
 - Vercel env already set: `COMMERCE_CREDENTIALS_ENCRYPTION_KEY` (sensitive,
   production + preview). Not set, by design until the owner has them:
@@ -63,6 +64,27 @@ code, docs and merchant-facing UI are English.
   (122 pre-existing warnings), tsc clean, `npm run build` clean, deploy READY,
   cron tick clean, six ElevenLabs platform tools created, 0 existing agents
   changed.
+- `45e7f1c` feat(billing,commerce): store pricing plans and the English store
+  experience (migration 026 applied; deploy READY).
+- `2fcbfa4` fix(onboarding): the service onboarding's steps 1 and 2 now save
+  on the server (`/api/onboarding/company`, `/api/onboarding/agent`) before
+  advancing, and PUT /api/agent/voice creates the org's local agent row with
+  `ensureAgent` when it is missing. Before this, step 3 answered "Agent not
+  found. Finish setting up your agent first." for every voice. Deploy
+  `dpl_H6RvDWYAEsBqJfR5o54zNJVXF1bt` READY on www.neurotechvoice.com.
+  The same change is applied in the working tree, so the next commit must
+  use `2fcbfa4` (or newer `main`) as its parent. Confirmed in production:
+  an owner finished the service onboarding after this deploy (agent row
+  created at step 3, voice synced, provider agents created at launch).
+- Production data fix (2026-10-14, SQL, no code): migration 024 backfilled
+  every pre-024 organization to `business_type = 'services'`, including 7
+  that had never started onboarding (step 1, no agent, no number, no Stripe
+  customer), so they never saw Step 0. Those 7 were reset to
+  `business_type = NULL`, `onboarding_step = 1`, which is exactly a new
+  sign-up's state: they now get the services / online store choice. Orgs
+  that completed onboarding keep `services`. A Google account registered
+  before 024 is not a new account: signing in with it returns its old
+  organization.
 - Known, intentional limits (documented in `docs/commerce-integrations.md`):
   custom-connector HMAC covers the body only; Shopify expiring tokens are not
   refreshed (offline token in use); Shopify `customer_phone` stays
@@ -79,15 +101,22 @@ sign-up sees (Step 0 and the store onboarding were Romanian).
 
 Design decisions already taken (do not re-open):
 
-| id | name | monthly | annual | minutes | overage | family |
+| id | name | monthly | annual | minutes | extra minute | family |
 |---|---|---|---|---|---|---|
 | store_starter | Store Starter | $100 | $1,000 | 350 | $0.25 | ecommerce |
 | store_growth | Store Growth | $250 | $2,500 | 950 | $0.22 | ecommerce |
 | store_scale | Store Scale | $500 | $5,000 | 2,000 | $0.20 | ecommerce |
 | store_enterprise | Store Enterprise | $1,000 | $10,000 | 4,500 | $0.18 | ecommerce, contact sales |
 
-- Blended COGS ~ $0.10/min, so every tier keeps >= 60% gross margin at full
-  usage; annual = 10 x monthly (two months free), like the service plans.
+- Pricing note (figures only, no margin claim): blended cost is about $0.10
+  per minute. An included store minute sells for about $0.29 on Store
+  Starter, $0.26 on Store Growth, $0.25 on Store Scale and $0.22 on Store
+  Enterprise's starting fee when every included minute is used, monthly
+  billing; a sixth less on annual billing. Extra minutes sell at the plan's
+  rate, $0.25 down to $0.18, and up to 12% less in the bigger packs (Store
+  Enterprise's 2,500-minute pack works out at about $0.158 a minute). The
+  service plans' cost note is in "app plans aligned with the homepage"
+  below. Annual = 10 x monthly (two months free), like the service plans.
 - `types/index.ts`: `Plan` gains the four ids; `PlanConfig.family`
   (`'services' | 'ecommerce' | 'any'`, trial = any); `SERVICE_PLANS`,
   `STORE_PLANS`, `plansForBusinessType()`, `planAllowedFor()`. Rule: an
@@ -141,8 +170,9 @@ extra minutes." Decisions (do not re-open): hard cap on every plan (capacity
 = included left + purchased balance; unknown plans fail open;
 VOICE_TRIAL_MINUTES_ENFORCED=false disables the cap); packs of 100 / 500 /
 1,000 / 2,500 minutes priced at the plan's extra-minute rate
-(PLANS[plan].overage_per_min: 0.25 / 0.25 / 0.22 / 0.18 for services,
-0.25 / 0.22 / 0.20 / 0.18 for stores) with volume discounts 0 / 4 / 8 / 12%;
+(PLANS[plan].overage_per_min: $0.20 on every service plan since the
+homepage alignment below, Enterprise included; 0.25 / 0.22 / 0.20 / 0.18 for
+the store plans) with volume discounts 0 / 4 / 8 / 12%;
 only paid plans can buy; purchased minutes never expire and are used after
 the included ones; minutes_used resets on each Stripe renewal
 (invoice.paid subscription_cycle / subscription_create, idempotent per
@@ -156,10 +186,58 @@ paid price cannot be resolved, plan display names, atomic one-time business
 type, /magazin -> /store redirects, no empty catch in the intent cookie
 reader. Migration `027_minute_packs.sql` (new columns, minute_purchases,
 credit_minute_purchase, start_usage_period, claim_auto_topup, updated
-record_call_usage) must be applied to Supabase BEFORE deploying, because
-the code selects the new columns. Workflow run: `wf_0867dbb2-576`; WIP
+record_call_usage), then `028_service_plans.sql` (Growth and Scale in the
+plan CHECK, billing_interval, roll_annual_usage_periods), must be applied to
+Supabase BEFORE deploying, because the code selects the new columns
+(remaining step 3). Workflow run: `wf_0867dbb2-576`; WIP
 snapshots on `claude/amazing-shannon-ognheq` (22e164c, 96a2859) are to be
 squashed with the result onto `7d0cca6` into one commit for `main`.
+
+## Added 2026-10-15: app plans aligned with the homepage (owner request)
+
+The owner saw different plans and prices in the app (billing page,
+onboarding launch step, Stripe Checkout) than on the homepage. Decision (do
+not re-open): the homepage price list of 23 Sep 2026 wins, and `PLANS`
+(`types/index.ts`) is the single source of truth; `lib/site.ts` `TIERS`
+reads its numbers from `PLANS`, and `tests/plan-parity.test.ts` holds them
+together, so they cannot drift again.
+
+| id | name | monthly | annual | minutes | extra min |
+|---|---|---|---|---|---|
+| starter | Starter | $49 | $490 | 400 | $0.20 |
+| growth | Growth | $99 | $990 | 1,000 | $0.20 |
+| pro | Pro (featured) | $249 | $2,490 | 3,000 | $0.20 |
+| business | Business | $499 | $4,990 | 5,000 | $0.20 |
+| scale | Scale | $990 | $9,900 | 15,000 | $0.20 |
+| custom | Enterprise | "Talk to us" (no published price) | | starts from 15,000 | $0.20 |
+
+The store plans keep the values in the table above. Annual = 10 x monthly.
+
+- Cost note (the only margin wording to use): blended cost is
+  about $0.10 per minute, so at full use of the included minutes Growth and
+  Business run near break-even and Pro and Scale below it; extra minutes at
+  $0.20 keep about 50%.
+- Stripe prices: an env pin (`STRIPE_STARTER_PRICE_ID`, `STRIPE_PRO_PRICE_ID`,
+  `STRIPE_BUSINESS_PRICE_ID` and their `_ANNUAL` variants, created July 2026
+  with unknown, probably old amounts; never read or print their values) is
+  used only while Stripe reports it active, USD, on the plan's interval, at
+  exactly the `PLANS` price, AND tagged `metadata.ntv_plan = <plan>` (price,
+  else its product). Otherwise it is ignored (a warning without the id) and
+  `ensurePlanPriceId` (`lib/stripe/store-prices.ts`) finds or creates the
+  price by lookup key `ntv_<plan>_<interval>`. A price whose amount differs
+  from `PLANS` is never charged. Checkout colours and logo are the Stripe
+  Dashboard's branding (Settings > Branding), not set from code.
+- The 14 free days of a first plan subscription grant at most 100 included
+  minutes (`STRIPE_TRIAL_MINUTES`, `lib/billing/stripe-trial.ts`) until the
+  first payment; the full allowance once the subscription is active. Default
+  chosen without the owner; tell the owner in the hand-off.
+- The billing webhook answers 500 when the organizations write fails (Stripe
+  retries for up to 3 days), so a Growth or Scale plan paid before migration
+  028 is applied is granted once 028 is in place instead of being lost.
+- Database: migration `027_minute_packs.sql`, then `028_service_plans.sql`
+  (Growth and Scale in `organizations_plan_check`, `billing_interval`,
+  `roll_annual_usage_periods`), BEFORE the deploy (remaining step 3). Without
+  028 the database refuses `growth` and `scale`.
 
 ## Remaining steps for this task (in order)
 
@@ -168,10 +246,24 @@ squashed with the result onto `7d0cca6` into one commit for `main`.
 2. Review the money path by hand: `app/api/billing/checkout/route.ts`,
    `app/api/billing/webhook/route.ts`, `app/api/onboarding/complete/route.ts`,
    `lib/stripe/store-prices.ts`, `lib/stripe/client.ts`.
-3. Migration 026 is already applied (verified); nothing to do unless the
-   project was reset.
-4. Squash the WIP snapshot into one commit on top of `1e62bd5`
-   (`git reset --soft 1e62bd5`, then commit with a descriptive message and
+3. Apply the database migrations BEFORE step 4 (pushing to `main` deploys
+   to production). Migration 026 is already applied (verified). Apply
+   `supabase/migrations/027_minute_packs.sql`, then
+   `supabase/migrations/028_service_plans.sql`, with the Supabase MCP
+   `apply_migration` (names `027_minute_packs` and `028_service_plans`, the
+   file contents as the query; both are re-runnable and rewrite no row, and
+   028 needs 027). The new code reads the new columns and throws when they are
+   missing: every app-routed inbound call (`lib/telephony/context.ts`
+   through `router.ts`), native inbound initiation
+   (`lib/telephony/initiation.ts`), store automations
+   (`lib/commerce/automations/dispatch.ts`), dashboard metrics and the store
+   overview would fail. Verify before going on: `list_migrations` lists both;
+   `execute_sql` with `select extra_minutes_balance, usage_alert_notified_at,
+   billing_interval from public.organizations limit 1` succeeds; and
+   `get_advisors` (security and performance) shows nothing new. Only then go
+   on to step 4.
+4. Build one commit on top of the current `main` (`2fcbfa4` or newer) with
+   `git commit-tree` from the validated working tree (descriptive message and
    the trailers), push to `main` and to `claude/amazing-shannon-ognheq`
    (`git push origin HEAD:main` and `HEAD:claude/amazing-shannon-ognheq`;
    if the branch has the WIP commit, `--force-with-lease` is fine on that

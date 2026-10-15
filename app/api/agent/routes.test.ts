@@ -60,6 +60,12 @@ vi.mock('@/lib/stripe/client', () => ({
   getStripeClient: () => stripe,
   isStripeConfigured: () => stripeConfigured.value,
 }))
+// Plan prices (an env pin validated against PLANS, else found or created by
+// lookup key) are lib/stripe/store-prices.test.ts's subject; here every
+// self-serve plan simply has one.
+vi.mock('@/lib/stripe/store-prices', () => ({
+  ensurePlanPriceId: async (plan: string, interval: string) => `price_${plan}_${interval}`,
+}))
 const sendEmail = vi.fn()
 vi.mock('@/lib/email/client', () => ({ sendEmail: (...a: unknown[]) => sendEmail(...a) }))
 
@@ -431,16 +437,9 @@ describe('onboarding', () => {
 
 describe('billing', () => {
   it('checkout writes stripe_customer_id via admin scoped by org', async () => {
-    vi.stubEnv('STRIPE_STARTER_PRICE_ID', 'price_starter')
-    const { PLANS } = await import('@/types')
-    const configuredPlan = (['starter', 'pro', 'business'] as const).find((p) => PLANS[p].stripe_price_id)
-    if (!configuredPlan) {
-      const res = await billingCheckout(req('/api/billing/checkout', 'POST', { plan: 'starter' }))
-      expect(res.status).toBe(400) // no price configured in this env
-      return
-    }
-    const res = await billingCheckout(req('/api/billing/checkout', 'POST', { plan: configuredPlan }))
+    const res = await billingCheckout(req('/api/billing/checkout', 'POST', { plan: 'starter' }))
     expect(res.status).toBe(200)
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({ line_items: [{ price: 'price_starter_month', quantity: 1 }] }))
     const [u] = updates(state.admin!, 'organizations')
     expect(u.payload).toEqual({ stripe_customer_id: 'cus_1' })
     expect(filterOf(u, 'id')).toBe(ORG)

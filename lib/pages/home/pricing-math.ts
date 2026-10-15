@@ -24,6 +24,7 @@ export type HomePlan = {
   name: string;
   monthly: number;
   minutes: number;
+  /** USD per prepaid extra minute past the allowance (Tier.overage). */
   overage: number;
   /** Our recommendation ("Our pick"). */
   featured: boolean;
@@ -58,7 +59,9 @@ export type Estimate = {
   plan: HomePlan;
   /** Plan fee for the month, rounded to the cent. */
   fee: number;
+  /** Minutes past the allowance: without prepaid extra minutes, calls pause here. */
   overMinutes: number;
+  /** Those minutes bought as prepaid extra minutes at the plan's own rate, rounded to the cent. */
   overCost: number;
   /** `fee + overCost`, so the receipt adds up to the figure it prints. */
   total: number;
@@ -81,7 +84,8 @@ export function planFee(plan: HomePlan, annual: boolean): number {
 
 /**
  * The bill for a number of calls a day: the listed plan that costs least
- * at that volume, by the same `costFor` the product pages use.
+ * at that volume, by the same `costFor` the product pages use (the fee,
+ * plus prepaid extra minutes for anything past the allowance).
  */
 export function estimate(callsDay: number, annual: boolean): Estimate {
   const calls = Number.isFinite(callsDay)

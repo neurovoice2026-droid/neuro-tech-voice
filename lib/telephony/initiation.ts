@@ -5,8 +5,8 @@ import 'server-only'
 // what register-call gives app-routed calls: our call id, the signed
 // correlation and tool tokens (so platform tools work on native calls), the
 // real after_hours, the direction and routing mode, the business and tenant
-// variables, and an "unavailable" opening for a paused agent/number or a used
-// up trial.
+// variables, and an "unavailable" opening for a paused agent/number or an
+// organization out of minutes (included and purchased, lib/telephony/quota.ts).
 //
 // Tenant isolation: the organization comes ONLY from the agent_id (our
 // agent_provider_resources row); the called number must be a phone_numbers row
@@ -32,7 +32,7 @@ import { evaluateWorkingHours } from '@/lib/voice-providers/working-hours'
 import { normalizeAgentLanguage } from '@/lib/voice/languages'
 import { maskPhone, normalizeE164 } from '@/lib/phone/e164'
 import { conversationOverride, platformVariables, type ClientDataInput } from './client-data'
-import { callAllowance } from './quota'
+import { callAllowance, connectedCallCapSeconds } from './quota'
 
 /** Answer within this budget whatever happens (the caller is waiting). */
 export const INITIATION_DEADLINE_MS = 1_200
@@ -160,8 +160,8 @@ async function resolve(req: InitiationWebhookRequest, partial: KnownSoFar, log: 
   const orgId = resource.org_id
 
   const [org, agent] = await Promise.all([
-    one<{ id: string; name: string | null; timezone: string | null; plan: string | null; minutes_used: number | null; minutes_limit: number | null }>(
-      db.from('organizations').select('id, name, timezone, plan, minutes_used, minutes_limit').eq('id', orgId).maybeSingle(),
+    one<{ id: string; name: string | null; timezone: string | null; plan: string | null; minutes_used: number | null; minutes_limit: number | null; extra_minutes_balance: number | null }>(
+      db.from('organizations').select('id, name, timezone, plan, minutes_used, minutes_limit, extra_minutes_balance').eq('id', orgId).maybeSingle(),
       'organizations',
     ),
     one<{ id: string; name: string; language: string | null; is_active: boolean | null; conversation_settings: unknown; metadata: Record<string, unknown> | null; working_hours: unknown; after_hours: unknown; dynamic_variables: unknown }>(
@@ -176,7 +176,8 @@ async function resolve(req: InitiationWebhookRequest, partial: KnownSoFar, log: 
   const language = normalizeAgentLanguage(agent.language)
   const conversation = readConversationSettings(agent.conversation_settings ?? agent.metadata?.behavior_settings)
   const hours = evaluateWorkingHours(readWorkingHours(agent.working_hours), org.timezone, readAfterHours(agent.after_hours), new Date(now))
-  const allowance = callAllowance({ plan: org.plan, minutes_used: org.minutes_used, minutes_limit: org.minutes_limit })
+  const usage = { plan: org.plan, minutes_used: org.minutes_used, minutes_limit: org.minutes_limit, extra_minutes_balance: org.extra_minutes_balance }
+  const allowance = callAllowance(usage)
   const base = (over: { callId: string | null; direction: 'inbound' | 'outbound'; routingMode: 'app_routed' | 'native'; afterHours: boolean; unavailable: boolean; endUser: string | null }): ClientDataInput => ({
     callId: over.callId,
     orgId,
@@ -188,7 +189,9 @@ async function resolve(req: InitiationWebhookRequest, partial: KnownSoFar, log: 
     endUserNumber: over.endUser,
     tenantVariables: partial.tenantVariables,
     allowedOverrides: overridesInForce(resource.details),
-    capSeconds: allowance.capSeconds,
+    // A new call without minutes opens with the unavailable line instead; a
+    // call already placed or routed keeps at least the minimum capped length.
+    capSeconds: connectedCallCapSeconds(usage),
     unavailable: over.unavailable,
   })
 

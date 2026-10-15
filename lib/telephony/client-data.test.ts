@@ -1,9 +1,8 @@
 // The shared conversation_initiation_client_data builder (register-call,
-// native outbound-call, initiation webhook), the plan-minutes allowance and
-// the override allow-list in force at the provider.
+// native outbound-call, initiation webhook) and the override allow-list in
+// force at the provider. The plan-minutes allowance: ./quota.test.ts.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildClientData, conversationOverride, endUserId, platformVariables, UNAVAILABLE_MAX_DURATION_S, type ClientDataInput } from './client-data'
-import { callAllowance, MIN_CAPPED_CALL_SECONDS } from './quota'
 import { verifyCallToken } from './tokens'
 import { allowedOverridePaths, clientOverridesDetail, overridesInForce, OVERRIDE_FIRST_MESSAGE, OVERRIDE_MAX_DURATION } from '@/lib/elevenlabs/client-overrides'
 import { PLATFORM_AGENT_CONFIG_VERSION, buildElevenLabsAgentBody } from '@/lib/elevenlabs/agent-config'
@@ -108,26 +107,6 @@ describe('conversation_config_override', () => {
   it('never overrides anything outside the allow-list', () => {
     const o = conversationOverride(input({ direction: 'outbound', capSeconds: 60, allowedOverrides: new Set() }))
     expect(o).toBeNull()
-  })
-})
-
-describe('plan minutes', () => {
-  it('paid plans (overage) are never refused or capped', () => {
-    expect(callAllowance({ plan: 'starter', minutes_used: 999, minutes_limit: 150 })).toEqual({ allowed: true, capSeconds: null })
-  })
-
-  it('a trial is capped to the minutes left and refused once they are used', () => {
-    expect(callAllowance({ plan: 'trial', minutes_used: 10, minutes_limit: 30 })).toEqual({ allowed: true, capSeconds: 1200 })
-    expect(callAllowance({ plan: 'trial', minutes_used: 29.5, minutes_limit: 30 })).toEqual({ allowed: true, capSeconds: MIN_CAPPED_CALL_SECONDS })
-    expect(callAllowance({ plan: 'trial', minutes_used: 30, minutes_limit: 30 })).toEqual({ allowed: false, capSeconds: 0 })
-  })
-
-  it('fails open on unknown plans, missing limits and when turned off', () => {
-    expect(callAllowance({ plan: 'free', minutes_used: 99, minutes_limit: 10 }).allowed).toBe(true)
-    expect(callAllowance({ plan: 'trial', minutes_used: 99, minutes_limit: null }).allowed).toBe(true)
-    expect(callAllowance(null).allowed).toBe(true)
-    vi.stubEnv('VOICE_TRIAL_MINUTES_ENFORCED', 'false')
-    expect(callAllowance({ plan: 'trial', minutes_used: 30, minutes_limit: 30 }).allowed).toBe(true)
   })
 })
 

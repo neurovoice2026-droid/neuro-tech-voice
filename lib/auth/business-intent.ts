@@ -61,8 +61,10 @@ export function readBusinessIntent(cookieHeader: string | null | undefined): Bus
     let value = pair.slice(eq + 1).trim()
     try {
       value = decodeURIComponent(value)
-    } catch {
-      // A value that was never percent-encoded by us: judged as written.
+    } catch (err) {
+      // decodeURIComponent only throws URIError (a stray '%', a value never
+      // percent-encoded by us): that value is judged as written.
+      if (!(err instanceof URIError)) throw err
     }
     return isBusinessType(value) ? value : null
   }

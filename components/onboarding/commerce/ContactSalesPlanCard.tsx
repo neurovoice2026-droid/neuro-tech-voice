@@ -1,63 +1,55 @@
 'use client'
 
-// The sales-led tier of a plan family (Store Enterprise) as a plan card. It
-// keeps PlanCard's five subgrid rows (name, tagline, price + note, rule,
-// features) so it lines up with the self-serve cards next to it, but shows a
-// "from" price and no checkout note: picking it launches on the trial and the
-// team sets the plan up (POST /api/onboarding/complete treats contact_sales
-// plans that way).
+// The sales-led plan of a family (Enterprise for services, Store Enterprise
+// for stores) at launch, as its homepage card (components/pricing,
+// EnterpriseTierCard): a name, the line where a fee would be ("Priced with
+// you", "From $1,000 a month"), what it has, and the radio. Picking it
+// launches on the trial and the team sets the plan up (POST
+// /api/onboarding/complete treats contact_sales plans that way);
+// ContactSalesNote says so under the cards.
 
-import { Check } from 'lucide-react'
-import { OptionCard } from '@/components/shared/OptionCard'
-import { cn } from '@/lib/utils'
+import { AppPlanTierCard, PlanTierRadio } from '@/components/pricing/AppPlanTiers'
+import { CONTACT_SALES_HREF, CONTACT_SALES_PHONE } from '@/lib/billing/upgrade'
 import { PLANS, type Plan } from '@/types'
 
 interface ContactSalesPlanCardProps {
   id: Plan
+  /** Its place among the cards. */
+  index: number
   selected: boolean
   onSelect: () => void
-  /** Chip next to the name. */
-  badge?: React.ReactNode
+  annual: boolean
   disabled?: boolean
-  className?: string
 }
 
-export function ContactSalesPlanCard({ id, selected, onSelect, badge, disabled, className }: ContactSalesPlanCardProps) {
-  const p = PLANS[id]
+export function ContactSalesPlanCard({ id, index, selected, onSelect, annual, disabled }: ContactSalesPlanCardProps) {
+  const name = PLANS[id].name
   return (
-    <OptionCard
-      selected={selected}
-      onSelect={onSelect}
-      // leading-6 = the badge's height, so a badge never makes one title row taller than another.
-      title={<span className="text-[15px] leading-6">{p.name}</span>}
-      badge={badge}
+    <AppPlanTierCard
+      plan={id}
+      annual={annual}
+      index={index}
+      idPrefix="launch-plan"
+      state={selected ? 'selected' : undefined}
+      stateLabel="Selected"
       disabled={disabled}
-      className={cn('row-span-5 mb-3 grid grid-rows-subgrid gap-0 p-5', !selected && 'bg-white shadow-hair hover:bg-band', className)}
-    >
-      <span aria-hidden="true" className="mt-0.5 text-[13px] leading-[19px] text-muted-foreground">
-        For high-volume stores
-      </span>
-      <span className="mt-4 flex flex-col">
-        <span className="flex flex-wrap items-baseline gap-x-1.5">
-          <span className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">${p.price_monthly.toLocaleString('en-US')}+</span>
-          <span className="text-[13px] leading-[19px] text-muted-foreground">/ month</span>
-        </span>
-        <span className="mt-1 text-xs leading-4 text-muted-foreground">Volume pricing · contact sales</span>
-      </span>
-      <span aria-hidden="true" className="my-4 block h-px w-full bg-rule" />
-      <span className="grid w-full content-start gap-x-6 gap-y-2 sm:grid-cols-2">
-        {p.features.map((f, i) => (
-          <span
-            key={f}
-            // The first line is the minutes allowance; the rest is visual detail of the radio.
-            aria-hidden={i > 0 ? true : undefined}
-            className="flex items-start gap-2 text-[13px] leading-[19px] text-foreground"
-          >
-            <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            {f}
-          </span>
-        ))}
-      </span>
-    </OptionCard>
+      onPick={selected ? undefined : onSelect}
+      action={<PlanTierRadio name={name} selected={selected} pick={false} disabled={disabled} onSelect={onSelect} />}
+    />
+  )
+}
+
+/** Under the cards once a sales-led plan is chosen: what happens at launch, and the sales line (the homepage's). */
+export function ContactSalesNote({ plan }: { plan: Plan }) {
+  const name = PLANS[plan].name
+  return (
+    <p className="mt-3 text-[13px] leading-[19px] text-muted-foreground" aria-live="polite">
+      {name} is set up with our team: you launch on the free trial now and we get in touch to agree volume and terms. In a
+      hurry? Call{' '}
+      <a href={CONTACT_SALES_HREF} className="font-medium text-foreground underline underline-offset-4 tabular-nums">
+        {CONTACT_SALES_PHONE}
+      </a>
+      .
+    </p>
   )
 }

@@ -3,7 +3,7 @@ import 'server-only'
 // problems that stop automations from working (each with where to fix it).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { callAllowance } from '@/lib/telephony/quota'
+import { callAllowance, type OrgUsage } from '@/lib/telephony/quota'
 import { commerceCryptoConfigured } from './crypto'
 import { enableGate, listAutomationDtos } from './automations/service'
 import { type ConnectionRow, RUN_COLUMNS_WITH_REFS, type RunRow, connectionDto, countRunsByStatus, primaryConnection, readWebhookConfig, runDto } from './store'
@@ -16,7 +16,7 @@ export async function buildOverview(db: SupabaseClient, org: { id: string; plan:
     countRunsByStatus(db, { orgId: org.id }),
     db.from('commerce_automation_runs').select(RUN_COLUMNS_WITH_REFS).eq('org_id', org.id).order('created_at', { ascending: false }).limit(10),
     enableGate(db, org.id),
-    db.from('organizations').select('plan, minutes_used, minutes_limit').eq('id', org.id).maybeSingle(),
+    db.from('organizations').select('plan, minutes_used, minutes_limit, extra_minutes_balance').eq('id', org.id).maybeSingle(),
   ])
   if (recent.error) throw new Error(`commerce_automation_runs read failed: ${recent.error.message}`)
   const problems: CommerceOverviewDto['problems'] = []
@@ -34,8 +34,26 @@ export async function buildOverview(db: SupabaseClient, org: { id: string; plan:
   if (!gate.agentActive) push('agent_inactive', 'The agent is paused: automated calls will not start.', '/agent')
   if (!gate.hasOutboundNumber) push('no_phone_number', 'No active phone number can place calls: automated calls will not start.', '/phone')
   if (connection && !automations.some((a) => a.consent_confirmed_at) ) push('no_consent', 'No automation has confirmed customer consent.', '/store/automations')
-  const allowance = callAllowance(usage.data ? { plan: (usage.data.plan as string | null) ?? org.plan, minutes_used: usage.data.minutes_used as number | null, minutes_limit: usage.data.minutes_limit as number | null } : null)
-  if (!allowance.allowed) push('minutes_exhausted', 'The included plan minutes are used up: automated calls will not start.', '/billing')
+  // Capacity = included minutes left + purchased minutes (lib/billing/minute-packs.ts
+  // minutesCapacity), gated like the dispatcher (lib/telephony/quota.ts).
+  const minutes: OrgUsage | null = usage.data
+    ? {
+        plan: (usage.data.plan as string | null) ?? org.plan,
+        minutes_used: usage.data.minutes_used as number | null,
+        minutes_limit: usage.data.minutes_limit as number | null,
+        extra_minutes_balance: (usage.data.extra_minutes_balance as number | null | undefined) ?? null,
+      }
+    : null
+  if (!callAllowance(minutes).allowed) {
+    const trial = minutes?.plan === 'trial'
+    push(
+      'minutes_exhausted',
+      trial
+        ? 'Your trial minutes are used up: automated calls are paused. Choose a plan to keep them running.'
+        : 'You are out of call minutes: automated calls are paused for up to 24 hours, then skipped. Buy extra minutes or turn on auto top-up.',
+      '/billing#minutes',
+    )
+  }
   void anyEnabled
   return {
     connection: connection ? await connectionDto(db, connection) : null,

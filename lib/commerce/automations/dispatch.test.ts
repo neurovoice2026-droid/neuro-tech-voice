@@ -7,7 +7,8 @@ vi.mock('@/lib/telephony/outbound', () => ({ startOutboundCall: vi.fn() }))
 import { RequestError } from '@/lib/api/http'
 import { ProviderError } from '@/lib/voice-providers/errors'
 import { AGENT_A, AUTO_A, CALL_A, CONN_A, NOW, ORG_A, asClient, automationRow, commerceDb, connectionRow, orgRow } from '@/tests/helpers/commerce'
-import { claimDueRuns, dispatchFailureMessage, dispatchRun, recoverStaleDispatches } from './dispatch'
+import { MINUTES_RESERVED_REASON, MINUTES_SKIP_REASON, MINUTES_WAIT_REASON, claimDueRuns, dispatchFailureMessage, dispatchRun, minutesRetrySlot, recoverStaleDispatches } from './dispatch'
+import { readAutomationConfig } from './config'
 import { outcomeFromCall, reconcileCommerceRun, reconcileStaleCallingRuns } from './reconcile'
 
 const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), child: () => log, context: {} }
@@ -115,10 +116,11 @@ describe('dispatch', () => {
     expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('cancelled')
     expect(db.tables.commerce_automation_runs[0]).toMatchObject({ error_code: 'no_consent' })
 
+    // Out of minutes: the run waits for minutes instead of dialing (see 'out of minutes' below).
     db = seed({ org: { plan: 'trial', minutes_used: 100, minutes_limit: 100 } })
     ;[claimed] = await claimDueRuns(asClient(db), 'w1', 10)
-    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('skipped')
-    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ error_code: 'minutes_exhausted' })
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('deferred')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'scheduled', eligibility_reason: MINUTES_WAIT_REASON })
 
     db = seed()
     const noNumber = vi.fn(async () => { throw new RequestError('precondition_failed', 'You need an active phone number to place calls.', 409) })
@@ -210,6 +212,189 @@ describe('dispatch', () => {
     ;[claimed] = await claimDueRuns(asClient(db), 'w1', 10)
     expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('called')
     expect(start).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dispatch out of minutes (included and purchased)', () => {
+  const OUT = { plan: 'pro', minutes_used: 1000, minutes_limit: 1000, extra_minutes_balance: 0 }
+  const at = (iso: string) => {
+    const d = new Date(iso)
+    vi.setSystemTime(d)
+    return d
+  }
+  const deferredAudits = (db: ReturnType<typeof seed>) => db.tables.commerce_audit_log.filter((a) => a.action === 'run.deferred')
+
+  it('waits 30 minutes at a time from the scheduled time, never dialing and never spending an attempt', async () => {
+    const start = vi.fn()
+    const db = seed({ org: OUT })
+    let [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('deferred')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({
+      status: 'scheduled',
+      scheduled_for: '2026-10-13T08:30:00.000Z',
+      attempt: 0,
+      eligibility_reason: MINUTES_WAIT_REASON,
+      minutes_wait_since: '2026-10-13T07:59:00.000Z',
+      lease_owner: null,
+    })
+    expect(deferredAudits(db)).toHaveLength(1)
+    expect(deferredAudits(db)[0].metadata).toMatchObject({ code: 'minutes_exhausted', until: '2026-10-13T08:30:00.000Z' })
+
+    // Still out of minutes 31 minutes later: the anchor stays the scheduled time, one audit only.
+    const later = at('2026-10-13T08:31:00Z')
+    ;[claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(claimed.attempt).toBe(1)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, later)).toBe('deferred')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'scheduled', scheduled_for: '2026-10-13T09:01:00.000Z', attempt: 0, minutes_wait_since: '2026-10-13T07:59:00.000Z' })
+    expect(deferredAudits(db)).toHaveLength(1)
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('dials as soon as minutes are bought, and the run no longer waits', async () => {
+    const start = vi.fn(async () => ({ callId: CALL_A, routingMode: 'app_routed' as const, status: 'queued' as const }))
+    const db = seed({ org: OUT })
+    let [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('deferred')
+    db.tables.organizations[0].extra_minutes_balance = 500
+    const later = at('2026-10-13T08:30:00Z')
+    ;[claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, later)).toBe('called')
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'calling', call_id: CALL_A, minutes_wait_since: null, attempt: 1 })
+  })
+
+  it('a paid plan with purchased minutes left dials without waiting', async () => {
+    const start = vi.fn(async () => ({ callId: CALL_A, routingMode: 'app_routed' as const, status: 'queued' as const }))
+    const db = seed({ org: { ...OUT, extra_minutes_balance: 5 } })
+    const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('called')
+    expect(db.tables.commerce_automation_runs[0]).not.toHaveProperty('minutes_wait_since')
+  })
+
+  it('moves the next try into the call window (next morning) while that is within 24 hours', async () => {
+    const start = vi.fn()
+    // 19:45 in Bucharest: 30 minutes later is past the 20:00 window end.
+    const evening = at('2026-10-13T16:45:00Z')
+    const db = seed({ org: OUT, run: { scheduled_for: '2026-10-13T16:40:00Z' } })
+    const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, evening)).toBe('deferred')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'scheduled', scheduled_for: '2026-10-14T06:00:00.000Z', minutes_wait_since: '2026-10-13T16:40:00.000Z' })
+  })
+
+  it('skips the run as minutes_exhausted 24 hours after its scheduled time, and never dials later than that', async () => {
+    const start = vi.fn()
+    // Waiting since 07:59 yesterday: the next try (08:15) would be past the 24 hours.
+    let now = at('2026-10-14T07:45:00Z')
+    let db = seed({ org: OUT, run: { scheduled_for: '2026-10-14T07:44:00Z', minutes_wait_since: '2026-10-13T07:59:00Z' } })
+    let [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, now)).toBe('skipped')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'skipped', error_code: 'minutes_exhausted', eligibility_reason: MINUTES_SKIP_REASON, lease_owner: null })
+    expect(db.tables.commerce_audit_log.some((a) => a.action === 'run.skipped' && (a.metadata as Record<string, unknown>).code === 'minutes_exhausted')).toBe(true)
+
+    // Out of minutes in the evening with the 24 hours ending before the window reopens: skipped now.
+    now = at('2026-10-13T16:45:00Z')
+    db = seed({ org: OUT, run: { scheduled_for: '2026-10-13T05:30:00Z' } })
+    ;[claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, now)).toBe('skipped')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({ status: 'skipped', error_code: 'minutes_exhausted' })
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('an out-of-minutes refusal from startOutboundCall (minutes ran out after the check) waits for minutes instead of skipping', async () => {
+    const outOfMinutes = vi.fn(async () => {
+      throw new RequestError('precondition_failed', 'You are out of call minutes.', 409, { reason: 'minutes_exhausted' })
+    })
+    const db = seed()
+    const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+    expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: outOfMinutes }, NOW)).toBe('deferred')
+    expect(db.tables.commerce_automation_runs[0]).toMatchObject({
+      status: 'scheduled',
+      scheduled_for: '2026-10-13T08:30:00.000Z',
+      attempt: 0,
+      eligibility_reason: MINUTES_WAIT_REASON,
+      minutes_wait_since: '2026-10-13T07:59:00.000Z',
+      lease_owner: null,
+    })
+    expect(deferredAudits(db)[0].metadata).toMatchObject({ code: 'minutes_exhausted' })
+  })
+
+  describe('calls under way hold minutes (usage is recorded only when a call ends)', () => {
+    const liveCall = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      org_id: ORG_A,
+      status: 'in-progress',
+      usage_recorded_at: null,
+      started_at: '2026-10-13T07:58:00.000Z',
+      ...over,
+    })
+    const dialed = () => vi.fn(async () => ({ callId: CALL_A, routingMode: 'app_routed' as const, status: 'queued' as const }))
+
+    it('with 3 minutes left and one call under way, the next store call waits a few minutes instead of overrunning', async () => {
+      const start = dialed()
+      const db = seed({ org: { plan: 'pro', minutes_used: 997, minutes_limit: 1000, extra_minutes_balance: 0 } })
+      db.tables.calls = [liveCall('call-live')]
+      const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+      expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('deferred')
+      expect(start).not.toHaveBeenCalled()
+      expect(db.tables.commerce_automation_runs[0]).toMatchObject({
+        status: 'scheduled',
+        scheduled_for: '2026-10-13T08:05:00.000Z',
+        attempt: 0,
+        eligibility_reason: MINUTES_RESERVED_REASON,
+        minutes_wait_since: '2026-10-13T07:59:00.000Z',
+      })
+      expect(deferredAudits(db)[0].metadata).toMatchObject({ code: 'minutes_reserved' })
+    })
+
+    it('dials when the minutes left cover the calls under way and this one', async () => {
+      const start = dialed()
+      const db = seed({ org: { plan: 'pro', minutes_used: 996, minutes_limit: 1000, extra_minutes_balance: 0 } })
+      db.tables.calls = [liveCall('call-live')]
+      const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+      expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('called')
+    })
+
+    it('the first call always may start, and finished, recorded, stale or other organizations\' calls hold nothing', async () => {
+      const start = dialed()
+      const db = seed({ org: { plan: 'pro', minutes_used: 999, minutes_limit: 1000, extra_minutes_balance: 0 } })
+      db.tables.calls = [
+        liveCall('call-done', { status: 'completed' }),
+        liveCall('call-recorded', { usage_recorded_at: '2026-10-13T07:59:30.000Z' }),
+        liveCall('call-stale', { started_at: '2026-10-13T04:00:00.000Z' }),
+        liveCall('call-other-org', { org_id: '99999999-9999-4999-8999-999999999999' }),
+      ]
+      const [claimed] = await claimDueRuns(asClient(db), 'w1', 10)
+      expect(await dispatchRun(asClient(db), claimed, 'w1', log, { startOutboundCall: start }, NOW)).toBe('called')
+    })
+
+    it('within one tick, each dialed store call holds minutes for the next', async () => {
+      // 3 minutes left: the first run dials; once its call is live, the second waits.
+      const db = seed({ org: { plan: 'pro', minutes_used: 997, minutes_limit: 1000, extra_minutes_balance: 0 } })
+      // Another customer's order, so only the minutes can hold the second run back.
+      db.tables.commerce_orders.push(order({ id: 'order-2', external_id: '1002', order_number: '1002', contact_phone_e164: '+40722123457' }))
+      db.tables.commerce_automation_runs.push(run({ id: 'run-2', idempotency_key: 'k2', external_ref: '1002', order_id: 'order-2', event_key: 'order:1002', to_phone_e164: '+40722123457' }))
+      const start = vi.fn(async () => {
+        db.tables.calls = [...(db.tables.calls ?? []), liveCall(`call-${(db.tables.calls ?? []).length}`)]
+        return { callId: CALL_A, routingMode: 'app_routed' as const, status: 'queued' as const }
+      })
+      const claimed = await claimDueRuns(asClient(db), 'w1', 10)
+      expect(claimed).toHaveLength(2)
+      const outcomes = []
+      for (const r of claimed) outcomes.push(await dispatchRun(asClient(db), r, 'w1', log, { startOutboundCall: start }, NOW))
+      expect(outcomes).toEqual(['called', 'deferred'])
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(db.tables.commerce_automation_runs.find((r) => r.id === claimed[1].id)).toMatchObject({ status: 'scheduled', eligibility_reason: MINUTES_RESERVED_REASON })
+    })
+  })
+
+  it('minutesRetrySlot: 30 minutes on, inside the window, null past the 24 hours', () => {
+    const cfg = readAutomationConfig('cod_confirmation', {})
+    const anchor = new Date('2026-10-13T07:59:00Z')
+    expect(minutesRetrySlot(anchor, new Date('2026-10-13T08:00:00Z'), cfg, 'Europe/Bucharest')?.toISOString()).toBe('2026-10-13T08:30:00.000Z')
+    expect(minutesRetrySlot(anchor, new Date('2026-10-13T16:45:00Z'), cfg, 'Europe/Bucharest')?.toISOString()).toBe('2026-10-14T06:00:00.000Z')
+    expect(minutesRetrySlot(anchor, new Date('2026-10-14T07:20:00Z'), cfg, 'Europe/Bucharest')?.toISOString()).toBe('2026-10-14T07:50:00.000Z')
+    expect(minutesRetrySlot(anchor, new Date('2026-10-14T07:30:00Z'), cfg, 'Europe/Bucharest')).toBeNull()
+    expect(minutesRetrySlot(anchor, new Date('2026-10-14T07:59:00Z'), cfg, 'Europe/Bucharest')).toBeNull()
   })
 })
 

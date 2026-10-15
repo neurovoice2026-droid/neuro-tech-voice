@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { minutesMeterTone } from '@/components/billing/minutes-logic'
 import { StatTile } from '@/components/shared/StatTile'
 import { formatDuration } from '@/lib/utils'
 import type { DashboardMetrics } from '@/types'
@@ -46,7 +47,10 @@ export function MetricsCards({ metrics, loading = false }: MetricsCardsProps) {
     ? Math.round((metrics.minutes_used / minutesLimit) * 100)
     : 0
   const minutesLeft = Math.max(0, minutesLimit - (metrics?.minutes_used ?? 0))
-  const meterTone = minutesPct >= 100 ? 'danger' : minutesPct >= 80 ? 'warning' : 'default'
+  // Prepaid extra minutes (minute packs), used after the included ones; shown only when there are some.
+  const extraMinutes = Math.max(0, Math.floor(metrics?.extra_balance ?? 0))
+  // The sidebar meter's rule: at 100% included it warns, not alarms, while extra minutes are left.
+  const meterTone = minutesMeterTone(minutesPct, extraMinutes)
   // No metrics after loading = the request failed (the insights card explains and retries).
   const missing = !loading && !metrics
 
@@ -80,8 +84,14 @@ export function MetricsCards({ metrics, loading = false }: MetricsCardsProps) {
         loading={loading}
         value={missing ? '—' : fmt(minutesUsed)}
         // A blank line while loading keeps the tile (the tallest in the row) from growing later.
-        hint={metrics ? `of ${fmt(minutesLimit)} · ${fmt(minutesLeft)} left` : ' '}
-        meter={{ value: minutesPct, tone: meterTone, label: 'Minutes used this period' }}
+        hint={
+          metrics
+            ? extraMinutes > 0
+              ? `of ${fmt(minutesLimit)} · ${fmt(minutesLeft)} left + ${fmt(extraMinutes)} extra`
+              : `of ${fmt(minutesLimit)} · ${fmt(minutesLeft)} left`
+            : ' '
+        }
+        meter={{ value: minutesPct, tone: meterTone, label: 'Included minutes used this period' }}
       />
     </div>
   )

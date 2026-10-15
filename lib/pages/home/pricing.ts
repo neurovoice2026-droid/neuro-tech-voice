@@ -10,7 +10,7 @@ import {
   PRICING_TRIAL,
   TIERS,
 } from "@/lib/site";
-import { SCALE_COVERS, minutesFmt, money, perMinute, underCent, type PlanId } from "./pricing-math";
+import { SCALE_COVERS, minutesFmt, money, underCent, type PlanId } from "./pricing-math";
 import { sentences } from "./source";
 
 /* ─── #pricing: the bill ─────────────────────────────────────────── *
@@ -71,7 +71,7 @@ const PERKS: Record<CardId, { head: string; items: Perk[] }> = {
       },
       { text: "Confirmation texts to your callers", source: ent("smsConfirmations") },
       { text: "Outbound calls you start from the dashboard", source: ent("outboundCalls") },
-      { text: "Keeps answering past the included minutes", source: ent("overageAllowed") },
+      { text: "Prepaid extra minutes whenever you need more", source: ent("overageAllowed") },
     ],
   },
   growth: {
@@ -157,12 +157,6 @@ const PERKS: Record<CardId, { head: string; items: Perk[] }> = {
   },
 };
 
-if (!TIERS.every((t) => t.overage === TIERS[0].overage)) {
-  throw new Error(
-    "lib/pages/home/pricing.ts: the facts row says one overage rate for every plan; the price list has several",
-  );
-}
-
 const faqWhere = FAQ.find((f) => f.where?.href === "#your-bill")?.where?.label;
 if (!faqWhere) throw new Error("lib/pages/home/pricing.ts: the FAQ no longer links to #your-bill");
 
@@ -208,7 +202,8 @@ export const HOME_PRICING = {
     aMonth: " a month",
     aMonthYearly: " a month, billed yearly",
     included: (n: number) => `${minutesFmt(n)} min included`,
-    then: (c: string) => `then ${c} a minute`,
+    // Past the allowance calls pause unless prepaid extra minutes are added (packs, or auto top-up).
+    then: (c: string) => `then prepaid extra minutes at ${c}`,
     perDay: (d: string) => `${d} a day`,
     onYearly: (m: string) => `or ${m}/mo billed yearly`,
     yearly: (total: string, off: string) => `${total} a year, ${off} off`,
@@ -233,12 +228,12 @@ export const HOME_PRICING = {
     "“Cheapest for” compares our plans at about four minutes a call, every day of the month; a day is the plan fee over thirty.",
   facts: [
     {
-      title: "It keeps answering past your minutes",
-      body: `On a paid plan, at ${perMinute(TIERS[0].overage)} a minute past the allowance.`,
+      title: "Calls pause when your minutes run out",
+      body: "Unless you add prepaid extra minutes at your plan's own rate, less in bigger packs, or turn on auto top-up so a pack is bought before you run low. Nothing is billed after the fact.",
     },
     {
       title: "Change plan or cancel whenever",
-      body: "From your billing settings; a cancelled plan runs to the end of the period you paid for.",
+      body: "From your billing settings: a change between paid plans applies right away and is prorated; a canceled plan runs to the end of the period you paid for.",
     },
     { title: "No setup fee", body: "On any plan. A custom build is quoted on its own." },
     {

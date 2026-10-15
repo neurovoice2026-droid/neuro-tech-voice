@@ -14,6 +14,11 @@
 // whether or not onboarding is completed: the services steps and the store
 // steps do not check the type themselves, so a flip mid-onboarding would leave
 // the organization with the other flow's agent, data and dashboard.
+//
+// The write itself is conditional (still unselected, and the type still NULL or
+// the backfilled value being confirmed), so two concurrent requests (two tabs,
+// a double click) cannot both win: the one that updates no row answers 409
+// `already_selected` like a late request would.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -31,6 +36,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const BodySchema = z.object({
   business_type: z.enum(['services', 'ecommerce']),
 })
+
+/** The 409 of a choice already made (by an earlier request or a concurrent one). */
+function alreadySelectedError(): RequestError {
+  return new RequestError(
+    'precondition_failed',
+    'The business type has already been chosen and cannot be changed.',
+    409,
+    { reason: 'already_selected' },
+  )
+}
 
 /** Postgres "column does not exist" / PostgREST unknown column: migration 024 is not applied. */
 function isMissingColumn(error: { code?: string } | null): boolean {
@@ -70,22 +85,17 @@ export async function POST(request: Request) {
     // confirmed, never changed. Only a NULL type (new sign-up) is open to either value.
     const alreadySelected =
       !!row.business_type_selected_at || (row.business_type != null && row.business_type !== body.business_type)
-    if (alreadySelected) {
-      throw new RequestError(
-        'precondition_failed',
-        'The business type has already been chosen and cannot be changed.',
-        409,
-        { reason: 'already_selected' },
-      )
-    }
+    if (alreadySelected) throw alreadySelectedError()
 
     // A first choice starts its flow at step 1; confirming the legacy backfill keeps the
     // position the organization already reached in the service onboarding.
     const firstChoice = row.business_type == null
     const onboardingStep = firstChoice ? 1 : (row.onboarding_step ?? 1)
 
+    // The same rule again, inside the UPDATE: it only matches while nobody else has chosen.
+    // body.business_type is one of two enum literals, safe in the filter string.
     const admin = createAdminClient()
-    const { error: writeErr } = await admin
+    const { data: written, error: writeErr } = await admin
       .from('organizations')
       .update({
         business_type: body.business_type,
@@ -93,7 +103,14 @@ export async function POST(request: Request) {
         ...(firstChoice ? { onboarding_step: 1 } : {}),
       })
       .eq('id', org.id)
+      .is('business_type_selected_at', null)
+      .or(`business_type.is.null,business_type.eq.${body.business_type}`)
+      .select('id')
     if (writeErr) throw new Error(`organizations update failed: ${writeErr.message}`)
+    if (!Array.isArray(written) || written.length === 0) {
+      log.info('onboarding.business_type_race_lost', { businessType: body.business_type })
+      throw alreadySelectedError()
+    }
 
     log.info('onboarding.business_type_selected', { businessType: body.business_type, firstChoice })
     return NextResponse.json({ business_type: body.business_type, onboarding_step: onboardingStep })

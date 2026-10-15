@@ -80,6 +80,12 @@ describe('labels', () => {
     expect(handledBy({ status: 'failed', provider: null, routing_reason: 'no_provider' }).kind).toBe('failed')
     expect(handledBy({ status: 'completed', elevenlabs_conversation_id: 'conv_1' }).label).toBe('AI · ElevenLabs')
   })
+  it('a call refused for lack of minutes names both balances and the Billing page, never "upgrade" alone', () => {
+    const refused = handledBy({ status: 'failed', provider: null, routing_reason: 'quota_exhausted' })
+    expect(refused).toMatchObject({ kind: 'paused', label: 'Minutes used up' })
+    expect(refused.description).toBe('You were out of minutes (included and extra), so the agent did not take this call. Add minutes on the Billing page to keep answering calls.')
+    expect(refused.description).not.toMatch(/upgrade your plan/i)
+  })
   it('misc', () => {
     expect(terminationReasonLabel('client_hangup')).toBe('The caller hung up')
     // ElevenLabs free-text reasons: common ones by pattern, the rest tidied.

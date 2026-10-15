@@ -1,4 +1,7 @@
 import type { LucideIcon } from "lucide-react";
+import { MINUTE_PACKS, PACK_DISCOUNTS, extraMinuteRate } from "@/lib/billing/minute-packs";
+import { STRIPE_TRIAL_MINUTES } from "@/lib/billing/stripe-trial";
+import { PLANS, SERVICE_PLANS, STORE_PLANS, type Plan } from "@/types";
 import {
   Calendar,
   Mail,
@@ -1597,15 +1600,17 @@ export const COMPARISON_SOURCE =
 /* ------------------------------------------------------------------ *
  * Pricing — the arithmetic on the invoice, not a marketing rate.
  *
- * Every plan is a fee plus an allowance of minutes plus a rate for the
- * minutes past it, which means the only honest answer to "what does this
+ * Every plan is a fee plus an allowance of minutes. Past the allowance
+ * calls pause, unless the business adds prepaid extra minutes at that
+ * plan's own rate (minute packs, lib/billing/minute-packs.ts; nothing is
+ * billed after the fact). So the only honest answer to "what does this
  * cost" is a function of call volume, not a number on a card. The section
  * draws that function for every plan at once.
  *
  * Which is also how the price list gets audited. Run the arithmetic across
  * the range and the plans have to actually order themselves — if a rung's
- * overage rate undercuts its own effective per-minute rate, everyone below
- * it is cheaper at every volume and the rung is dead weight. Numbers here
+ * extra-minute rate undercuts its own effective per-minute rate, everyone
+ * below it is cheaper at every volume and the rung is dead weight. Numbers here
  * are the business's to set; the section only refuses to hide them.
  * ------------------------------------------------------------------ */
 /**
@@ -1633,7 +1638,11 @@ export type Tier = {
   monthly: number;
   /** Minutes included in that fee. */
   minutes: number;
-  /** USD per minute once the allowance is gone. */
+  /**
+   * USD per prepaid extra minute once the allowance is used up (the
+   * per-minute rate of the 100-minute pack; bigger packs cost less). The
+   * field keeps its old name.
+   */
   overage: number;
   cta: string;
   href: string;
@@ -1646,11 +1655,11 @@ export type Tier = {
  * has no published fee, allowance or rate (ENTERPRISE), so nothing can
  * estimate onto it, print "from $X" for it, or divide by its minutes.
  *
- * Three invariants hold this list together; home.test.ts checks each, on
- * monthly and yearly billing:
- *  · A rung's overage sits above its own effective rate (fee ÷ allowance):
- *    every rung bills $0.20 past its allowance, over 12.25¢ · 9.9¢ · 8.3¢ ·
- *    9.98¢ · 6.6¢ inside it.
+ * Three invariants hold this list together; tests/plan-parity.test.ts
+ * checks each, on monthly and yearly billing:
+ *  · A rung's extra-minute rate sits above its own effective rate (fee ÷
+ *    allowance): every rung sells extra minutes at $0.20, over 12.25¢ ·
+ *    9.9¢ · 8.3¢ · 9.98¢ · 6.6¢ inside it.
  *  · Every rung owns one band of volumes where it is the cheapest: monthly
  *    1–5 · 6–14 · 15–35 · 36–62 · 63–80 calls a day; yearly 1–5 · 6–13 ·
  *    14–33 · 34–58 · 59–80.
@@ -1663,29 +1672,39 @@ export type Tier = {
  * features and owns 36–62 calls a day. No copy may call Business better
  * value than Pro, or Pro "best value" (Scale, 6.6¢, is the lowest). Against
  * a flat 8¢ voice platform only Scale is cheaper per included minute, so
- * the landing names no rival (home.test.ts bans the names).
+ * the landing names no rival.
  *
- * OWNER: fees, minutes, the flat $0.20 overage and Pro's extras are the
- * owner's (23 Sep 2026). Growth and Scale do not exist in the backend
- * (types/index.ts PLANS), whose minutes also differ, and its cost note
- * (~$0.10 a minute) puts Pro and Scale below cost at full use. Checkout
- * must match this list before launch.
+ * OWNER: fees, minutes, the flat $0.20 extra-minute rate and Pro's extras
+ * are the owner's (23 Sep 2026), and the backend now sells exactly this
+ * list: the fee, the allowance and the extra-minute rate of every rung are
+ * read from types/index.ts PLANS, the table checkout, the billing page and
+ * the minute packs charge from, so the homepage cannot drift from what a
+ * customer pays (tests/plan-parity.test.ts). Only the id, the name, the
+ * button and the pick live here. Cost note: at about $0.10 a minute, full
+ * use runs Growth and Business near break-even and Pro and Scale below it;
+ * extra minutes at $0.20 keep about half of what they sell for.
  */
+const listed = (
+  id: Tier["id"],
+  name: string,
+  extra: Pick<Tier, "featured"> = {},
+): Tier => ({
+  id,
+  name,
+  monthly: PLANS[id].price_monthly,
+  minutes: PLANS[id].minutes_limit,
+  overage: PLANS[id].overage_per_min,
+  cta: "Start free",
+  href: AUTH.signup,
+  ...extra,
+});
+
 export const TIERS: Tier[] = [
-  { id: "starter", name: "Starter", monthly: 49, minutes: 400, overage: 0.2, cta: "Start free", href: AUTH.signup },
-  { id: "growth", name: "Growth", monthly: 99, minutes: 1000, overage: 0.2, cta: "Start free", href: AUTH.signup },
-  {
-    id: "pro",
-    name: "Pro",
-    monthly: 249,
-    minutes: 3000,
-    overage: 0.2,
-    cta: "Start free",
-    href: AUTH.signup,
-    featured: true,
-  },
-  { id: "business", name: "Business", monthly: 499, minutes: 5000, overage: 0.2, cta: "Start free", href: AUTH.signup },
-  { id: "scale", name: "Scale", monthly: 990, minutes: 15000, overage: 0.2, cta: "Start free", href: AUTH.signup },
+  listed("starter", "Starter"),
+  listed("growth", "Growth"),
+  listed("pro", "Pro", { featured: true }),
+  listed("business", "Business"),
+  listed("scale", "Scale"),
 ];
 
 /**
@@ -1710,9 +1729,9 @@ export const ENTERPRISE = {
  * way for a reader to tell which is the real one.
  *
  * It is deliberately a function and not a table of prices: a plan is a fee
- * plus an allowance plus a rate past it, so what a customer pays is a
- * function of their call volume and there is no honest single number to
- * put on a card.
+ * plus an allowance plus prepaid extra minutes past it, so what a customer
+ * pays is a function of their call volume and there is no honest single
+ * number to put on a card.
  */
 
 /** Two months off the plan fee, per `PRICING_INTRO.annualNote`. */
@@ -1721,7 +1740,15 @@ const ANNUAL = 10 / 12;
 export const feeFor = (t: Tier, annual: boolean) =>
   annual ? t.monthly * ANNUAL : t.monthly;
 
-/** The invoice: the fee, plus this plan's own rate past its allowance. */
+/**
+ * The month's bill: the fee, plus prepaid extra minutes at this plan's own
+ * rate for each minute past its allowance. The rate is the 100-minute pack's
+ * per minute, the dearest; the minutes are not rounded up to whole packs,
+ * because what a pack buys and the month does not use carries over (extra
+ * minutes never expire). So the receipt prices the minutes the month uses,
+ * not the cash paid for packs that month: 80 minutes over prints 80 x $0.20,
+ * while the smallest purchase is a 100-minute pack (PRICING_NOTE says so).
+ */
 export const costFor = (t: Tier, minutes: number, annual: boolean) =>
   feeFor(t, annual) + Math.max(0, minutes - t.minutes) * t.overage;
 
@@ -1758,8 +1785,8 @@ export const DAYS_PER_MONTH = 30;
 /** Volumes worth naming, so nobody has to guess where to start. */
 /**
  * Each lands exactly on a plan fee with nothing over: 3 → Starter $49,
- * 8 → Growth $100, 25 → Pro $249 (yearly $40.83 / $83.33 / $207.50).
- * home.test.ts pins it.
+ * 8 → Growth $99, 25 → Pro $249 (yearly $40.83 / $82.50 / $207.50).
+ * tests/plan-parity.test.ts pins it.
  */
 export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
   { label: "A quiet clinic", callsDay: 3 },
@@ -1776,7 +1803,7 @@ export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
  * minutes once, inside a fourteen-day window, never renewed: the plan is
  * literally excluded from the renewal job that rolls everyone else's
  * minutes over. When those five are gone the agent stops answering, because
- * the trial is the one plan that cannot run into overage.
+ * the trial is the one plan that cannot buy extra minutes.
  *
  * Every other page on this site already says the correct thing — the
  * product pages, the industry pages, the register page. The hero is frozen
@@ -1798,12 +1825,51 @@ export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
  * hero's, the close's and every rung in `TIERS`, and a page that calls one
  * button four things has a copy problem, not a variety of them.
  */
+/**
+ * What the launch step says under a paid card ("14 days free with up to 100
+ * minutes", components/onboarding/steps/Step5Launch.tsx launchMicro), said
+ * here too: a customer's first plan subscription, chosen when they launch,
+ * starts with fourteen free days (POST /api/onboarding/complete) and at most
+ * STRIPE_TRIAL_MINUTES included until its first payment
+ * (lib/billing/stripe-trial.ts). The store trial block repeats it.
+ */
+export const PAID_PLAN_TRIAL_LINE = `Choose a paid plan when you launch and its first fourteen days are free as well, with up to ${STRIPE_TRIAL_MINUTES} minutes before the first payment.`;
+
 export const PRICING_TRIAL = {
   headline: "Five free minutes, fourteen days, and no card.",
-  body: "Set it up, give it your documents and ring it yourself — test calls run on the real agent and never touch the five minutes. What the free fortnight cannot give you is a line: a number is bought separately, so until you buy one it answers you and nobody else.",
+  body: `Set it up, give it your documents and ring it yourself — test calls run on the real agent and never touch the five minutes. What the free fortnight cannot give you is a line: a number is bought separately, so until you buy one it answers you and nobody else. ${PAID_PLAN_TRIAL_LINE}`,
   cta: "Start free",
   href: AUTH.signup,
 } as const;
+
+/**
+ * Extra minutes, in words, off what checkout actually charges: the packs
+ * of lib/billing/minute-packs.ts ("100 to 2,500 minutes"), their deepest
+ * volume discount ("12%") and the extra-minute rates (types/index.ts PLANS
+ * overage_per_min) per family, since each family buys at its own: every
+ * service plan, Enterprise included ("$0.20"), and the store plans ("$0.18
+ * to $0.25"). Written in dollars, which the owner finds easier to read than
+ * cents.
+ */
+function extraMinutesSummary() {
+  const usd = (n: number) => `$${n.toFixed(2)}`;
+  const count = (n: number) => n.toLocaleString("en-US");
+  const range = (plans: readonly Plan[]) => {
+    const rates = plans.map((plan) => extraMinuteRate(plan)).filter((r): r is number => r !== null);
+    const low = Math.min(...rates);
+    const high = Math.max(...rates);
+    return low === high ? usd(low) : `${usd(low)} to ${usd(high)}`;
+  };
+  return {
+    smallest: count(MINUTE_PACKS[0]),
+    packs: `${count(MINUTE_PACKS[0])} to ${count(MINUTE_PACKS[MINUTE_PACKS.length - 1])} minutes`,
+    serviceRates: range(SERVICE_PLANS),
+    storeRates: range(STORE_PLANS),
+    discount: `${Math.round(Math.max(...MINUTE_PACKS.map((m) => PACK_DISCOUNTS[m])) * 100)}%`,
+  };
+}
+
+const EXTRA_MINUTES = extraMinutesSummary();
 
 /**
  * The rounding sentence is new and it is against us.
@@ -1814,9 +1880,16 @@ export const PRICING_TRIAL = {
  * so the rounding does not move its arithmetic; it moves a real invoice,
  * for a business whose calls are short. A reader who finds that on their
  * first bill instead of on this page has been handled rather than told.
+ *
+ * Past the allowance nothing is billed after the fact: calls pause unless
+ * prepaid extra minutes are added (packs, or auto top-up). The receipt
+ * prices the minutes the month uses at the 100-minute pack's per-minute
+ * rate, the dearest one; it does not round them up to whole packs, so the
+ * note says that packs come in whole hundreds and that what a pack buys
+ * beyond the month carries over.
  */
 export const PRICING_NOTE =
-  "Prices are in US dollars and exclude VAT. Two assumptions sit on the receipt above so you can argue with them: a call runs about four minutes, and the agent answers every day of the month, weekends included. A third is not an assumption — minutes are rounded up on each call, so ninety seconds costs two. Everything else is the plan fee plus that plan's own rate for the minutes past its allowance, which is the arithmetic that lands on the invoice rather than a headline rate. Annual billing takes two months off the fee; the per-minute rate does not move.";
+  `Prices are in US dollars and exclude VAT. Two assumptions sit on the receipt above so you can argue with them: a call runs about four minutes, and the agent answers every day of the month, weekends included. A third is not an assumption — minutes are rounded up on each call, so ninety seconds costs two. Past a plan's allowance the receipt adds the prepaid extra minutes the month uses, at that plan's own rate: the per-minute price of the smallest pack. Packs are bought whole, ${EXTRA_MINUTES.smallest}-minute packs being the smallest, so you pay for the whole pack and the minutes the month doesn't use carry over, because extra minutes never expire. Bigger packs cost up to ${EXTRA_MINUTES.discount} less, and without extra minutes calls pause until the next month's minutes arrive. Annual billing takes two months off the fee; the price of extra minutes does not move.`;
 
 /* ------------------------------------------------------------------ *
  * FAQ — five doubts, flat, in the order they arrive.
@@ -1845,21 +1918,6 @@ export const FAQ_INTRO = {
   // are already short.
   title: "Five doubts, in the order they arrive.",
 } as const;
-
-/**
- * The overage, in words, off the price list: "$0.20 a minute, the same on
- * every plan" while the rungs share one rate, the entry and top rates if
- * they ever differ. Written in dollars ("$0.20"), which the owner finds
- * easier to read than cents.
- */
-function overageSummary() {
-  const usd = (n: number) => `$${n.toFixed(2)}`;
-  const first = TIERS[0];
-  const last = TIERS[TIERS.length - 1];
-  return TIERS.every((t) => t.overage === first.overage)
-    ? `${usd(first.overage)} a minute, the same on every plan`
-    : `${usd(first.overage)} a minute on ${first.name}, falling to ${usd(last.overage)} on ${last.name}`;
-}
 
 /**
  * `where` is optional and rare on purpose.
@@ -1972,18 +2030,18 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     a: "A new one. You buy a local number inside your dashboard in seconds, on its own monthly subscription at $1.15 — the carrier's own cost, passed through with nothing on top — and you release it whenever you like to stop the charge. Two things go with that and neither is in our favour: porting your existing number in is not supported yet, so today this sits alongside your current line rather than replacing it, and the twenty-one countries you can buy a number in do not include Romania, because Romanian numbers need a regulatory bundle we have not done.",
   },
   {
-    // The rate is interpolated from TIERS rather than typed, because the
-    // sentence it replaced quoted "$0.25 down to $0.18" long after the
-    // price list had moved to 7¢ and 4¢. A number written by hand in an
-    // answer is a number that will be wrong by the next price change.
+    // The packs, the discount and the rates are interpolated from what
+    // checkout charges (extraMinutesSummary) rather than typed: a number
+    // written by hand in an answer is a number that will be wrong by the
+    // next price change.
     //
-    // "Nothing stops answering" was true of every plan and false of the
-    // free trial, which is the one plan the person reading this is on. The
-    // trial cannot run into overage at all: the five minutes go, and the
-    // agent stops taking calls. That belonged in the answer, not in a
-    // support ticket.
-    q: "What happens if I go over my included minutes?",
-    a: `On a paid plan, nothing stops answering. The extra minutes bill at your own plan's published rate — ${overageSummary()} — and you can change plan at any point; the calculator above says when that is actually cheaper rather than leaving you to work it out off an invoice. The free trial is the other way round, and this is the part worth reading twice: there is no overage on it, so when the five minutes are gone the agent stops answering and your callers hear that the call can't be taken.`,
+    // Every plan stops at its minutes now (lib/telephony/quota.ts): nothing
+    // is billed after the fact, so the answer leads with the pause and then
+    // says how to avoid it. The trial cannot buy minutes at all: the five
+    // minutes go, and the agent stops taking calls. That belongs in the
+    // answer, not in a support ticket.
+    q: "What happens when my included minutes run out?",
+    a: `Calls pause until you add minutes. A plan's minutes reset every month; once they are used up, the agent stops taking new calls, and a call already under way runs only until the minutes left are spent. On a paid plan you add minutes yourself, prepaid: packs of ${EXTRA_MINUTES.packs} at your own plan's rate, ${EXTRA_MINUTES.serviceRates} a minute on every service plan (${EXTRA_MINUTES.storeRates} on the online-store plans), and up to ${EXTRA_MINUTES.discount} less in the bigger packs. They never expire and are only spent once the month's minutes are gone, and auto top-up can buy a pack for you whenever you run low, as long as the charge to your card goes through. Nothing is billed after the fact. If you find yourself buying minutes every month, the calculator above says when a bigger plan is cheaper. The free trial cannot buy minutes: when its five minutes are gone the agent stops answering and your callers hear that the call can't be taken.`,
     where: { label: "Work out the bill", href: "#your-bill" },
   },
 ];

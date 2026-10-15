@@ -4,7 +4,10 @@ import 'server-only'
 // the once-per-call side effects:
 //   • usage: record_call_usage() inserts into usage_ledger with key call:<id>
 //     and increments minutes_used only if that insert happened (retries and
-//     a second source for the same call are no-ops);
+//     a second source for the same call are no-ops); minutes past the plan's
+//     included ones come out of the prepaid extra-minute balance. Then, best
+//     effort: auto top-up (lib/billing/auto-topup.ts) and the owner's minute
+//     e-mails (80% of the included minutes; out of minutes, once per period);
 //   • workflows: claimed with workflows_triggered_at IS NULL → now().
 // Conversations that are not phone calls (dashboard tests, widget/SDK
 // sessions, ElevenLabs simulations) are stored as test calls (calls.channel,
@@ -27,8 +30,12 @@ import type { NormalizedCallEvent } from './types'
 import type { VoiceProvider } from './errors'
 import { executeWorkflows, type CallContext } from '@/lib/workflows/executor'
 import { sendEmail } from '@/lib/email/client'
-import { usageAlertEmail } from '@/lib/email/templates'
-import { PLANS, type Plan } from '@/types'
+import { minutesExhaustedEmail, usageAlertEmail } from '@/lib/email/templates'
+import { minutesCapacity } from '@/lib/billing/minute-packs'
+import { callAllowance } from '@/lib/telephony/quota'
+import { maybeAutoTopUp } from '@/lib/billing/auto-topup'
+import { canBuyMinutes } from '@/lib/billing/minutes-summary'
+import { PLANS, isPlan, type BusinessType } from '@/types'
 import { verifyCallToken } from '@/lib/telephony/tokens'
 import { reportOutcome } from './circuit-registry'
 import { earlyFailureWindowSeconds } from './config'
@@ -393,34 +400,127 @@ export async function recordUsage(
   const row = (Array.isArray(data) ? data[0] : data) as { recorded: boolean; minutes: number; minutes_used_after: number | null } | null
   if (row?.recorded) {
     emitProviderEvent({ system: input.provider, kind: 'usage_recorded', ok: true, orgId: input.orgId, callId: input.callId, details: { minutes: row.minutes, source: input.source } })
-    await maybeSendUsageAlert(db, input.orgId, row.minutes, log)
+    await afterUsageRecorded(db, input.orgId, log)
   }
+}
+
+/**
+ * Best effort once a call's minutes are recorded (the usage itself is
+ * already written and never undone here): auto top-up first, so a successful
+ * one keeps the "out of minutes" e-mail from going out, then the alerts.
+ */
+async function afterUsageRecorded(db: SupabaseClient, orgId: string, log: Logger) {
+  try {
+    const res = await maybeAutoTopUp(db, orgId, log)
+    if (res.status !== 'skipped') log.info('auto_topup.after_call', { orgId, status: res.status })
+  } catch (err) {
+    log.error('auto_topup.after_call_failed', err, { orgId })
+  }
+  await maybeSendUsageAlerts(db, orgId, log)
 }
 
 const USAGE_ALERT_THRESHOLD = 0.8
 
-/** Emails the owner once, on the call that first crosses 80% of the allowance. */
-async function maybeSendUsageAlert(db: SupabaseClient, orgId: string, minutesJustAdded: number, log: Logger) {
+interface AlertOrg {
+  user_id: string | null
+  plan: string | null
+  /** The plan family a trial is offered (the out-of-minutes e-mail's upgrade). */
+  business_type: BusinessType | null
+  minutes_used: number | null
+  minutes_limit: number | null
+  extra_minutes_balance: number | null
+  usage_period_start: string | null
+  minutes_exhausted_notified_at: string | null
+  usage_alert_notified_at: string | null
+  auto_topup_enabled: boolean | null
+}
+
+function planNameOf(plan: string | null): string | undefined {
+  return isPlan(plan) ? PLANS[plan].name : undefined
+}
+
+async function ownerEmail(db: SupabaseClient, userId: string | null): Promise<string | null> {
+  if (!userId) return null
+  const { data, error } = await db.auth.admin.getUserById(userId)
+  if (error) throw new Error(error.message)
+  return data?.user?.email ?? null
+}
+
+/**
+ * The owner's minute e-mails, only where the hard cap applies (callAllowance),
+ * each claimed atomically once per usage period (a trial, which has no
+ * period, gets each once; a renewal, or a new month on an annual plan, moves
+ * usage_period_start and arms them again):
+ *   • out of minutes (included and extra all used, no new call is placed),
+ *     claimed on minutes_exhausted_notified_at;
+ *   • otherwise, once 80% or more of the included minutes are used, claimed
+ *     on usage_alert_notified_at. minutes_used counts only the included
+ *     minutes a call used (record_call_usage, migration 027), so calls paid
+ *     from purchased minutes never move it, and the claim, not a before/after
+ *     comparison, keeps a long call that is paid partly from purchased
+ *     minutes from sending it twice.
+ */
+async function maybeSendUsageAlerts(db: SupabaseClient, orgId: string, log: Logger) {
   try {
-    const { data: org, error } = await db.from('organizations').select('user_id, plan, minutes_used, minutes_limit').eq('id', orgId).single()
+    const { data, error } = await db
+      .from('organizations')
+      .select('user_id, plan, business_type, minutes_used, minutes_limit, extra_minutes_balance, usage_period_start, minutes_exhausted_notified_at, usage_alert_notified_at, auto_topup_enabled')
+      .eq('id', orgId)
+      .single()
     if (error) throw new Error(error.message)
-    if (!org?.minutes_limit || org.minutes_limit <= 0) return
-    const after = org.minutes_used ?? 0
-    const before = after - minutesJustAdded
-    const threshold = org.minutes_limit * USAGE_ALERT_THRESHOLD
-    if (before >= threshold || after < threshold || after >= org.minutes_limit) return
-    const { data: userRes, error: userErr } = await db.auth.admin.getUserById(org.user_id as string)
-    if (userErr) throw new Error(userErr.message)
-    const email = userRes?.user?.email
-    if (!email) return
+    const org = data as AlertOrg
+    const canBuy = canBuyMinutes(org.plan)
+    // The same decision the call paths make: no capacity → no new call.
+    const allowance = callAllowance(org)
+
+    if (!allowance.allowed) {
+      if (!(await claimPeriodNotice(db, orgId, 'minutes_exhausted_notified_at', org.usage_period_start))) return
+      const to = await ownerEmail(db, org.user_id)
+      if (!to) return
+      // The explicit choice: the next plan up of the org's family, or 100 minutes (none on the trial).
+      await sendEmail({ to, ...minutesExhaustedEmail({ plan: org.plan, businessType: org.business_type ?? null }) })
+      log.info('usage_alert.minutes_exhausted_sent', { orgId })
+      return
+    }
+
+    // No cap applies (an unknown plan, or VOICE_TRIAL_MINUTES_ENFORCED=false): nothing will pause.
+    if (allowance.capSeconds === null) return
+    const limit = Number(org.minutes_limit)
+    if (!Number.isFinite(limit) || limit <= 0) return
+    const used = Number(org.minutes_used ?? 0)
+    if (!Number.isFinite(used) || used < limit * USAGE_ALERT_THRESHOLD) return
+    if (!(await claimPeriodNotice(db, orgId, 'usage_alert_notified_at', org.usage_period_start))) return
+    const to = await ownerEmail(db, org.user_id)
+    if (!to) return
     await sendEmail({
-      to: email,
-      ...usageAlertEmail({ minutesUsed: after, minutesLimit: org.minutes_limit, planName: PLANS[(org.plan ?? 'trial') as Plan]?.name }),
+      to,
+      ...usageAlertEmail({
+        minutesUsed: used,
+        minutesLimit: limit,
+        planName: planNameOf(org.plan),
+        extraBalance: minutesCapacity(org).extra,
+        canBuy,
+        autoTopUpEnabled: org.auto_topup_enabled === true,
+      }),
     })
   } catch (err) {
-    // The usage itself is already recorded; the alert is best-effort.
+    // The usage itself is already recorded; the alerts are best-effort.
     log.error('usage_alert.failed', err, { orgId })
   }
+}
+
+/** Takes this period's notice (the "out of minutes" or the 80% e-mail); false when it was already sent. */
+async function claimPeriodNotice(
+  db: SupabaseClient,
+  orgId: string,
+  column: 'minutes_exhausted_notified_at' | 'usage_alert_notified_at',
+  periodStart: string | null,
+): Promise<boolean> {
+  const query = db.from('organizations').update({ [column]: new Date().toISOString() }).eq('id', orgId)
+  const scoped = periodStart ? query.or(`${column}.is.null,${column}.lt."${periodStart}"`) : query.is(column, null)
+  const { data, error } = await scoped.select('id')
+  if (error) throw new Error(`${column} claim failed: ${error.message}`)
+  return (data?.length ?? 0) > 0
 }
 
 async function triggerWorkflowsOnce(db: SupabaseClient, callId: string, kind: 'ended' | 'missed', log: Logger) {

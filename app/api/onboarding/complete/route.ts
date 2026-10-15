@@ -10,7 +10,18 @@
 //
 // The response says whether the agent is live (`activated`): the agent is only
 // switched on when the primary provider sync is ready, so the client must not
-// claim "you're live" otherwise.
+// claim "you're live" otherwise. When a paid plan was chosen but could not be
+// started (its Stripe price could not be resolved, or the checkout could not
+// be opened), the organization launches on the trial and the response carries
+// `plan_notice` so the client tells the owner to choose the plan from Billing.
+//
+// An organization that already has a plan subscription in Stripe (Checkout
+// finished in another tab, a stale Launch tab, or a payment due) keeps it:
+// the plan and its minutes stay the billing webhook's, nothing here rewrites
+// them and no second subscription is opened (plan_notice
+// 'subscription_exists' or 'payment_due'). The 14 free days of a new
+// subscription are only for a Stripe customer that never had a plan
+// subscription.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -22,12 +33,13 @@ import {
   parseJsonBody,
   requestErrorResponse,
 } from '@/lib/api/http'
-import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
 import { deferBackground } from '@/lib/observability/telemetry'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { ensurePlanPriceId } from '@/lib/stripe/store-prices'
+import { findPlanSubscriptions } from '@/lib/stripe/plan-subscription'
 import { sendEmail } from '@/lib/email/client'
 import { welcomeEmail } from '@/lib/email/templates'
 import {
@@ -48,17 +60,52 @@ import {
 } from '@/lib/agents/ensure-agent'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import { TOTAL_COMMERCE_ONBOARDING_STEPS, isEcommerceOrg } from '@/lib/commerce/business-type'
-import { PLANS, PLAN_NOT_AVAILABLE_MESSAGE, planAllowedFor, stripePriceId } from '@/types'
+import { PLANS, PLAN_NOT_AVAILABLE_MESSAGE, SERVICE_PLANS, STORE_PLANS, isSelfServePlan, planAllowedFor } from '@/types'
 import type { BillingInterval, BusinessType, Plan } from '@/types'
 import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
 
 // Agent sync with the primary provider + Stripe customer/session creation.
 export const maxDuration = 60
 
-const PLAN_VALUES = [
-  'trial', 'starter', 'pro', 'business', 'custom',
-  'store_starter', 'store_growth', 'store_scale', 'store_enterprise',
-] as const satisfies readonly Plan[]
+/** Every plan of the catalogue: the trial, the service ladder (Growth and Scale included) and the store tiers. */
+const PLAN_VALUES = ['trial', ...SERVICE_PLANS, ...STORE_PLANS] as const satisfies readonly Plan[]
+
+/**
+ * Why the plan the owner chose was not started: its Stripe price could not be
+ * resolved or the Stripe checkout could not be opened (the launch went ahead
+ * on the trial), or the organization already has a plan subscription (live,
+ * or with a payment due), which it keeps.
+ */
+type PlanNotice = 'price_unavailable' | 'checkout_unavailable' | 'subscription_exists' | 'payment_due'
+
+/** Free days of a first plan subscription bought at launch. */
+const FIRST_SUBSCRIPTION_TRIAL_DAYS = 14
+
+/**
+ * The organization's plan subscription in Stripe: 'live' (active or
+ * trialing), 'due' (a payment is due), 'none', or 'unknown' when Stripe could
+ * not answer (then nothing about the plan is changed). `hadAny`: the customer
+ * had a plan subscription before (no second free trial).
+ */
+async function existingPlanSubscription(
+  orgId: string,
+  row: { stripe_customer_id?: unknown; stripe_subscription_id?: unknown },
+  log: Logger,
+): Promise<{ state: 'live' | 'due' | 'none' | 'unknown'; hadAny: boolean }> {
+  const customerId = typeof row.stripe_customer_id === 'string' && row.stripe_customer_id ? row.stripe_customer_id : null
+  if (!customerId || !isStripeConfigured()) return { state: 'none', hadAny: false }
+  try {
+    const found = await findPlanSubscriptions(getStripeClient(), {
+      orgId,
+      customerId,
+      recordedId: typeof row.stripe_subscription_id === 'string' && row.stripe_subscription_id ? row.stripe_subscription_id : null,
+    })
+    return { state: found.live ? 'live' : found.due ? 'due' : 'none', hadAny: found.hadAny }
+  } catch (err) {
+    log.error('onboarding.subscription_lookup_failed', err)
+    return { state: 'unknown', hadAny: true }
+  }
+}
 
 /** Agent columns set here that end up in the provider-side agent (AgentSpec). */
 const PROVIDER_AGENT_FIELDS = ['name', 'language', 'system_prompt', 'first_message'] as const
@@ -102,7 +149,7 @@ export async function POST(request: Request) {
 
     const { data: orgRow, error: orgErr } = await supabase
       .from('organizations')
-      .select('id, name, industry, website, description, stripe_customer_id, onboarding_completed, business_type')
+      .select('id, name, industry, website, description, stripe_customer_id, stripe_subscription_id, onboarding_completed, business_type')
       .eq('id', org.id)
       .single()
     if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
@@ -118,6 +165,9 @@ export async function POST(request: Request) {
         business_type: businessType,
       })
     }
+
+    // Asked of Stripe before anything is written: an existing plan subscription is kept as it is.
+    const existing = await existingPlanSubscription(org.id, orgRow, log)
 
     const companyName = (body.company?.name ?? orgRow.name ?? null) as string | null
     const agent = await ensureAgent(org.id, defaultAgentName(companyName))
@@ -208,31 +258,28 @@ export async function POST(request: Request) {
     // so the product is usable without a payment provider.
     const planConfig = PLANS[body.plan]
     // Self-serve paid tiers go through Stripe checkout; the trial and the
-    // sales-led tiers (no price id) land on the trial tier until billing/sales
-    // takes over. Service plans use the env price ids (the monthly one when an
-    // annual one isn't configured yet); store plans are found or created in
-    // Stripe by lookup key, which needs no manual setup but can fail like any
-    // API call, in which case the trial fallback below applies.
+    // sales-led tiers land on the trial tier until billing/sales takes over.
+    // Every self-serve plan's price, service or store, monthly or annual, is
+    // resolved by ensurePlanPriceId: an env pin only while Stripe bills
+    // exactly what PLANS says, else the app's own price, found or created by
+    // lookup key. That needs no manual setup but can fail like any API call,
+    // in which case the trial fallback below applies.
     let priceId = ''
-    let storePriceFailed = false
-    if (planConfig.family === 'ecommerce') {
-      if (!planConfig.contact_sales && isStripeConfigured()) {
-        try {
-          priceId = await ensurePlanPriceId(body.plan, interval)
-        } catch (err) {
-          storePriceFailed = true
-          log.error('onboarding.store_price_failed', err, { plan: body.plan, interval })
-        }
+    // Not needed while a plan subscription exists: that one is kept (below).
+    if (isSelfServePlan(body.plan) && isStripeConfigured() && existing.state === 'none') {
+      try {
+        priceId = await ensurePlanPriceId(body.plan, interval)
+      } catch (err) {
+        log.error('onboarding.plan_price_failed', err, { plan: body.plan, interval })
       }
-    } else {
-      priceId = stripePriceId(body.plan, interval) || planConfig.stripe_price_id
     }
     const willCheckout = !!priceId && isStripeConfigured()
-    // Billing configured but this paid tier has no price id: never grant a
-    // paid plan for free — fall back to the trial and flag the misconfiguration.
-    const paidWithoutPrice = isStripeConfigured() && !planConfig.contact_sales && planConfig.price_monthly > 0 && !priceId
-    if (paidWithoutPrice && !storePriceFailed) log.error('onboarding.price_not_configured', null, { plan: body.plan, interval })
+    // Billing configured but this paid tier has no usable price: never grant a
+    // paid plan for free — fall back to the trial and tell the owner.
+    const paidWithoutPrice = isStripeConfigured() && isSelfServePlan(body.plan) && !priceId
     const effectivePlan: Plan = willCheckout || planConfig.contact_sales || paidWithoutPrice ? 'trial' : body.plan
+    // The owner chose a paid plan that is not being started: say so, never imply it was.
+    let planNotice: PlanNotice | null = paidWithoutPrice ? 'price_unavailable' : null
 
     // plan / minutes_limit are platform-managed columns (guard trigger): written
     // with the service role, scoped to the authorized org.
@@ -244,6 +291,37 @@ export async function POST(request: Request) {
     // last step — a store org sent back to 4 would reopen the automations step instead.
     const launchStep = isEcommerceOrg(orgRow) ? TOTAL_COMMERCE_ONBOARDING_STEPS : 4
     const admin = createAdminClient()
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+    if (existing.state !== 'none') {
+      // A plan subscription exists (or Stripe could not say): the plan and its
+      // minutes are left to the billing webhook, no Checkout is opened, and the
+      // owner changes plans from Billing.
+      const { error } = await admin
+        .from('organizations')
+        .update({ onboarding_completed: true, onboarding_step: launchStep })
+        .eq('id', org.id)
+      if (error) throw new Error(`organizations onboarding update failed: ${error.message}`)
+      const keptNotice: PlanNotice | null =
+        existing.state === 'live'
+          ? 'subscription_exists'
+          : existing.state === 'due'
+            ? 'payment_due'
+            : isSelfServePlan(body.plan)
+              ? 'checkout_unavailable'
+              : null
+      log.info('onboarding.plan_kept', { subscription: existing.state, chosenPlan: body.plan })
+      return NextResponse.json({
+        success: true,
+        redirect: `${appUrl}/dashboard?welcome=true`,
+        activated,
+        primary_provider: primaryProvider,
+        warning,
+        sync,
+        plan_notice: keptNotice,
+      })
+    }
+
     const { error: planErr } = await admin
       .from('organizations')
       .update({
@@ -267,8 +345,6 @@ export async function POST(request: Request) {
         }),
       )
     }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
     // ── Stripe checkout for paid plans ─────────────────────────────────────
     if (willCheckout) {
@@ -300,7 +376,8 @@ export async function POST(request: Request) {
           customer_update: { address: 'auto', name: 'auto' },
           metadata: { org_id: org.id, ntv_plan: body.plan },
           subscription_data: {
-            trial_period_days: 14,
+            // Free days only for a customer that never had a plan subscription (no trial on every re-run).
+            ...(existing.hadAny ? {} : { trial_period_days: FIRST_SUBSCRIPTION_TRIAL_DAYS }),
             // ntv_plan is the billing webhook's second signal for the plan,
             // after the price id (a store price carries it too).
             metadata: { org_id: org.id, ntv_plan: body.plan },
@@ -316,6 +393,7 @@ export async function POST(request: Request) {
           .update({ onboarding_completed: true, plan: 'trial', minutes_limit: PLANS.trial.minutes_limit })
           .eq('id', org.id)
         if (error) throw new Error(`organizations trial fallback failed: ${error.message}`)
+        planNotice = 'checkout_unavailable'
       }
     }
 
@@ -326,6 +404,7 @@ export async function POST(request: Request) {
       primary_provider: primaryProvider,
       warning,
       sync,
+      plan_notice: planNotice,
     })
   } catch (err) {
     if (err instanceof RequestError) return requestErrorResponse(err, requestId)

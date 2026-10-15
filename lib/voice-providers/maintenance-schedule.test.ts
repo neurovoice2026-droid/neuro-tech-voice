@@ -9,6 +9,10 @@ const state: { db: MemoryDb | null } = { db: null }
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => state.db }))
 const syncAgent = vi.fn()
 vi.mock('./agent-sync', () => ({ syncAgent: (...a: unknown[]) => syncAgent(...a) }))
+const sweepAutoTopUps = vi.fn()
+vi.mock('@/lib/billing/auto-topup', () => ({ sweepAutoTopUps: (...a: unknown[]) => sweepAutoTopUps(...a) }))
+const rollAnnualUsagePeriods = vi.fn()
+vi.mock('@/lib/billing/usage-periods', () => ({ rollAnnualUsagePeriods: (...a: unknown[]) => rollAnnualUsagePeriods(...a) }))
 
 import { SKIPPED_SYNC_RETRY_DELAY_MS, TAIL_ROTATION_KEY, maintenanceSteps, retryAgentSyncs, runMaintenanceSteps, type MaintenanceStep } from './maintenance'
 import type { Logger } from '@/lib/observability/logger'
@@ -42,6 +46,8 @@ describe('maintenance step order', () => {
       'web_test_finalize',
       'call_retention',
       'business_tools_retention',
+      'annual_usage_periods',
+      'auto_topup',
       'commerce',
       'retention',
       'elevenlabs_quota',
@@ -52,6 +58,39 @@ describe('maintenance step order', () => {
     expect(tail.map(([n]) => n).sort()).toEqual(
       ['account_deletions', 'config_rollout', 'default_voice_migration', 'knowledge_retries', 'knowledge_sync', 'library_voices', 'platform_tools', 'rejected_clones', 'voice_housekeeping', 'voice_orphans', 'voice_saves'].sort(),
     )
+  })
+})
+
+describe('annual_usage_periods step', () => {
+  it('rolls the monthly periods of annual plans with the service client and reports the count', async () => {
+    rollAnnualUsagePeriods.mockReset().mockResolvedValue({ rolled: 3 })
+    state.db = stateDb()
+    const { log } = logger()
+    const step = maintenanceSteps(log).head.find(([n]) => n === 'annual_usage_periods')!
+    expect(await step[1](Date.now() + 200_000)).toEqual({ rolled: 3 })
+    expect(rollAnnualUsagePeriods).toHaveBeenCalledWith(state.db, log)
+  })
+
+  it('runs right before auto top-up, so a new month of minutes is counted before a pack is bought', () => {
+    const names = maintenanceSteps(logger().log).head.map(([n]) => n)
+    expect(names.indexOf('annual_usage_periods')).toBe(names.indexOf('auto_topup') - 1)
+  })
+})
+
+describe('auto_topup step', () => {
+  it('sweeps the organizations below their threshold with the service client, for at most 30 s of the run', async () => {
+    sweepAutoTopUps.mockReset().mockResolvedValue({ checked: 0, attempted: 0, credited: 0, failed: 0, deferred: 0 })
+    state.db = stateDb()
+    const step = maintenanceSteps(logger().log).head.find(([n]) => n === 'auto_topup')!
+    const before = Date.now()
+    await step[1](before + 200_000)
+    expect(sweepAutoTopUps).toHaveBeenCalledWith(state.db, expect.anything(), expect.any(Number))
+    const capped = sweepAutoTopUps.mock.calls[0][2] as number
+    expect(capped).toBeGreaterThanOrEqual(before + 30_000)
+    expect(capped).toBeLessThanOrEqual(Date.now() + 30_000)
+    // A run that is almost out of budget passes its own, earlier deadline.
+    await step[1](before + 1_000)
+    expect(sweepAutoTopUps.mock.calls[1][2]).toBe(before + 1_000)
   })
 })
 

@@ -21,7 +21,9 @@ import { WEIGHT } from "./type";
  * snapped to the cent, so every frame is a price that could be on a
  * bill) instead of cutting; the words beside them change at once,
  * because they say what is being added, not how much. The allowance
- * line and the overage line are two faces of one cell (pricing.css).
+ * line and the extra-minutes line are two faces of one cell (pricing.css):
+ * past the allowance the receipt buys prepaid extra minutes at the plan's
+ * own rate, since without them calls pause.
  * ------------------------------------------------------------------ */
 
 const P = HOME_PRICING;
@@ -33,7 +35,7 @@ const line = {
     `${calls} ${calls === 1 ? "call" : "calls"} × ${AVG_CALL_MIN} min × ${DAYS_PER_MONTH} days`,
   fee: (plan: string, annual: boolean) => `${plan} plan fee${annual ? ` · ${P.billing.billedYearly}` : ""}`,
   over: (e: Estimate) =>
-    `${minutesFmt(e.overMinutes)} min past ${minutesFmt(e.plan.minutes)} × ${perMinute(e.plan.overage)}`,
+    `${minutesFmt(e.overMinutes)} prepaid extra min × ${perMinute(e.plan.overage)}`,
   under: (e: Estimate) => `Included in the plan: ${minutesFmt(e.minutes)} of ${minutesFmt(e.plan.minutes)} min`,
 };
 

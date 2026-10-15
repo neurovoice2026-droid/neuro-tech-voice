@@ -6,15 +6,23 @@
 // PLANS[].features in types/index.ts. Delete this file and import
 // "@/lib/billing/entitlements" again when the platform ships.
 //
-// Store plans (types/index.ts STORE_PLANS) get the entitlements of the service
-// plan with the nearest price: Store Starter ($100) those of Starter ($49),
+// The service ladder follows the homepage cards (lib/pages/home/pricing.ts):
+// Growth is "everything in Starter" with more minutes, so it has Starter's
+// entitlements; Scale is "everything in Business" with more minutes, so it
+// has Business's; Enterprise ('custom') adds the largest voice-lab allowance
+// and the most test calls.
+//
+// Store plans (types/index.ts STORE_PLANS) get the entitlements of a service
+// plan: a listed store plan those of the listed service plan with the nearest
+// price, Store Starter ($100) those of Growth ($99, the same as Starter's),
 // Store Growth ($250) those of Pro ($249), Store Scale ($500) those of
-// Business ($499), Store Enterprise ($1,000) those of Custom ($999). That is
-// what their feature lists promise (recordings and analytics arrive with
-// Growth, every integration with Scale) and it keeps one table instead of
-// two. Store plans are never "above" or "below" a service plan in a way that
-// matters to a buyer, because an organization can only buy from its own
-// family, so requiredPlanFor answers per family.
+// Business ($499); the sales-led Store Enterprise those of the sales-led
+// Enterprise ('custom'). That is what their feature lists promise
+// (recordings and analytics arrive with Store Growth, every integration with
+// Store Scale) and it keeps one table instead of two. Store plans are never
+// "above" or "below" a service plan in a way that matters to a buyer, because
+// an organization can only buy from its own family, so requiredPlanFor
+// answers per family.
 
 import { PLANS, type Plan, type PlanFamily } from '@/types'
 
@@ -27,7 +35,12 @@ export interface Entitlements {
   voiceCloning: boolean
   smsConfirmations: boolean
   outboundCalls: boolean
-  /** Paid plans keep answering past the included minutes and bill overage. */
+  /**
+   * Paid plans can buy prepaid extra minutes (minute packs or auto top-up)
+   * and keep calling once the included minutes are used up; the trial
+   * cannot, so it stops at its minutes. Nothing is billed after the fact.
+   * The key keeps its old name.
+   */
   overageAllowed: boolean
   /** Voice lab text-to-speech quota. */
   ttsCharactersPerMonth: number
@@ -114,8 +127,12 @@ const CUSTOM: Entitlements = {
 const ENTITLEMENTS: Record<Plan, Entitlements> = {
   trial: TRIAL,
   starter: STARTER,
+  // "Everything in Starter, plus" minutes (the homepage Growth card).
+  growth: STARTER,
   pro: PRO,
   business: BUSINESS,
+  // "Everything in Business, plus" minutes and priority onboarding (the homepage Scale card).
+  scale: BUSINESS,
   custom: CUSTOM,
   store_starter: STARTER,
   store_growth: PRO,
@@ -123,23 +140,32 @@ const ENTITLEMENTS: Record<Plan, Entitlements> = {
   store_enterprise: CUSTOM,
 }
 
-/** The service plan whose entitlements (and call capacity) a store plan shares: the nearest price. */
+/**
+ * The service plan whose entitlements (and call capacity) a store plan
+ * shares: for a listed store plan the listed service plan with the nearest
+ * price, for the sales-led Store Enterprise the sales-led Enterprise.
+ */
 export const STORE_PLAN_EQUIVALENT: Readonly<Record<'store_starter' | 'store_growth' | 'store_scale' | 'store_enterprise', Plan>> = {
-  store_starter: 'starter',
+  store_starter: 'growth',
   store_growth: 'pro',
   store_scale: 'business',
   store_enterprise: 'custom',
 }
 
-/** Every plan, cheapest first (store plans interleaved by price). requiredPlanFor walks it per family. */
+/**
+ * Every plan, cheapest first (store plans interleaved by price), the
+ * sales-led tiers last. requiredPlanFor walks it per family.
+ */
 export const PLAN_ORDER: readonly Plan[] = [
   'trial',
   'starter',
+  'growth',
   'store_starter',
   'pro',
   'store_growth',
   'business',
   'store_scale',
+  'scale',
   'custom',
   'store_enterprise',
 ]

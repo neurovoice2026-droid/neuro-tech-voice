@@ -38,6 +38,10 @@ describe('plan gate', () => {
     expect(customVoicesAllowed('pro')).toBe(true)
     expect(customVoicesAllowed('business')).toBe(true)
     expect(customVoicesAllowed('custom')).toBe(true)
+    // Growth is Starter with more minutes; Scale is Business with more minutes.
+    expect(customVoicesAllowed('growth')).toBe(false)
+    expect(customVoicesAllowed('scale')).toBe(true)
+    expect(() => assertCustomVoicePlan('growth')).toThrow(expect.objectContaining({ details: { reason: 'plan', required_plan: 'pro' } }))
     expect(customVoicesAllowed(null)).toBe(false)
     expect(customVoicesAllowed('enterprise-hack')).toBe(false)
     expect(() => assertCustomVoicePlan('starter')).toThrow(expect.objectContaining({ status: 403, details: { reason: 'plan', required_plan: 'pro' } }))

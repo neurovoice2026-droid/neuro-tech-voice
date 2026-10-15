@@ -4,8 +4,15 @@ import {
   Accordion, AccordionItem, AccordionTrigger, AccordionContent,
 } from '@/components/ui/accordion'
 import { PLANS } from '@/types'
+import { MINUTE_PACKS, PACK_DISCOUNTS, extraMinuteRate } from '@/lib/billing/minute-packs'
 
-const FAQS = [
+// The extra-minute prices, read from what checkout charges (every plan that can buy).
+const EXTRA_RATES = Object.keys(PLANS).map((plan) => extraMinuteRate(plan)).filter((r): r is number => r !== null)
+const usd = (n: number) => `$${n.toFixed(2)}`
+const MAX_DISCOUNT = Math.round(Math.max(...MINUTE_PACKS.map((m) => PACK_DISCOUNTS[m])) * 100)
+
+/** The questions, in order (exported for the copy tests: the accordion renders an answer only once opened). */
+export const FAQS = [
   {
     question: 'Do I need a credit card to start?',
     answer: `No. Every plan starts with a 14-day free trial and ${PLANS.trial.minutes_limit} minutes included, no credit card required.`,
@@ -19,8 +26,8 @@ const FAQS = [
     answer: "Your agent can speak in multiple languages and accents, powered by advanced multilingual voice AI.",
   },
   {
-    question: 'What happens if I go over my included minutes?',
-    answer: "You're never cut off. Extra minutes are billed per minute at your plan's overage rate (as low as $0.18/min on higher tiers), and you can upgrade anytime.",
+    question: 'What happens when my included minutes run out?',
+    answer: `Calls pause until you add minutes. Your plan's minutes reset every month; on a paid plan you can buy prepaid extra minutes in packs of ${MINUTE_PACKS[0].toLocaleString('en-US')} to ${MINUTE_PACKS[MINUTE_PACKS.length - 1].toLocaleString('en-US')} (${usd(Math.min(...EXTRA_RATES))} to ${usd(Math.max(...EXTRA_RATES))} per minute depending on your plan, up to ${MAX_DISCOUNT}% off on bigger packs), or turn on auto top-up so a pack is bought before you run out. Extra minutes never expire, nothing is billed after the fact, and you can upgrade anytime.`,
   },
   {
     question: 'Which tools does it integrate with?',

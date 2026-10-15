@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import { LegalHeader, LegalSection } from '@/components/marketing/LegalContent'
+import { STRIPE_TRIAL_MINUTES } from '@/lib/billing/stripe-trial'
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
   description: 'The terms governing your use of Neuro Tech Voice.',
 }
 
-const UPDATED = 'July 4, 2026'
+const UPDATED = 'October 15, 2026'
 
 export default function TermsPage() {
   return (
@@ -48,11 +49,28 @@ export default function TermsPage() {
           New accounts begin with a free trial (currently 14 days, with a limited number of
           included minutes) that does not require a credit card. Paid plans are billed monthly or
           annually in advance, in accordance with the pricing displayed on our website at the
-          time of purchase. Usage beyond the minutes included in your plan is billed at the
-          applicable per-minute overage rate for that plan.
+          time of purchase. A paid plan that starts with free days includes up to{' '}
+          {STRIPE_TRIAL_MINUTES} minutes until its first payment; its full monthly minutes start
+          with the first paid billing period.
         </p>
         <p>
-          Subscriptions renew automatically at the end of each billing period unless cancelled
+          Each paid plan includes a number of call minutes a month, which reset every month, on
+          annual billing too; unused included minutes do not carry over. When your included
+          minutes and any extra minutes you bought are used up, the Service stops placing and
+          answering calls for your account until minutes are added, and a call in progress may
+          end when your remaining minutes run out. We do not bill usage after the fact.
+        </p>
+        <p>
+          On a paid plan you can buy prepaid extra minutes in packs, at the per-minute price shown
+          for your plan in your billing settings (larger packs carry a volume discount). Extra
+          minutes are used only after your plan&apos;s included minutes and do not expire while
+          your account exists. You may also turn on auto top-up: you then authorize us to charge
+          your saved payment method for the pack you choose each time your remaining minutes fall
+          below the threshold you set. You can turn auto top-up off at any time; a failed auto
+          top-up charge is not retried and turns auto top-up off until you turn it back on.
+        </p>
+        <p>
+          Subscriptions renew automatically at the end of each billing period unless canceled
           before the renewal date. We may change our prices, but will give existing Customers
           reasonable advance notice before a price change takes effect on their account.
         </p>
@@ -61,9 +79,16 @@ export default function TermsPage() {
       <LegalSection title="5. Cancellation and refunds">
         <p>
           You may upgrade, downgrade, or cancel your subscription at any time from your billing
-          settings. Cancellation takes effect at the end of the current billing period unless
-          stated otherwise. See our <a href="/refund-policy">Refund &amp; Cancellation Policy</a>{' '}
-          for full details on refund eligibility.
+          settings. An upgrade to a higher-priced plan on the same billing interval takes effect
+          right away: the price difference for the rest of the current billing period is
+          charged immediately, and the additional included minutes are prorated for that period.
+          A downgrade, a change to a plan at the same price, or a change between monthly and
+          annual billing takes effect at the end of the current billing period, with nothing
+          charged or refunded at the time of the change; the new price is invoiced at that
+          renewal. While a paid subscription is still in its free trial period, a change takes
+          effect right away and nothing is charged until the trial ends. Cancellation takes
+          effect at the end of the current billing period unless stated otherwise. See our <a href="/refund-policy">Refund &amp; Cancellation Policy</a>{' '}
+          for full details on refund eligibility, including for extra minute packs.
         </p>
       </LegalSection>
 

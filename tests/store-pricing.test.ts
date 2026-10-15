@@ -107,16 +107,18 @@ describe('store plan arithmetic', () => {
     for (const plan of STORE_HOME_PLANS) expect(plan.annual).toBe(plan.monthly * 10)
   })
 
-  it('order calls per allowance match the backend bullets, to two figures', () => {
+  it('order calls per allowance are the card line\'s, to two figures', () => {
     expect(STORE_AVG_CALL_MIN).toBe(1.5)
     expect(approxCalls(350)).toBe(230)
     expect(approxCalls(950)).toBe(630)
     expect(approxCalls(2000)).toBe(1300)
     expect(approxCalls(4500)).toBe(3000)
     expect(approxCalls(12)).toBe(8)
+    // The card says it once, under the allowance; the perks never repeat it (types/index.ts).
+    expect(STORE_PRICING.plan.calls(350)).toBe('about 230 order calls a month')
+    expect(STORE_PRICING.plan.calls(2000)).toBe('about 1,300 order calls a month')
     for (const plan of STORE_LISTED) {
-      const bullets = plan.features.join(' ').replace(/,/g, '')
-      expect(bullets, `${plan.name}'s allowance bullet`).toContain(String(approxCalls(plan.minutes)))
+      expect(plan.features.join(' '), `${plan.name}'s perks`).not.toMatch(/order (calls|confirmations)|minutes\/month/)
     }
   })
 

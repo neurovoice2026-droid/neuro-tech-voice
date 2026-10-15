@@ -22,7 +22,7 @@ npm run dev                    # http://localhost:3000
 ```
 
 Database: apply the SQL files in `supabase/migrations/` in order (001 → 021,
-then 023, 024, 025 and 026; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+then 023, 024, 025, 026, 027 and 028; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
 SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
 ships it, apply `022_security_performance_hardening.sql`: it is the former
@@ -75,9 +75,32 @@ schedule above applies), retention and the runbook:
 migrations `024_commerce.sql`, `025_commerce_fk_indexes.sql` and `026_store_plans.sql`
 and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`. Online stores buy the store plans
 (Store Starter, Growth, Scale from $100/month, Store Enterprise sales-led;
-`PLANS` in `types/index.ts`): their Stripe prices are created by the app on
-first checkout, so the `STRIPE_STORE_*` ids in `.env.example` are optional
-(docs §11).
+`PLANS` in `types/index.ts`): like every plan's, their Stripe prices are
+created by the app on first checkout, so the `STRIPE_*_PRICE_ID` ids in
+`.env.example` are optional ([`docs/billing.md`](docs/billing.md), section 2).
+
+## Billing and minutes
+
+Plans are Stripe subscriptions (`PLANS` in `types/index.ts`, the single price
+list: the homepage pricing section reads its numbers from it). Service
+businesses choose Starter ($49, 400 minutes), Growth ($99, 1,000), Pro ($249,
+3,000), Business ($499, 5,000), Scale ($990, 15,000) or Enterprise (priced
+with us), with extra minutes at $0.20 and annual billing at ten times the
+monthly fee. Every plan's Stripe price is found or created by the app (an env
+price id is only an optional pin, used while it bills exactly the `PLANS`
+price and is tagged `metadata.ntv_plan` for its plan). Every plan includes
+minutes a month (annual plans too: the maintenance cron starts each month's
+allowance) and stops at them (a hard cap): calls pause until the owner adds
+prepaid extra minutes (packs of 100 to 2,500 at the plan's extra-minute
+price, with volume discounts) or turns on auto top-up, which charges the
+saved card when the minutes left fall below a threshold.
+Included minutes reset on each Stripe renewal and, on annual plans, every
+month; purchased minutes never expire. Plans, prices, the period reset, auto
+top-up and its failure handling, the Stripe objects and metadata, fiscal
+invoices and the operational runbook: [`docs/billing.md`](docs/billing.md).
+Requires migrations `027_minute_packs.sql` and then `028_service_plans.sql`
+(Growth and Scale, `billing_interval` and the monthly roll of annual plans),
+applied **before** deploying the code that uses them.
 
 ## Deployment (Vercel)
 

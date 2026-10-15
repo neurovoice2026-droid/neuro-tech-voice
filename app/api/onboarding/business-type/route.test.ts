@@ -6,7 +6,7 @@ const ORG = '11111111-1111-4111-8111-111111111111'
 
 const state: {
   user: ReturnType<typeof fakeDb> | null
-  admin: ReturnType<typeof fakeDb> | null
+  admin: ReturnType<typeof adminDb> | null
   org: Record<string, unknown>
 } = { user: null, admin: null, org: {} }
 
@@ -26,13 +26,53 @@ const userHandler: Handler = (c) => {
   return { data: null, error: null }
 }
 
-/** The admin write lands on the same fake row, so the test can read the row the page would branch on. */
-const adminHandler: Handler = (c) => {
-  if (c.table === 'organizations' && c.op === 'update') {
-    Object.assign(state.org, c.payload as Record<string, unknown>)
-    return { data: null, error: null }
+/** Whether the fake row passes a call's filters, as PostgREST would read them (eq, is, or of is/eq). */
+function rowMatches(call: FakeCall, row: Record<string, unknown>): boolean {
+  return call.filters.every(([op, column, value]) => {
+    if (op === 'eq') return row[column] === value
+    if (op === 'is') return (row[column] ?? null) === value
+    if (op === 'or') {
+      return String(value)
+        .split(',')
+        .some((condition) => {
+          const [col, operator, ...rest] = condition.split('.')
+          const operand = rest.join('.')
+          if (operator === 'is' && operand === 'null') return row[col] == null
+          if (operator === 'eq') return row[col] === operand
+          throw new Error(`unsupported filter in the fake: ${condition}`)
+        })
+    }
+    throw new Error(`unsupported filter in the fake: ${op}`)
+  })
+}
+
+/**
+ * The service-role client: a conditional UPDATE lands on the same fake row
+ * only when the row passes its filters, and returns the rows it updated
+ * (`.select('id')`), so the test can read the row the page would branch on.
+ */
+function adminDb(fail: { message: string } | null = null) {
+  const calls: FakeCall[] = []
+  function from(table: string) {
+    const call: FakeCall = { table, op: 'select', filters: [] }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b: any = {
+      update: (payload: unknown) => ((call.op = 'update'), (call.payload = payload), b),
+      eq: (c: string, v: unknown) => (call.filters.push(['eq', c, v]), b),
+      is: (c: string, v: unknown) => (call.filters.push(['is', c, v]), b),
+      or: (v: string) => (call.filters.push(['or', '', v]), b),
+      select: (cols: string) => ((call.columns = cols), b),
+      then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
+        calls.push(call)
+        if (fail) return Promise.resolve({ data: null, error: fail }).then(res, rej)
+        const hit = call.op === 'update' && table === 'organizations' && rowMatches(call, state.org)
+        if (hit) Object.assign(state.org, call.payload as Record<string, unknown>)
+        return Promise.resolve({ data: hit ? [{ id: state.org.id }] : [], error: null }).then(res, rej)
+      },
+    }
+    return b
   }
-  return { data: null, error: null }
+  return { from, calls }
 }
 
 // No Origin header by default (a server-side caller); the cross-site case sets one explicitly.
@@ -55,7 +95,7 @@ const ALREADY_SELECTED_MESSAGE = 'The business type has already been chosen and 
 
 beforeEach(() => {
   state.user = fakeDb(userHandler)
-  state.admin = fakeDb(adminHandler)
+  state.admin = adminDb()
   state.org = { id: ORG, business_type: null, business_type_selected_at: null, onboarding_step: 1, onboarding_completed: false }
 })
 
@@ -78,6 +118,13 @@ describe('POST /api/onboarding/business-type', () => {
     const updates = orgUpdates()
     expect(updates).toHaveLength(1)
     expect(filterOf(updates[0], 'id')).toBe(ORG)
+    // The one-time rule is part of the UPDATE itself, and the updated rows are read back.
+    expect(updates[0].filters).toEqual([
+      ['eq', 'id', ORG],
+      ['is', 'business_type_selected_at', null],
+      ['or', '', 'business_type.is.null,business_type.eq.ecommerce'],
+    ])
+    expect(updates[0].columns).toBe('id')
     const payload = updates[0].payload as Record<string, unknown>
     expect(payload.business_type).toBe('ecommerce')
     expect(payload.onboarding_step).toBe(1)
@@ -141,6 +188,45 @@ describe('POST /api/onboarding/business-type', () => {
       expect(await res.json()).toMatchObject({ details: { reason: 'already_selected' } })
       expect(orgUpdates()).toHaveLength(0)
       expect(state.org).toMatchObject({ business_type: 'services', business_type_selected_at: null, onboarding_step: 2 })
+    })
+  })
+
+  describe('the write is atomic: a request that loses the race answers 409 already_selected', () => {
+    it('the type was chosen between the read and the write (stale read): no row is updated, nothing changes', async () => {
+      // The read still sees a new sign-up, but another request has meanwhile chosen services.
+      const stale = { ...state.org }
+      state.user = fakeDb((c) => (c.table === 'organizations' && c.op === 'select' ? { data: stale, error: null } : { data: null, error: null }))
+      state.org = { ...state.org, business_type: 'services', business_type_selected_at: SELECTED_AT, onboarding_step: 3 }
+      const res = await post({ business_type: 'ecommerce' })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ code: 'precondition_failed', error: ALREADY_SELECTED_MESSAGE, details: { reason: 'already_selected' } })
+      expect(orgUpdates()).toHaveLength(1)
+      expect(state.org).toMatchObject({ business_type: 'services', business_type_selected_at: SELECTED_AT, onboarding_step: 3 })
+    })
+
+    it('a legacy confirmation is refused when the backfill changed underneath it', async () => {
+      const stale = { ...state.org, business_type: 'services', business_type_selected_at: null, onboarding_step: 2 }
+      state.user = fakeDb((c) => (c.table === 'organizations' && c.op === 'select' ? { data: stale, error: null } : { data: null, error: null }))
+      state.org = { ...state.org, business_type: 'ecommerce', business_type_selected_at: null, onboarding_step: 2 }
+      const res = await post({ business_type: 'services' })
+      expect(res.status).toBe(409)
+      expect(state.org.business_type).toBe('ecommerce')
+      expect(state.org.business_type_selected_at).toBeNull()
+    })
+
+    it('two concurrent choices (two tabs): exactly one wins, the other is refused', async () => {
+      const [a, b] = await Promise.all([post({ business_type: 'ecommerce' }), post({ business_type: 'services' })])
+      expect([a.status, b.status].sort()).toEqual([200, 409])
+      const winner = a.status === 200 ? 'ecommerce' : 'services'
+      expect(state.org.business_type).toBe(winner)
+      expect(state.org.business_type_selected_at).toEqual(expect.any(String))
+    })
+
+    it('a database error on the write is a 500, not a silent success', async () => {
+      state.admin = adminDb({ message: 'connection reset' })
+      const res = await post({ business_type: 'ecommerce' })
+      expect(res.status).toBe(500)
+      expect(state.org.business_type).toBeNull()
     })
   })
 

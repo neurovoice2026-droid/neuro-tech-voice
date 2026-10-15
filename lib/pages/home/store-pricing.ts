@@ -1,7 +1,8 @@
 import { PLANS, STORE_PLANS, type Plan } from "@/types";
-import { AUTH, DAYS_PER_MONTH } from "@/lib/site";
+import { AUTH, DAYS_PER_MONTH, PAID_PLAN_TRIAL_LINE } from "@/lib/site";
 import { PHONE_NUMBER_MONTHLY_PRICE_USD } from "@/lib/phone/pricing";
 import { STORE_INTENT } from "@/lib/auth/business-intent";
+import { MINUTE_PACKS, PACK_DISCOUNTS } from "@/lib/billing/minute-packs";
 import { minutesFmt, money, perMinute, wholeMoney } from "./pricing-math";
 
 /* ------------------------------------------------------------------ *
@@ -20,8 +21,8 @@ export const STORE_SIGNUP_HREF = `${AUTH.signup}?intent=${STORE_INTENT}`;
 
 /**
  * Minutes an order call takes, on average: a confirmation reads the
- * order back, takes a yes or a change, and rings off. The plan table's
- * own "~230 order confirmations" for 350 minutes is this figure.
+ * order back, takes a yes or a change, and rings off. A card's "about
+ * 230 order calls a month" for 350 minutes is this figure.
  */
 export const STORE_AVG_CALL_MIN = 1.5;
 
@@ -37,7 +38,10 @@ export type StorePlan = {
   annual: number;
   /** Minutes included in the fee. */
   minutes: number;
-  /** USD per minute once the allowance is gone. */
+  /**
+   * USD per prepaid extra minute once the allowance is used up (the
+   * 100-minute pack; bigger packs cost less): PLANS[plan].overage_per_min.
+   */
   overage: number;
   /** What the plan has, as the backend lists it. */
   features: readonly string[];
@@ -110,6 +114,10 @@ export function approxCalls(minutes: number): number {
 const first = STORE_LISTED[0];
 const last = STORE_LISTED[STORE_LISTED.length - 1];
 
+/** The extra-minute packs as the note words them, off lib/billing/minute-packs.ts: "100 to 2,500" and "12%". */
+const PACK_RANGE = `${minutesFmt(MINUTE_PACKS[0])} to ${minutesFmt(MINUTE_PACKS[MINUTE_PACKS.length - 1])}`;
+const PACK_MAX_DISCOUNT = `${Math.round(Math.max(...MINUTE_PACKS.map((m) => PACK_DISCOUNTS[m])) * 100)}%`;
+
 export const STORE_PRICING = {
   /** The heading's sub while the store plans are showing. */
   sub: `Plans for online stores start at ${wholeMoney(STORE_FROM)} a month. You buy minutes, and the agent spends them confirming cash-on-delivery orders, recovering abandoned carts and following up on deliveries — with the live order in front of it, and one agent on every plan.`,
@@ -120,7 +128,8 @@ export const STORE_PRICING = {
     head: "What's included",
     included: (minutes: number) => `${minutesFmt(minutes)} min included`,
     calls: (minutes: number) => `about ${minutesFmt(approxCalls(minutes))} order calls a month`,
-    then: (rate: string) => `then ${rate} a minute`,
+    // Past the allowance calls pause unless prepaid extra minutes are added (packs, or auto top-up).
+    then: (rate: string) => `then prepaid extra minutes at ${rate}`,
     trialMicro: "5 free minutes, no card",
   },
   enterprise: {
@@ -151,12 +160,12 @@ export const STORE_PRICING = {
   },
   facts: [
     {
-      title: "It keeps calling past your minutes",
-      body: `On a paid plan, at your plan's own rate: ${perMinute(first.overage)} a minute on ${first.name}, down to ${perMinute(last.overage)} on ${last.name}.`,
+      title: "Calls pause when your minutes run out",
+      body: `Unless you add prepaid extra minutes at your plan's own rate: ${perMinute(first.overage)} a minute on ${first.name}, down to ${perMinute(last.overage)} on ${last.name}, and less in bigger packs. Or turn on auto top-up, and a pack is bought before you run low.`,
     },
     {
       title: "Change plan or cancel whenever",
-      body: "From your billing settings; a canceled plan runs to the end of the period you paid for.",
+      body: "From your billing settings: a change between paid plans applies right away and is prorated; a canceled plan runs to the end of the period you paid for.",
     },
     { title: "No setup fee", body: "On any plan. A custom integration is quoted on its own." },
     {
@@ -167,7 +176,7 @@ export const STORE_PRICING = {
   /** After the VAT sentence, in place of the service plans' "cheapest for" footnote. */
   footnote: `An order call runs about a minute and a half, so a plan's "order calls" is its minutes over that; a day is the plan fee over thirty.`,
   trial: {
-    body: "Set it up, connect your store and ring it yourself — test calls run on the real agent and never touch the five minutes. What the free fortnight cannot give you is a line: a number is bought separately, so until you buy one it answers you and nobody else.",
+    body: `Set it up, connect your store and ring it yourself — test calls run on the real agent and never touch the five minutes. What the free fortnight cannot give you is a line: a number is bought separately, so until you buy one it answers you and nobody else. ${PAID_PLAN_TRIAL_LINE}`,
   },
-  note: "Prices are in US dollars and exclude VAT. Minutes are rounded up on each call, so ninety seconds costs two. Everything else is the plan fee plus that plan's own rate for the minutes past its allowance, which is the arithmetic that lands on the invoice rather than a headline rate. Annual billing takes two months off the fee; the per-minute rate does not move.",
+  note: `Prices are in US dollars and exclude VAT. Minutes are rounded up on each call, so ninety seconds costs two. A plan's minutes reset every month; past them, calls pause unless you add prepaid extra minutes at that plan's own rate, in packs of ${PACK_RANGE} minutes that cost up to ${PACK_MAX_DISCOUNT} less the bigger they are and never expire. Auto top-up can buy a pack for you when you run low. Nothing is billed after the fact. Annual billing takes two months off the fee; the price of extra minutes does not move.`,
 } as const;

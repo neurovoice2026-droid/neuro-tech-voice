@@ -1,14 +1,23 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState, type CSSProperties, type HTMLAttributes, type RefObject } from "react";
-import { Check } from "lucide-react";
+import { memo, useEffect, useMemo, useState, type RefObject } from "react";
 import { cn } from "@/lib/utils";
 import { PillLink } from "@/components/site/product/primitives";
+import {
+  ENTERPRISE_CARD,
+  EnterpriseTierCard,
+  PerkList,
+  PlanTierCard,
+  RollIn,
+  TIER_CARD,
+  TierAllowance,
+  TierPrice,
+  useLiveMeshes,
+} from "@/components/pricing/PlanTierCard";
 import { HOME_PRICING, perkText } from "@/lib/pages/home/pricing";
 import {
   HOME_ENTERPRISE,
   HOME_PLANS,
-  money,
   perDay,
   perMinute,
   planFee,
@@ -18,22 +27,25 @@ import {
   type PlanId,
 } from "@/lib/pages/home/pricing-math";
 import { RING_LIGHT, centreInRail } from "./controls";
-import { meshBlobs } from "./mesh-flow";
-import { ENTERPRISE_LIGHT, PLAN_LIGHTS } from "./palettes";
-import { WEIGHT } from "./type";
+
+// The card pieces live in components/pricing (the app's plan pickers draw
+// the same cards); the homepage's other modules import them from here.
+export { ENTERPRISE_BLOBS, PLAN_BLOBS } from "@/components/pricing/lights";
+export { Fee, Mesh, PerkList, RollIn, useLiveMeshes } from "@/components/pricing/PlanTierCard";
 
 /* ------------------------------------------------------------------ *
  * #pricing's plan cards: five listed plans and Enterprise, each a pearl
- * mesh (pricing.css `.home-plan-light[data-plan]`, the same recipes
- * as palettes.ts PLAN_LIGHTS), climbing in colour with the plan, under a
- * fine grain that keeps the soft gradients from banding. Pro, our pick, is
- * the magenta pearl: centred, widest, ringed in an iridescent edge, the
- * only badge and the only magenta button.
+ * mesh (components/pricing/plan-tier.css `.home-plan-light[data-plan]`,
+ * the same recipes as palettes.ts PLAN_LIGHTS), climbing in colour with
+ * the plan, under a fine grain that keeps the soft gradients from
+ * banding. Pro, our pick, is the magenta pearl: centred, widest, ringed in
+ * an iridescent edge, the only badge and the only magenta button.
  *
  * Every card reads, top to bottom: the name, the fee (and what it is a
- * day), the allowance and the rate past it, the band of call volumes it
- * is the cheapest for, the way in, and what it has. Enterprise shows no
- * fee, allowance or rate anywhere, in any state.
+ * day), the allowance and the price of prepaid extra minutes past it
+ * (without them calls pause), the band of call volumes it is the cheapest
+ * for, the way in, and what it has. Enterprise shows no fee, allowance or
+ * rate anywhere, in any state.
  *
  * Once the reader has changed the estimate, the card with the lowest bill
  * for it is ringed in ink and carries a tab saying so. Before that nothing
@@ -41,9 +53,9 @@ import { WEIGHT } from "./type";
  *
  * The colour moves: over each card's ground sits the same mesh taken apart
  * into its pools (mesh-flow.ts), each its own element drifting on its own
- * path (pricing.css `.home-plan-mesh`, on the compositor), so the colours
+ * path (plan-tier.css `.home-plan-mesh`, on the compositor), so the colours
  * travel across the card while the palette never changes. It runs only while the card is on screen (`data-live`,
- * set here by an IntersectionObserver straight on the element, so no
+ * set by an IntersectionObserver straight on the element, so no
  * render; off screen it rests, and its layers are dropped), and never on
  * weak hardware or with reduced motion, where the ground alone is the same
  * picture standing still.
@@ -54,105 +66,18 @@ import { WEIGHT } from "./type";
  *
  * Every card carries two attributes: `data-card`, the card's own id, which
  * the jump chips and the estimator look cards up by; and `data-plan`, the
- * light it wears (pricing.css). On these cards the two are the same; the
+ * light it wears (plan-tier.css). On these cards the two are the same; the
  * store cards (pricing-store-cards.tsx) wear a service plan's light under
- * their own id, and share the pieces exported from here.
+ * their own id.
+ *
+ * The card itself is components/pricing/PlanTierCard.tsx, the one the
+ * app's onboarding and billing show too; this file gives it the
+ * homepage's figures, its "lowest bill" tab and band, and its buttons.
  * ------------------------------------------------------------------ */
 
 const P = HOME_PRICING;
 
 type Band = { from: number; to: number; first: boolean; last: boolean };
-
-/** Each card's pools as elements, worked out once: the same recipes the card paints as its ground. */
-export const PLAN_BLOBS = Object.fromEntries(
-  Object.entries(PLAN_LIGHTS).map(([id, light]) => [id, meshBlobs(light.ground)]),
-) as Record<PlanId, CSSProperties[]>;
-export const ENTERPRISE_BLOBS = meshBlobs(ENTERPRISE_LIGHT.ground);
-
-/** The flowing copy of a card's mesh (pricing.css "The mesh in motion"). */
-export function Mesh({ blobs }: { blobs: CSSProperties[] }) {
-  return (
-    <span aria-hidden className="home-plan-mesh">
-      {blobs.map((style, n) => (
-        <span key={n} style={style} />
-      ))}
-    </span>
-  );
-}
-
-/**
- * The meshes flow only on the cards that are on screen: `data-live` is
- * toggled straight on each `.home-plan` in the rail, so no render.
- */
-export function useLiveMeshes(railRef: RefObject<HTMLOListElement | null>) {
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) e.target.toggleAttribute("data-live", e.isIntersecting);
-    });
-    rail.querySelectorAll(".home-plan").forEach((li) => io.observe(li));
-    return () => io.disconnect();
-  }, [railRef]);
-}
-
-/**
- * A span that rolls in (`.home-pricing-in`) when it mounts after the
- * reader's first change — which is when a key change (Yearly, a new plan)
- * remounts it — and never merely because `changed` flipped under it.
- */
-export function RollIn({ animate, className, ...rest }: { animate: boolean } & HTMLAttributes<HTMLSpanElement>) {
-  const [on] = useState(animate);
-  return <span className={cn(className, on && "home-pricing-in")} {...rest} />;
-}
-
-/** "$207.50" → ["$207", "50"]; whole-dollar fees print without cents. */
-function splitMoney(n: number) {
-  const [dollars, c = "00"] = money(n).split(".");
-  return { dollars, cents: c === "00" ? null : c };
-}
-
-/** A card's fee a month, in the display face, with what it is said as. */
-export function Fee({ fee, pick, annual, changed }: { fee: number; pick: boolean; annual: boolean; changed: boolean }) {
-  const { dollars, cents: c } = splitMoney(fee);
-  return (
-    <p className="flex items-baseline gap-1 whitespace-nowrap">
-      <RollIn
-        key={annual ? "yearly" : "monthly"}
-        animate={changed}
-        aria-hidden
-        className={cn("home-plan-fee pp-display tracking-[-0.025em] tabular-nums", pick && "home-plan-fee-pick")}
-        style={{ fontWeight: WEIGHT.num }}
-      >
-        {dollars}
-        {c && <span className="ml-px align-[0.72em] text-[0.5em] leading-none tracking-normal">.{c}</span>}
-      </RollIn>
-      <span aria-hidden className="text-[13px] leading-[18px] text-(--plan-dim)">
-        {P.plan.perMonth}
-      </span>
-      <span className="sr-only">
-        {money(fee)}
-        {annual ? P.plan.aMonthYearly : P.plan.aMonth}
-      </span>
-    </p>
-  );
-}
-
-export function PerkList({ head, items, wide = false }: { head: string; items: readonly string[]; wide?: boolean }) {
-  return (
-    <div className="home-plan-perks">
-      <p className="text-[13px] leading-[18px] text-(--plan-dim)">{head}</p>
-      <ul className={cn("mt-3 grid gap-2.5", wide && "xl:grid-cols-2 xl:gap-x-8")}>
-        {items.map((text, k) => (
-          <li key={k} className="flex gap-2.5 text-[14px] leading-5 text-(--plan-text)">
-            <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-(--plan-tick)" strokeWidth={2.25} />
-            <span>{text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 const PlanCard = memo(function PlanCard({
   plan,
@@ -178,90 +103,63 @@ const PlanCard = memo(function PlanCard({
   const perks = P.perks[plan.id];
   const year = yearlyOf(plan);
   return (
-    <li
+    <PlanTierCard
       id={`plan-${plan.id}`}
-      data-card={plan.id}
-      data-plan={plan.id}
-      data-tone="light"
-      data-pick={pick || undefined}
-      data-i={i}
-      aria-labelledby={`plan-${plan.id}-name`}
-      aria-current={fits ? "true" : undefined}
-      className="home-plan home-plan-light home-plan-rise scroll-mt-28"
-    >
-      <Mesh blobs={PLAN_BLOBS[plan.id]} />
-      <span aria-hidden className="home-grain" />
-      {pick && <span aria-hidden className="home-plan-ring" />}
-      <span aria-hidden className="home-plan-tab">
-        {shownCalls !== null ? P.plan.fitTab(shownCalls) : ""}
-      </span>
-      {fits && <span className="sr-only">{P.plan.fits}</span>}
-
-      <div className="home-plan-head flex items-start justify-between gap-3">
-        <h3
-          id={`plan-${plan.id}-name`}
-          // Focused from script by the jump chips, so a keyboard lands in the card it was shown.
-          tabIndex={-1}
-          className="pp-display text-[20px] leading-[26px] tracking-[-0.01em] text-(--plan-text) outline-none"
-          style={{ fontWeight: WEIGHT.h3 }}
-        >
-          {plan.name}
-        </h3>
-        {plan.featured && (
-          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-white px-2.5 text-[12px] leading-4 font-medium text-[#a21caf] shadow-[0_1px_2px_rgb(162_28_175/0.18)]">
-            <svg aria-hidden viewBox="0 0 10 10" className="size-2.5 fill-current">
-              <path d="M5 0c.4 2.6 2.4 4.6 5 5-2.6.4-4.6 2.4-5 5-.4-2.6-2.4-4.6-5-5 2.6-.4 4.6-2.4 5-5Z" />
-            </svg>
-            {P.plan.pick}
+      cardId={plan.id}
+      light={plan.id}
+      pick={pick}
+      i={i}
+      nameId={`plan-${plan.id}-name`}
+      current={fits}
+      className={`${TIER_CARD} home-plan-rise scroll-mt-28`}
+      overlay={
+        <>
+          <span aria-hidden className="home-plan-tab">
+            {shownCalls !== null ? P.plan.fitTab(shownCalls) : ""}
           </span>
-        )}
-      </div>
-
-      <div className="home-plan-price mt-4">
-        <Fee fee={planFee(plan, annual)} pick={pick} annual={annual} changed={changed} />
-        <p className="mt-1 text-[15px] leading-[22px] font-medium text-(--plan-accent)">
-          <RollIn key={annual ? "yearly" : "monthly"} animate={changed} className="block">
-            {P.plan.perDay(money(perDay(plan, annual)))}
-          </RollIn>
-        </p>
-        <p className="mt-0.5 grid text-[13px] leading-[18px] text-(--plan-dim)">
-          <span aria-hidden={annual} className={cn("[grid-area:1/1]", annual && "invisible")}>
-            {P.plan.onYearly(wholeMoney(planFee(plan, true)))}
-          </span>
-          <span aria-hidden={!annual} className={cn("[grid-area:1/1]", !annual && "invisible")}>
-            {P.plan.yearly(wholeMoney(year.total), wholeMoney(year.off))}
-          </span>
-        </p>
-      </div>
-
-      <div className="home-plan-allowance mt-5 border-t border-(--plan-rule) pt-4">
-        <p className="text-[15px] leading-[22px] font-medium text-(--plan-text)">{P.plan.included(plan.minutes)}</p>
-        <p className="text-[13px] leading-[18px] text-(--plan-dim)">{P.plan.then(perMinute(plan.overage))}</p>
-        {band && (
-          <p className="mt-2 flex items-center gap-2 text-[13px] leading-[18px] font-medium text-(--plan-accent)">
-            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-(--plan-tick)" />
-            <RollIn key={annual ? "yearly" : "monthly"} animate={changed}>
-              {P.plan.cheapest(band.from, band.to, band.first, band.last)}
-            </RollIn>
-          </p>
-        )}
-      </div>
-
-      <div className="home-plan-action mt-5">
-        <PillLink
-          href={plan.cta.href}
-          variant="primary"
-          className={cn("h-11 w-full justify-center", RING_LIGHT, pick && "home-plan-cta-pick")}
-        >
-          {plan.cta.label}
-        </PillLink>
-        <p className="mt-2 text-center text-[12px] leading-4 text-(--plan-dim)">{P.plan.trialMicro}</p>
-      </div>
-
-      <div className="mt-5 border-t border-(--plan-rule) pt-4">
-        <PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} />
-      </div>
-    </li>
+          {fits && <span className="sr-only">{P.plan.fits}</span>}
+        </>
+      }
+      name={plan.name}
+      badge={plan.featured ? P.plan.pick : null}
+      price={
+        <TierPrice
+          fee={planFee(plan, annual)}
+          perDay={perDay(plan, annual)}
+          yearlyFee={planFee(plan, true)}
+          yearTotal={year.total}
+          yearOff={year.off}
+          pick={pick}
+          annual={annual}
+          changed={changed}
+        />
+      }
+      allowance={
+        <TierAllowance included={P.plan.included(plan.minutes)} notes={[P.plan.then(perMinute(plan.overage))]}>
+          {band && (
+            <p className="mt-2 flex items-center gap-2 text-[13px] leading-[18px] font-medium text-(--plan-accent)">
+              <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-(--plan-tick)" />
+              <RollIn key={annual ? "yearly" : "monthly"} animate={changed}>
+                {P.plan.cheapest(band.from, band.to, band.first, band.last)}
+              </RollIn>
+            </p>
+          )}
+        </TierAllowance>
+      }
+      action={
+        <>
+          <PillLink
+            href={plan.cta.href}
+            variant="primary"
+            className={cn("h-11 w-full justify-center", RING_LIGHT, pick && "home-plan-cta-pick")}
+          >
+            {plan.cta.label}
+          </PillLink>
+          <p className="mt-2 text-center text-[12px] leading-4 text-(--plan-dim)">{P.plan.trialMicro}</p>
+        </>
+      }
+      perks={<PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} />}
+    />
   );
 });
 
@@ -269,43 +167,23 @@ const EnterpriseCard = memo(function EnterpriseCard({ annual }: { annual: boolea
   const e = HOME_ENTERPRISE;
   const perks = P.perks[e.id];
   return (
-    <li
+    <EnterpriseTierCard
       id={`plan-${e.id}`}
-      data-card={e.id}
-      data-plan={e.id}
-      data-tone="light"
-      data-i={5}
-      aria-labelledby={`plan-${e.id}-name`}
-      className="home-plan home-plan-light home-plan-enterprise home-plan-rise scroll-mt-28"
-    >
-      <Mesh blobs={ENTERPRISE_BLOBS} />
-      <span aria-hidden className="home-grain" />
-      <div className="home-plan-enterprise-id">
-        <h3
-          id={`plan-${e.id}-name`}
-          tabIndex={-1}
-          className="pp-display text-[20px] leading-[26px] tracking-[-0.01em] text-(--plan-text) outline-none"
-          style={{ fontWeight: WEIGHT.h3 }}
-        >
-          {e.name}
-        </h3>
-        <p
-          className="pp-display mt-3 text-[28px] leading-[32px] tracking-[-0.02em] text-(--plan-text)"
-          style={{ fontWeight: 500 }}
-        >
-          {P.enterprise.tagline}
-        </p>
-        <p className="mt-2 text-[14px] leading-5 text-(--plan-dim)">{P.enterprise.line}</p>
-      </div>
-      <div className="home-plan-enterprise-perks">
-        <PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} wide />
-      </div>
-      <div className="home-plan-enterprise-cta">
+      cardId={e.id}
+      light={e.id}
+      i={5}
+      nameId={`plan-${e.id}-name`}
+      className={`${ENTERPRISE_CARD} home-plan-rise scroll-mt-28`}
+      name={e.name}
+      tagline={P.enterprise.tagline}
+      line={P.enterprise.line}
+      perks={<PerkList head={perks.head} items={perks.items.map((perk) => perkText(perk, annual))} wide />}
+      action={
         <PillLink href={e.cta.href} variant="primary" className={cn("h-11 w-full justify-center", RING_LIGHT)}>
           {e.cta.label}
         </PillLink>
-      </div>
-    </li>
+      }
+    />
   );
 });
 
@@ -371,16 +249,20 @@ export function serviceJumpChips(annual: boolean): JumpChip[] {
  * the rail is ringed (at either end of the scroll, the end card). Worked
  * out when a card crosses 60% visible and once when a scroll ends, never
  * per scroll frame. Mounted afresh with each rail it serves (`key`), so
- * it observes the cards that are there.
+ * it observes the cards that are there. The app's plan rails (onboarding,
+ * billing) use it too, below sm, through `className`.
  */
 export function PlanJump({
   chips,
   railRef,
   reduce,
+  className,
 }: {
   chips: readonly JumpChip[];
-  railRef: RefObject<HTMLOListElement | null>;
+  railRef: RefObject<HTMLElement | null>;
   reduce: boolean;
+  /** Merged over the row's classes (the app shows it below sm, closer to its rail). */
+  className?: string;
 }) {
   const [inView, setInView] = useState(chips[0]?.id ?? "");
 
@@ -427,7 +309,10 @@ export function PlanJump({
     <div
       role="group"
       aria-label={P.jump.label}
-      className="home-fade-x -mx-4 mt-8 flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:hidden [&::-webkit-scrollbar]:hidden"
+      className={cn(
+        "home-fade-x -mx-4 mt-8 flex gap-2 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:hidden [&::-webkit-scrollbar]:hidden",
+        className,
+      )}
     >
       {chips.map((chip) => (
         <button

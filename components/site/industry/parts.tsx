@@ -34,8 +34,10 @@ export const EMBER_INK = "#bd4a1c";
 const PLAN_LABEL: Record<Plan, string> = {
   trial: "Trial",
   starter: "Starter",
+  growth: "Growth",
   pro: "Pro",
   business: "Business",
+  scale: "Scale",
   custom: "Enterprise",
   store_starter: "Store Starter",
   store_growth: "Store Growth",

@@ -25,10 +25,16 @@ const stripe = {
   client: {
     customers: { create: vi.fn() },
     checkout: { sessions: { create: vi.fn() } },
+    subscriptions: { list: vi.fn(), retrieve: vi.fn() },
   },
 }
-vi.mock('@/lib/stripe/client', () => ({ getStripeClient: () => stripe.client, isStripeConfigured: () => stripe.configured }))
-// Store plans resolve their Stripe price by lookup key (lib/stripe/store-prices.ts).
+vi.mock('@/lib/stripe/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/stripe/client')>()),
+  getStripeClient: () => stripe.client,
+  isStripeConfigured: () => stripe.configured,
+}))
+// Every self-serve plan resolves its Stripe price through ensurePlanPriceId
+// (an env pin validated against PLANS, else by lookup key: lib/stripe/store-prices.ts).
 const ensurePlanPriceId = vi.fn()
 vi.mock('@/lib/stripe/store-prices', () => ({ ensurePlanPriceId: (...a: unknown[]) => ensurePlanPriceId(...a) }))
 vi.mock('@/lib/email/client', () => ({ sendEmail: vi.fn() }))
@@ -97,13 +103,15 @@ beforeEach(() => {
   stripe.configured = false
   stripe.client.customers.create.mockReset().mockResolvedValue({ id: 'cus_test' })
   stripe.client.checkout.sessions.create.mockReset().mockResolvedValue({ url: 'https://checkout.stripe.test/s' })
-  ensurePlanPriceId.mockReset().mockResolvedValue('price_store_starter_month')
+  stripe.client.subscriptions.list.mockReset().mockResolvedValue({ data: [], has_more: false })
+  stripe.client.subscriptions.retrieve.mockReset().mockRejectedValue(Object.assign(new Error('No such subscription'), { code: 'resource_missing', statusCode: 404 }))
+  ensurePlanPriceId.mockReset().mockImplementation(async (plan: string, interval: string) => `price_${plan}_${interval}`)
 })
 
 describe('POST /api/onboarding/complete', () => {
   it('primary ready → activates and reports activated', async () => {
     const body = await (await complete({ plan: 'trial', agent: sameAgent })).json()
-    expect(body).toMatchObject({ success: true, activated: true, warning: null })
+    expect(body).toMatchObject({ success: true, activated: true, warning: null, plan_notice: null })
     expect(activations()).toHaveLength(1)
     expect(enforceRateLimit).toHaveBeenCalledWith(expect.objectContaining({ name: 'agent_sync' }), ORG, expect.any(String))
   })
@@ -188,21 +196,47 @@ describe('POST /api/onboarding/complete', () => {
       }))
     })
 
-    it('service org on a paid service plan → the env price id, the plan stamped on the subscription', async () => {
+    it('service org on a paid service plan → the price PLANS validates for the chosen interval, the plan stamped on the subscription', async () => {
       stripe.configured = true
-      const priceId = PLANS.pro.stripe_price_id_annual
-      PLANS.pro.stripe_price_id_annual = 'price_pro_year'
-      try {
-        const body = await (await complete({ plan: 'pro', annual: true, agent: sameAgent })).json()
-        expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
-      } finally {
-        PLANS.pro.stripe_price_id_annual = priceId
-      }
-      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      const body = await (await complete({ plan: 'pro', annual: true, agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      // The annual price, never the monthly one in its place.
+      expect(ensurePlanPriceId).toHaveBeenCalledWith('pro', 'year')
       expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({
         line_items: [{ price: 'price_pro_year', quantity: 1 }],
         subscription_data: expect.objectContaining({ metadata: { org_id: ORG, ntv_plan: 'pro' } }),
       }))
+    })
+
+    it.each(['growth', 'scale'] as const)('the homepage rung %s launches through checkout like every self-serve service plan', async (plan) => {
+      stripe.configured = true
+      const body = await (await complete({ plan, agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, checkout_url: 'https://checkout.stripe.test/s' })
+      expect(ensurePlanPriceId).toHaveBeenCalledWith(plan, 'month')
+      expect(orgUpdates()[0]).toEqual(expect.objectContaining({ plan: 'trial', onboarding_completed: false, onboarding_step: 4 }))
+      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({
+        line_items: [{ price: `price_${plan}_month`, quantity: 1 }],
+        subscription_data: expect.objectContaining({ metadata: { org_id: ORG, ntv_plan: plan } }),
+      }))
+    })
+
+    it('without Stripe (demo mode) Growth and Scale are granted directly with their own minutes', async () => {
+      for (const plan of ['growth', 'scale'] as const) {
+        state.admin = fakeDb(() => ({ data: null, error: null }))
+        expect((await complete({ plan, agent: sameAgent })).status).toBe(200)
+        expect(orgUpdates()).toEqual([expect.objectContaining({ plan, minutes_limit: PLANS[plan].minutes_limit, onboarding_completed: true })])
+      }
+      expect(PLANS.growth.minutes_limit).toBe(1000)
+      expect(PLANS.scale.minutes_limit).toBe(15000)
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+    })
+
+    it('Enterprise (custom) is sales-led: the trial, no Stripe, no notice', async () => {
+      stripe.configured = true
+      const body = await (await complete({ plan: 'custom', agent: sameAgent })).json()
+      expect(body.plan_notice).toBeNull()
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', onboarding_completed: true })])
     })
 
     it('e-commerce org on the trial plan → completed at the store launch step (6)', async () => {
@@ -235,7 +269,7 @@ describe('POST /api/onboarding/complete', () => {
 
     it('a service plan is refused to an e-commerce org', async () => {
       state.org.business_type = 'ecommerce'
-      for (const plan of ['starter', 'pro', 'business', 'custom']) {
+      for (const plan of ['starter', 'growth', 'pro', 'business', 'scale', 'custom']) {
         const res = await complete({ plan, agent: sameAgent })
         expect(res.status, plan).toBe(409)
         expect(await res.json()).toMatchObject({ code: 'plan_not_available' })
@@ -255,25 +289,123 @@ describe('POST /api/onboarding/complete', () => {
       stripe.configured = true
       ensurePlanPriceId.mockRejectedValue(new Error('Stripe is down'))
       const body = await (await complete({ plan: 'store_scale', agent: sameAgent })).json()
-      expect(body).toMatchObject({ success: true, redirect: expect.stringContaining('/dashboard') })
+      // The launch goes ahead on the trial, and the client is told the paid plan was not started.
+      expect(body).toMatchObject({ success: true, redirect: expect.stringContaining('/dashboard'), plan_notice: 'price_unavailable' })
       expect(body.checkout_url).toBeUndefined()
       expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', minutes_limit: PLANS.trial.minutes_limit, onboarding_completed: true, onboarding_step: 6 })])
       expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
     })
 
-    it('the sales-led Store Enterprise lands on the trial without touching Stripe', async () => {
+    it('the sales-led Store Enterprise lands on the trial without touching Stripe (no notice: sales sets it up)', async () => {
       state.org.business_type = 'ecommerce'
       stripe.configured = true
-      expect((await complete({ plan: 'store_enterprise', agent: sameAgent })).status).toBe(200)
+      const res = await complete({ plan: 'store_enterprise', agent: sameAgent })
+      expect(res.status).toBe(200)
+      expect((await res.json()).plan_notice).toBeNull()
       expect(ensurePlanPriceId).not.toHaveBeenCalled()
       expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', onboarding_completed: true })])
     })
 
     it('without Stripe (demo mode) the store plan is granted directly with its minutes', async () => {
       state.org.business_type = 'ecommerce'
-      expect((await complete({ plan: 'store_growth', agent: sameAgent })).status).toBe(200)
+      const res = await complete({ plan: 'store_growth', agent: sameAgent })
+      expect(res.status).toBe(200)
+      expect((await res.json()).plan_notice).toBeNull()
       expect(ensurePlanPriceId).not.toHaveBeenCalled()
       expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'store_growth', minutes_limit: PLANS.store_growth.minutes_limit, onboarding_completed: true })])
+    })
+  })
+  describe('plan_notice: a paid plan that could not be started', () => {
+    it('a service plan whose Stripe price cannot be resolved → trial, price_unavailable', async () => {
+      stripe.configured = true
+      ensurePlanPriceId.mockRejectedValue(new Error('No usable Stripe price for starter (month)'))
+      const body = await (await complete({ plan: 'starter', agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, plan_notice: 'price_unavailable' })
+      expect(body.checkout_url).toBeUndefined()
+      expect(orgUpdates()).toEqual([expect.objectContaining({ plan: 'trial', minutes_limit: PLANS.trial.minutes_limit, onboarding_completed: true })])
+      expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
+    })
+
+    it('a checkout that cannot be opened → trial, checkout_unavailable', async () => {
+      state.org.business_type = 'ecommerce'
+      stripe.configured = true
+      stripe.client.checkout.sessions.create.mockRejectedValue(new Error('Stripe is down'))
+      const body = await (await complete({ plan: 'store_starter', agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, redirect: expect.stringContaining('/dashboard'), plan_notice: 'checkout_unavailable' })
+      expect(body.checkout_url).toBeUndefined()
+      expect(orgUpdates().at(-1)).toEqual(expect.objectContaining({ plan: 'trial', onboarding_completed: true }))
+    })
+
+    it('a checkout that opens carries no notice', async () => {
+      state.org.business_type = 'ecommerce'
+      stripe.configured = true
+      const body = await (await complete({ plan: 'store_starter', agent: sameAgent })).json()
+      expect(body.checkout_url).toBe('https://checkout.stripe.test/s')
+      expect(body.plan_notice).toBeUndefined()
+    })
+  })
+
+  describe('an organization that already has a plan subscription keeps it (stale Launch tab, Checkout done elsewhere)', () => {
+    /** A Stripe plan subscription of this organization's customer. */
+    const planSub = (id: string, status: string) => ({
+      id,
+      status,
+      customer: 'cus_1',
+      metadata: { org_id: ORG, ntv_plan: 'scale' },
+      items: { data: [{ id: `si_${id}`, price: { id: 'price_scale_month' } }] },
+    })
+
+    beforeEach(() => {
+      stripe.configured = true
+      state.org = { ...state.org, stripe_customer_id: 'cus_1', stripe_subscription_id: 'sub_paid', onboarding_completed: false }
+    })
+
+    it.each(['trial', 'starter', 'scale'] as const)('a live subscription: choosing %s rewrites no plan or minutes and opens no Checkout', async (plan) => {
+      stripe.client.subscriptions.retrieve.mockResolvedValue(planSub('sub_paid', 'active'))
+      const body = await (await complete({ plan, agent: sameAgent })).json()
+      expect(body).toMatchObject({ success: true, redirect: expect.stringContaining('/dashboard'), plan_notice: 'subscription_exists' })
+      expect(body.checkout_url).toBeUndefined()
+      expect(orgUpdates()).toEqual([{ onboarding_completed: true, onboarding_step: 4 }])
+      expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
+      expect(ensurePlanPriceId).not.toHaveBeenCalled()
+      // The agent is still saved and launched.
+      expect(activations()).toHaveLength(1)
+    })
+
+    it('a subscription with a payment due: no second subscription, the owner is told', async () => {
+      state.org = { ...state.org, stripe_subscription_id: null }
+      stripe.client.subscriptions.list.mockResolvedValue({ data: [planSub('sub_due', 'past_due')], has_more: false })
+      const body = await (await complete({ plan: 'pro', agent: sameAgent })).json()
+      expect(body.plan_notice).toBe('payment_due')
+      expect(orgUpdates()).toEqual([{ onboarding_completed: true, onboarding_step: 4 }])
+      expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
+    })
+
+    it('when Stripe cannot say, the plan is left as it is and no Checkout is opened', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      stripe.client.subscriptions.retrieve.mockRejectedValue(Object.assign(new Error('Stripe is down'), { statusCode: 503 }))
+      const body = await (await complete({ plan: 'pro', agent: sameAgent })).json()
+      expect(body.plan_notice).toBe('checkout_unavailable')
+      expect(orgUpdates()).toEqual([{ onboarding_completed: true, onboarding_step: 4 }])
+      expect(stripe.client.checkout.sessions.create).not.toHaveBeenCalled()
+    })
+
+    it('a customer whose earlier plan subscription ended gets a Checkout without a second free trial', async () => {
+      state.org = { ...state.org, stripe_subscription_id: null }
+      stripe.client.subscriptions.list.mockResolvedValue({ data: [planSub('sub_old', 'canceled')], has_more: false })
+      const body = await (await complete({ plan: 'pro', agent: sameAgent })).json()
+      expect(body.checkout_url).toBe('https://checkout.stripe.test/s')
+      const params = stripe.client.checkout.sessions.create.mock.calls[0][0] as { subscription_data: Record<string, unknown> }
+      expect(params.subscription_data).not.toHaveProperty('trial_period_days')
+      expect(params.subscription_data.metadata).toEqual({ org_id: ORG, ntv_plan: 'pro' })
+    })
+
+    it('a customer that never had a plan subscription still gets the 14 free days', async () => {
+      state.org = { ...state.org, stripe_subscription_id: null }
+      await complete({ plan: 'pro', agent: sameAgent })
+      expect(stripe.client.checkout.sessions.create).toHaveBeenCalledWith(expect.objectContaining({
+        subscription_data: expect.objectContaining({ trial_period_days: 14 }),
+      }))
     })
   })
 })

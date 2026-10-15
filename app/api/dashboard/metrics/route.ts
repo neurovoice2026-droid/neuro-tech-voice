@@ -12,6 +12,7 @@ import {
   wallTime,
   zonedDayStart,
 } from '@/lib/calls/serialize'
+import { minutesCapacity } from '@/lib/billing/minute-packs'
 import { CALL_OUTCOMES, type DashboardMetrics } from '@/types'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -23,7 +24,9 @@ const LIVE = new Set(['ringing', 'in-progress'])
 // completed); ai_success_rate is the AI resolution rate from call_successful
 // (success / (success + failure)); outcome_breakdown counts calls.outcome.
 // sentiment_breakdown counts calls.sentiment, which is no longer derived from
-// the AI verdict (older rows only).
+// the AI verdict (older rows only). extra_balance is the purchased minutes
+// left; total_left adds the period's included minutes left (the hard cap of
+// lib/telephony/quota.ts).
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
   let log = createLogger({ requestId, route: 'dashboard.metrics' })
@@ -34,7 +37,7 @@ export async function GET(request: Request) {
 
     const [factsResult, usage] = await Promise.all([
       loadCallFacts(supabase, org.id),
-      supabase.from('organizations').select('minutes_used, minutes_limit').eq('id', org.id).single(),
+      supabase.from('organizations').select('minutes_used, minutes_limit, extra_minutes_balance').eq('id', org.id).single(),
     ])
     if (usage.error) throw dbError('organization usage', usage.error)
     const { facts, total, truncated } = factsResult
@@ -78,6 +81,11 @@ export async function GET(request: Request) {
     const judged = aiOutcome.success + aiOutcome.failure
 
     const peak = Math.max(...hourCounts)
+    const minutes = minutesCapacity({
+      minutes_used: (usage.data?.minutes_used as number | null | undefined) ?? null,
+      minutes_limit: (usage.data?.minutes_limit as number | null | undefined) ?? null,
+      extra_minutes_balance: (usage.data?.extra_minutes_balance as number | null | undefined) ?? null,
+    })
     const metrics: DashboardMetrics = {
       total_calls: total,
       total_duration_seconds: Math.round(totalDuration),
@@ -90,6 +98,9 @@ export async function GET(request: Request) {
       success_rate: finished > 0 ? Math.round((completed / finished) * 100) : 0,
       minutes_used: Number(usage.data?.minutes_used ?? 0),
       minutes_limit: Number(usage.data?.minutes_limit ?? 0),
+      // Purchased minutes left, and everything left (included left + purchased).
+      extra_balance: minutes.extra,
+      total_left: minutes.total,
       // AI resolution rate: the AI's verdict on each call's goal (not sentiment).
       ai_success_rate: judged > 0 ? Math.round((aiOutcome.success / judged) * 100) : null,
       ai_outcome_breakdown: aiOutcome,

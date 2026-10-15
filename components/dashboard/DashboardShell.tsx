@@ -24,6 +24,8 @@ import { LiveDot } from '@/components/shared/LiveDot'
 import { Logo } from '@/components/shared/Logo'
 import { OrbInline } from '@/components/shared/OrbLoader'
 import { signOut } from '@/lib/auth/actions'
+import { MinutesBanner } from '@/components/dashboard/MinutesBanner'
+import { minutesMeterTone, showsMinutesBanner, type MinutesBannerState } from '@/components/billing/minutes-logic'
 import { cn } from '@/lib/utils'
 import type { Organization, Agent } from '@/types'
 
@@ -97,6 +99,8 @@ interface DashboardShellProps {
   agent: Agent | null
   userEmail: string
   hasPhoneNumber: boolean
+  /** Out of minutes / running low (decided by the layout); null hides the banner. */
+  minutesBanner?: MinutesBannerState | null
 }
 
 function isActive(pathname: string, href: string) {
@@ -209,7 +213,9 @@ function WorkspaceMenu({ org, userEmail, onNavigate }: { org: Organization; user
 /** Minutes meter at the foot of the sidebar (≥ 80 % warning, ≥ 100 % danger). */
 function UsageTile({ org }: { org: Organization }) {
   const pct = org.minutes_limit > 0 ? Math.round((org.minutes_used / org.minutes_limit) * 100) : 0
-  const tone = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : 'default'
+  // Prepaid extra minutes keep calls going past the included ones: the meter warns instead of alarming.
+  const extra = Math.max(0, Math.floor(org.extra_minutes_balance ?? 0))
+  const tone = minutesMeterTone(pct, extra)
   return (
     <div className="rounded-2xl bg-secondary p-3">
       <div className="flex items-center justify-between gap-2 text-xs leading-4">
@@ -224,14 +230,19 @@ function UsageTile({ org }: { org: Organization }) {
         value={Math.min(pct, 100)}
         tone={tone}
         surface="tinted"
-        aria-label="Minutes used this period"
+        aria-label="Included minutes used this period"
         className="mt-2"
       />
+      {extra > 0 && (
+        <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums">
+          {`+${extra.toLocaleString('en-US')} extra ${extra === 1 ? 'minute' : 'minutes'}`}
+        </p>
+      )}
     </div>
   )
 }
 
-export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber }: DashboardShellProps) {
+export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber, minutesBanner = null }: DashboardShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -259,6 +270,8 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
   )
 
   const showNumberBanner = !hasPhoneNumber && !pathname.startsWith('/phone')
+  // The billing page's Minutes section shows the same out-of-minutes callout (and the auto top-up form).
+  const showMinutesBanner = !!minutesBanner && showsMinutesBanner(pathname)
   // The banner lines up with the page below it: same 1176 px container as PageContainer, and on
   // form pages the same left-aligned 768 px column, so its left edge matches the page header's.
   const narrowPage = NARROW_PAGES.some((p) => pathname.startsWith(p))
@@ -319,19 +332,22 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          {showNumberBanner && (
+          {(showNumberBanner || showMinutesBanner) && (
             <div className="px-4 pt-4 sm:px-6 lg:px-10 lg:pt-6">
-              <div className="mx-auto w-full max-w-[1176px]">
-                <Alert variant="warning" className={cn(narrowPage && 'max-w-[768px]')}>
-                  <Phone aria-hidden="true" />
-                  <AlertTitle>Your agent can&apos;t take calls yet</AlertTitle>
-                  <AlertDescription>Add a phone number to start answering and making calls.</AlertDescription>
-                  <AlertAction>
-                    <Link href="/phone" className={buttonVariants({ size: 'sm' })}>
-                      Add a number
-                    </Link>
-                  </AlertAction>
-                </Alert>
+              <div className="mx-auto w-full max-w-[1176px] space-y-3">
+                {showMinutesBanner && minutesBanner && <MinutesBanner state={minutesBanner} className={cn(narrowPage && 'max-w-[768px]')} />}
+                {showNumberBanner && (
+                  <Alert variant="warning" className={cn(narrowPage && 'max-w-[768px]')}>
+                    <Phone aria-hidden="true" />
+                    <AlertTitle>Your agent can&apos;t take calls yet</AlertTitle>
+                    <AlertDescription>Add a phone number to start answering and making calls.</AlertDescription>
+                    <AlertAction>
+                      <Link href="/phone" className={buttonVariants({ size: 'sm' })}>
+                        Add a number
+                      </Link>
+                    </AlertAction>
+                  </Alert>
+                )}
               </div>
             </div>
           )}

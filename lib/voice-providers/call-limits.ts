@@ -12,10 +12,14 @@ type Env = Record<string, string | undefined>
 export const PLAN_CONCURRENCY: Record<Plan, number> = {
   trial: 2,
   starter: 2,
+  // Growth: Starter's capacity (1,000 minutes is about eight four-minute calls a day).
+  growth: 2,
   pro: 4,
   business: 6,
+  // Scale: 15,000 minutes is about 125 calls a day, so more room at peak than Business.
+  scale: 8,
   custom: 10,
-  // Store plans: the capacity of the service plan with the nearest price
+  // Store plans: the capacity of their service equivalent
   // (lib/pages/entitlements.ts STORE_PLAN_EQUIVALENT); ELEVENLABS_CONCURRENCY_STORE_* overrides.
   store_starter: 2,
   store_growth: 4,

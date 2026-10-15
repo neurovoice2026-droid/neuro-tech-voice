@@ -3,8 +3,17 @@
 import { memo, type RefObject } from "react";
 import { cn } from "@/lib/utils";
 import { PillLink } from "@/components/site/product/primitives";
-import { HOME_PRICING } from "@/lib/pages/home/pricing";
-import { money, perMinute, wholeMoney, type PlanId } from "@/lib/pages/home/pricing-math";
+import { storeLight } from "@/components/pricing/lights";
+import {
+  EnterpriseTierCard,
+  PerkList,
+  PlanTierCard,
+  TIER_CARD,
+  TierAllowance,
+  TierPrice,
+  useLiveMeshes,
+} from "@/components/pricing/PlanTierCard";
+import { perMinute, wholeMoney } from "@/lib/pages/home/pricing-math";
 import {
   STORE_ENTERPRISE,
   STORE_LISTED,
@@ -15,43 +24,31 @@ import {
   type StorePlan,
 } from "@/lib/pages/home/store-pricing";
 import { RING_LIGHT } from "./controls";
-import {
-  ENTERPRISE_BLOBS,
-  Fee,
-  Mesh,
-  PLAN_BLOBS,
-  PerkList,
-  RollIn,
-  useLiveMeshes,
-  type JumpChip,
-} from "./pricing-cards";
+import type { JumpChip } from "./pricing-cards";
 import { TYPE, WEIGHT } from "./type";
+
+// Which service rung's light a store rung wears (components/pricing/lights.ts).
+export { storeLight };
 
 /* ------------------------------------------------------------------ *
  * #pricing's cards for online stores: the listed store plans and Store
- * Enterprise, the same pearl cards as the service plans (pricing-cards.tsx
- * lends the mesh, the fee, the perk list) on a rail of their own. Each
- * wears a service rung's light under its own id: the pick is the magenta
- * pearl with the badge and the magenta button, the others climb aqua to
- * lilac, Enterprise the champagne band.
+ * Enterprise, the same pearl cards as the service plans
+ * (components/pricing/PlanTierCard.tsx, which the app's store onboarding
+ * and billing show too) on a rail of their own. Each wears a service
+ * rung's light under its own id (components/pricing/lights.ts
+ * `storeLight`): the pick is the magenta pearl with the badge and the
+ * magenta button, the others climb aqua to lilac, Enterprise the
+ * champagne band.
  *
  * Every figure is the backend's (lib/pages/home/store-pricing.ts): the
  * fee, what it is a day, the allowance in minutes and in order calls, the
- * rate past it, and the plan's own feature list as checkout shows it.
+ * price of prepaid extra minutes past it (without them calls pause), and
+ * the plan's own feature list as checkout shows it.
  * Below lg a sideways rail with jump chips above it; from lg three
  * columns, Enterprise a band beneath.
  * ------------------------------------------------------------------ */
 
-const P = HOME_PRICING;
 const S = STORE_PRICING;
-
-/** The lights the listed rungs wear, cheapest first; the pick wears Pro's magenta whatever its rung. */
-const RUNG_LIGHTS: readonly PlanId[] = ["starter", "growth", "business", "scale"];
-const PICK_LIGHT: PlanId = "pro";
-
-export function storeLight(plan: StorePlan, rung: number): PlanId {
-  return plan.featured ? PICK_LIGHT : RUNG_LIGHTS[Math.min(rung, RUNG_LIGHTS.length - 1)];
-}
 
 /** The store plans' chips for the jump row: the listed plans with their fees, then Enterprise. */
 export function storeJumpChips(annual: boolean): JumpChip[] {
@@ -67,7 +64,7 @@ export function storeJumpChips(annual: boolean): JumpChip[] {
 }
 
 /** A card on the store rail: a fixed width that snaps below lg, a grid cell from lg. */
-const CARD = "home-plan home-plan-light home-plan-rise shrink-0 basis-[min(calc(100vw-72px),336px)] snap-center scroll-mt-28 lg:basis-auto";
+const CARD = `${TIER_CARD} home-plan-rise shrink-0 basis-[min(calc(100vw-72px),336px)] snap-center scroll-mt-28 lg:basis-auto`;
 
 const StoreCard = memo(function StoreCard({
   plan,
@@ -84,121 +81,71 @@ const StoreCard = memo(function StoreCard({
   const light = storeLight(plan, rung);
   const year = storeYearly(plan);
   return (
-    <li
+    <PlanTierCard
       id={`plan-${plan.id}`}
-      data-card={plan.id}
-      data-plan={light}
-      data-tone="light"
-      data-pick={pick || undefined}
-      data-i={rung}
-      aria-labelledby={`plan-${plan.id}-name`}
+      cardId={plan.id}
+      light={light}
+      pick={pick}
+      i={rung}
+      nameId={`plan-${plan.id}-name`}
       className={cn(CARD, pick && "xl:z-[1] xl:scale-[1.03]")}
-    >
-      <Mesh blobs={PLAN_BLOBS[light]} />
-      <span aria-hidden className="home-grain" />
-      {pick && <span aria-hidden className="home-plan-ring" />}
-
-      <div className="home-plan-head flex items-start justify-between gap-3">
-        <h3
-          id={`plan-${plan.id}-name`}
-          // Focused from script by the jump chips, so a keyboard lands in the card it was shown.
-          tabIndex={-1}
-          className="pp-display text-[20px] leading-[26px] tracking-[-0.01em] text-(--plan-text) outline-none"
-          style={{ fontWeight: WEIGHT.h3 }}
-        >
-          {plan.name}
-        </h3>
-        {pick && (
-          <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-white px-2.5 text-[12px] leading-4 font-medium text-[#a21caf] shadow-[0_1px_2px_rgb(162_28_175/0.18)]">
-            <svg aria-hidden viewBox="0 0 10 10" className="size-2.5 fill-current">
-              <path d="M5 0c.4 2.6 2.4 4.6 5 5-2.6.4-4.6 2.4-5 5-.4-2.6-2.4-4.6-5-5 2.6-.4 4.6-2.4 5-5Z" />
-            </svg>
-            {S.plan.pick}
-          </span>
-        )}
-      </div>
-
-      <div className="home-plan-price mt-4">
-        <Fee fee={storeFee(plan, annual)} pick={pick} annual={annual} changed={changed} />
-        <p className="mt-1 text-[15px] leading-[22px] font-medium text-(--plan-accent)">
-          <RollIn key={annual ? "yearly" : "monthly"} animate={changed} className="block">
-            {P.plan.perDay(money(storePerDay(plan, annual)))}
-          </RollIn>
-        </p>
-        <p className="mt-0.5 grid text-[13px] leading-[18px] text-(--plan-dim)">
-          <span aria-hidden={annual} className={cn("[grid-area:1/1]", annual && "invisible")}>
-            {P.plan.onYearly(wholeMoney(storeFee(plan, true)))}
-          </span>
-          <span aria-hidden={!annual} className={cn("[grid-area:1/1]", !annual && "invisible")}>
-            {P.plan.yearly(wholeMoney(year.total), wholeMoney(year.off))}
-          </span>
-        </p>
-      </div>
-
-      <div className="home-plan-allowance mt-5 border-t border-(--plan-rule) pt-4">
-        <p className="text-[15px] leading-[22px] font-medium text-(--plan-text)">{S.plan.included(plan.minutes)}</p>
-        <p className="text-[13px] leading-[18px] text-(--plan-dim)">{S.plan.calls(plan.minutes)}</p>
-        <p className="text-[13px] leading-[18px] text-(--plan-dim)">{S.plan.then(perMinute(plan.overage))}</p>
-      </div>
-
-      <div className="home-plan-action mt-5">
-        <PillLink
-          href={plan.cta.href}
-          variant="primary"
-          className={cn("h-11 w-full justify-center", RING_LIGHT, pick && "home-plan-cta-pick")}
-        >
-          {plan.cta.label}
-        </PillLink>
-        <p className="mt-2 text-center text-[12px] leading-4 text-(--plan-dim)">{S.plan.trialMicro}</p>
-      </div>
-
-      <div className="mt-5 border-t border-(--plan-rule) pt-4">
-        <PerkList head={S.plan.head} items={plan.features} />
-      </div>
-    </li>
+      name={plan.name}
+      badge={pick ? S.plan.pick : null}
+      price={
+        <TierPrice
+          fee={storeFee(plan, annual)}
+          perDay={storePerDay(plan, annual)}
+          yearlyFee={storeFee(plan, true)}
+          yearTotal={year.total}
+          yearOff={year.off}
+          pick={pick}
+          annual={annual}
+          changed={changed}
+        />
+      }
+      allowance={
+        <TierAllowance
+          included={S.plan.included(plan.minutes)}
+          notes={[S.plan.calls(plan.minutes), S.plan.then(perMinute(plan.overage))]}
+        />
+      }
+      action={
+        <>
+          <PillLink
+            href={plan.cta.href}
+            variant="primary"
+            className={cn("h-11 w-full justify-center", RING_LIGHT, pick && "home-plan-cta-pick")}
+          >
+            {plan.cta.label}
+          </PillLink>
+          <p className="mt-2 text-center text-[12px] leading-4 text-(--plan-dim)">{S.plan.trialMicro}</p>
+        </>
+      }
+      perks={<PerkList head={S.plan.head} items={plan.features} />}
+    />
   );
 });
 
 const StoreEnterpriseCard = memo(function StoreEnterpriseCard() {
   const e = STORE_ENTERPRISE;
   return (
-    <li
+    <EnterpriseTierCard
       id={`plan-${e.id}`}
-      data-card={e.id}
-      data-plan="custom"
-      data-tone="light"
-      data-i={5}
-      aria-labelledby={`plan-${e.id}-name`}
+      cardId={e.id}
+      light="custom"
+      i={5}
+      nameId={`plan-${e.id}-name`}
       className={cn(CARD, "home-plan-enterprise lg:col-span-3")}
-    >
-      <Mesh blobs={ENTERPRISE_BLOBS} />
-      <span aria-hidden className="home-grain" />
-      <div className="home-plan-enterprise-id">
-        <h3
-          id={`plan-${e.id}-name`}
-          tabIndex={-1}
-          className="pp-display text-[20px] leading-[26px] tracking-[-0.01em] text-(--plan-text) outline-none"
-          style={{ fontWeight: WEIGHT.h3 }}
-        >
-          {e.name}
-        </h3>
-        <p
-          className="pp-display mt-3 text-[28px] leading-[32px] tracking-[-0.02em] text-(--plan-text)"
-          style={{ fontWeight: 500 }}
-        >
-          {S.enterprise.tagline(wholeMoney(e.monthly))}
-        </p>
-        <p className="mt-2 text-[14px] leading-5 text-(--plan-dim)">{S.enterprise.line(e.minutes)}</p>
-      </div>
-      <div className="home-plan-enterprise-perks">
-        <PerkList head={S.plan.head} items={e.features} wide />
-      </div>
-      <div className="home-plan-enterprise-cta">
+      name={e.name}
+      tagline={S.enterprise.tagline(wholeMoney(e.monthly))}
+      line={S.enterprise.line(e.minutes)}
+      perks={<PerkList head={S.plan.head} items={e.features} wide />}
+      action={
         <PillLink href={e.cta.href} variant="primary" className={cn("h-11 w-full justify-center", RING_LIGHT)}>
           {e.cta.label}
         </PillLink>
-      </div>
-    </li>
+      }
+    />
   );
 });
 

@@ -6,13 +6,15 @@
 // only, sentence case).
 //
 // Client-safe: types and strings only (the script variable names come from
-// lib/commerce/prompt.ts and the consent wording from
-// lib/commerce/automations/config.ts, both pure and client-safe).
+// lib/commerce/prompt.ts, the consent wording from
+// lib/commerce/automations/config.ts and the out-of-minutes choice from
+// lib/billing/upgrade.ts, all pure and client-safe).
 
 import type { StatusTone } from '@/components/shared/StatusChip'
 import { SCRIPT_VARIABLES as SCRIPT_VARIABLE_NAMES, type ScriptVariable } from '@/lib/commerce/prompt'
 import type {
   AutomationType,
+  CommerceProblemCode,
   ConnectionStatus,
   CustomerListDto,
   FinancialStatus,
@@ -27,6 +29,8 @@ import type {
   SyncResource,
 } from '@/lib/commerce/types'
 import type { Weekday } from '@/lib/scheduling/time'
+import { outOfMinutesActions, outOfMinutesChoice, type OutOfMinutesAction } from '@/lib/billing/upgrade'
+import type { BusinessType } from '@/types'
 
 // ─── Value lists (for filters and the totality tests) ─────────────────────────
 
@@ -55,6 +59,20 @@ export const SUPPRESSION_SOURCES: readonly SuppressionSource[] = ['customer_opt_
 
 /** Runs a person may still cancel (POST /api/commerce/runs/[id]/cancel accepts only these). */
 export const CANCELLABLE_RUN_STATUSES: readonly RunStatus[] = ['eligible', 'scheduled', 'retry_waiting']
+
+/**
+ * Runs whose eligibility_reason the runs table prints under the status: why
+ * one was held back (suppressed), is waiting (scheduled, e.g. for minutes:
+ * lib/commerce/automations/dispatch.ts MINUTES_WAIT_REASON) or was skipped
+ * (e.g. out of minutes for 24 hours, MINUTES_SKIP_REASON).
+ */
+export const RUN_REASON_STATUSES: readonly RunStatus[] = ['suppressed', 'scheduled', 'skipped']
+
+/** The reason printed under a run's status in the runs table, or null. */
+export function runStatusReason(run: { status: RunStatus; eligibility_reason: string | null }): string | null {
+  const reason = run.eligibility_reason?.trim()
+  return reason && RUN_REASON_STATUSES.includes(run.status) ? reason : null
+}
 
 // ─── Store section paths (one place, so a renamed route never leaves a dead link) ──
 
@@ -211,6 +229,58 @@ export const ENABLE_BLOCKED_REASON: Record<string, { href: string | null; action
   no_phone_number: { href: '/phone', action: 'Add a number' },
   encryption_not_configured: { href: null, action: null },
   connection_inactive: { href: STORE_PATHS.connections, action: 'View connection' },
+}
+
+/**
+ * The button of each overview problem (CommerceOverviewDto.problems; the
+ * server gives the message and the page that fixes it). Out of minutes goes
+ * to the billing page's Minutes section (/billing#minutes): buy a pack or
+ * turn on auto top-up. Once the organization's plan is known, out of minutes
+ * offers the two-way choice instead (problemActions).
+ */
+export const PROBLEM_ACTION_LABEL: Record<CommerceProblemCode, string> = {
+  no_connection: 'Connect store',
+  connection_error: 'View connection',
+  credentials_expired: 'Reconnect',
+  webhook_failure: 'View connection',
+  sync_error: 'View connection',
+  no_phone_number: 'Add a number',
+  no_consent: 'Confirm consent',
+  agent_inactive: 'Open agent',
+  minutes_exhausted: 'Buy minutes',
+  encryption_not_configured: 'Contact support',
+}
+
+/** One button of an overview problem: the out-of-minutes choice, or the page that fixes the problem. */
+export interface ProblemAction {
+  kind: OutOfMinutesAction['kind'] | 'fix'
+  label: string
+  href: string
+  primary: boolean
+}
+
+/** The organization's plan, for the out-of-minutes choice (null while it is not loaded). */
+export interface ProblemOrgPlan {
+  plan: string | null
+  business_type?: BusinessType | null
+}
+
+/**
+ * The buttons of one overview problem. minutes_exhausted offers the same
+ * choice as the dashboard banner and the "out of minutes" e-mail
+ * (lib/billing/upgrade.ts): the next plan up of the store's family ("Talk to
+ * us" for Store Enterprise) and "Buy 100 minutes for $Y" (not on the trial),
+ * linking to /billing#plans and /billing?buy=100#minutes. Until the plan is
+ * known, or for any other problem, the single button the server's href
+ * points at; no button without an href.
+ */
+export function problemActions(problem: { code: CommerceProblemCode; href: string | null }, org?: ProblemOrgPlan | null): ProblemAction[] {
+  if (problem.code === 'minutes_exhausted' && org) {
+    const actions = outOfMinutesActions(outOfMinutesChoice(org.plan, org.business_type ?? null))
+    if (actions.length > 0) return actions
+  }
+  if (!problem.href) return []
+  return [{ kind: problem.code === 'minutes_exhausted' ? 'buy' : 'fix', label: PROBLEM_ACTION_LABEL[problem.code] ?? 'Fix', href: problem.href, primary: false }]
 }
 
 /**

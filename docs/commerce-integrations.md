@@ -399,30 +399,53 @@ org/connection/run ids and never a number in the clear.
   026) holds the service plans (`starter`, `pro`, `business`, `custom`) or the
   store plans (`store_starter` $100, `store_growth` $250, `store_scale` $500,
   `store_enterprise` from $1,000 a month, sales-led; annual = ten months).
-  `PLANS` in `types/index.ts` is the source of truth (prices, minutes, overage,
-  `family`). An online store may hold only the trial or a store plan, every
-  other organization only the trial or a service plan: `planAllowedFor` is
+  `PLANS` in `types/index.ts` is the source of truth (prices, minutes, the
+  extra-minute price `overage_per_min`, `family`). An online store may hold
+  only the trial or a store plan, every other organization only the trial or
+  a service plan: `planAllowedFor` is
   enforced by `POST /api/billing/checkout` and `POST /api/onboarding/complete`
   (409 `plan_not_available`), and the billing page and the launch step show
   `plansForBusinessType(org.business_type)` only.
-* **Minutes.** Store plans bill like the others: included minutes per month
-  (350 / 950 / 2,000 / 4,500, about 1.5 minutes per order-confirmation call),
-  then overage per minute. Dispatch refuses a run with `minutes_exhausted`
-  only on plans without overage (the trial), see `lib/telephony/quota.ts`.
-  Call concurrency and entitlements of a store plan are those of the service
-  plan priced like it (`lib/pages/entitlements.ts`, `call-limits.ts`).
-* **No manual Stripe setup.** Service plans use the `STRIPE_*_PRICE_ID` env
-  ids. Store plans do not need them: `ensurePlanPriceId`
-  (`lib/stripe/store-prices.ts`) returns the env id when set, otherwise the
-  Stripe price carrying the lookup key `ntv_<plan>_<month|year>`, otherwise it
-  creates the product (metadata `ntv_plan`) and a recurring USD price with
-  that lookup key and metadata `{ ntv_plan, ntv_interval }`. Both creates
-  carry a Stripe idempotency key (`ntv_product_<plan>`,
-  `ntv_price_<plan>_<interval>`), so two cold lambdas racing on the first
-  checkout share one product and one price. Checkout also stamps `ntv_plan`
-  on the subscription. The billing webhook resolves the plan from the env
-  price map, then the price itself (`resolvePlanFromPrice`: its metadata, then
-  its lookup key), and only then the subscription's `ntv_plan`: Stripe never
+* **Minutes.** Store plans work like the others (`docs/billing.md`): included
+  minutes per billing period (350 / 950 / 2,000 / 4,500, about 1.5 minutes per
+  order-confirmation call), reset on each Stripe renewal, then a hard cap.
+  Past the included minutes, calls draw on prepaid extra minutes: packs of
+  100 / 500 / 1,000 / 2,500 bought on the billing page (`/billing#minutes`) at
+  the plan's extra-minute price ($0.25 Store Starter, $0.22 Store Growth,
+  $0.20 Store Scale, $0.18 Store Enterprise) less 0 / 4 / 8 / 12%, or bought
+  automatically by auto top-up. Nothing is billed after the fact.
+* **Automations out of minutes.** When the organization has no minutes left
+  (included and extra, `lib/telephony/quota.ts`), a due run is not dialed:
+  dispatch defers it (tried again every 30 minutes inside the call window,
+  `minutes_wait_since`) for up to 24 hours after its scheduled time, then
+  skips it with the reason `minutes_exhausted`. The overview shows the
+  problem `minutes_exhausted` with "Buy minutes" (`/billing#minutes`); the
+  owner also gets the "out of minutes" e-mail once per period. Auto top-up
+  runs in the maintenance cron before the automations dial, so an
+  organization with it on rarely reaches this state.
+* **Capacity and entitlements.** Call concurrency and entitlements of a store
+  plan are those of its service equivalent: the listed service plan priced
+  nearest (Store Starter: Growth, which has Starter's; Store Growth: Pro;
+  Store Scale: Business), and Enterprise for Store Enterprise
+  (`lib/pages/entitlements.ts` `STORE_PLAN_EQUIVALENT`, `call-limits.ts`).
+* **Plan changes.** A store with an active store-plan subscription switches
+  plans in place (prorated, `POST /api/billing/checkout` answers
+  `{ updated: true, plan }`); a new subscription goes through Stripe
+  Checkout.
+* **No manual Stripe setup.** No plan needs a price id in the env, service
+  or store: `ensurePlanPriceId` (`lib/stripe/store-prices.ts`) uses an env pin
+  (`STRIPE_<PLAN>[_ANNUAL]_PRICE_ID`) only while Stripe reports it bills
+  exactly the `PLANS` price and it is tagged `metadata.ntv_plan` for the plan
+  (on the price, else on its product), otherwise the Stripe price carrying the lookup
+  key `ntv_<plan>_<month|year>`, otherwise it creates the product (metadata
+  `ntv_plan`, name and description from `PLANS`) and a recurring USD price
+  with that lookup key and metadata `{ ntv_plan, ntv_interval }`. Both creates
+  carry a Stripe idempotency key derived from the plan and the amount, so two
+  cold lambdas racing on the first checkout share one product and one price
+  (details: `docs/billing.md`, section 2). Checkout also stamps `ntv_plan` on
+  the subscription. The billing webhook resolves the plan from the env price
+  map, then the price itself (`resolvePlanFromPrice`: its metadata, then its
+  lookup key), and only then the subscription's `ntv_plan`: Stripe never
   rewrites that stamp when the price changes (Customer Portal plan switch), so
   the price must win. A price nobody tagged resets the organization to the
   trial as before.

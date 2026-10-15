@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { isAbortError } from '@/hooks/useVoiceCatalog'
 import type { AgentVoiceStatus } from '@/lib/voice-providers/voice-status'
+import { PLANS, isPlan } from '@/types'
 
 export type CurrentVoiceStatus = Pick<AgentVoiceStatus, 'voice_id' | 'kind' | 'notice'>
 
@@ -37,8 +38,9 @@ export interface CustomVoiceLimits {
   unavailableReason: string | null
 }
 
-function planName(plan: string): string {
-  return plan.charAt(0).toUpperCase() + plan.slice(1)
+/** The plan's display name from PLANS ('Store Growth' for store_growth); an id the client does not know is shown as sent. */
+export function planName(plan: string): string {
+  return isPlan(plan) ? PLANS[plan].name : plan
 }
 
 /** GET /api/voices/limits once; `count` is the live number of custom voices shown. */

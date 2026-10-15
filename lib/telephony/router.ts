@@ -33,7 +33,7 @@ import { signCallToken } from './tokens'
 import { appendRedirect, dialCartesiaSip, forwardCall, hangup, reject, sayAndHangup } from './twiml'
 import { findNumber, loadRoutingContext, numberById, type RoutingContext } from './context'
 import { buildClientData } from './client-data'
-import { callAllowance } from './quota'
+import { callAllowance, connectedCallCapSeconds } from './quota'
 
 const CALL_TOKEN_TTL_S = 4 * 60 * 60
 
@@ -132,10 +132,15 @@ function whisperUrlFor(ctx: RoutingContext, callId: string): string | null {
   return ctx.agent?.transferWhisper ? urlWithToken('/api/telephony/twilio/whisper', signCallToken(callId, 'whisper', CALL_TOKEN_TTL_S)) : null
 }
 
-/** Seconds this call may last: the agent's limit, lowered to the minutes left on a trial. */
+/**
+ * Seconds this call may last: the agent's limit, lowered to the minutes the
+ * organization has left (included + purchased, lib/telephony/quota.ts). A
+ * call that reached this point without minutes (an answered outbound call
+ * whose minutes ran out meanwhile) keeps the minimum capped length.
+ */
 function callTimeLimit(ctx: RoutingContext): number {
   const max = ctx.agent?.maxDurationSeconds ?? 60
-  const cap = callAllowance(ctx.org.usage).capSeconds
+  const cap = connectedCallCapSeconds(ctx.org.usage)
   return typeof cap === 'number' && cap > 0 ? Math.min(max, cap) : max
 }
 
@@ -163,7 +168,7 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
   // Shared builder (lib/telephony/client-data.ts): signed correlation and tool
   // tokens, routing mode 'app_routed' (mixed-mode orgs transfer with the
   // platform tool), the outbound greeting with the disclosure and the
-  // recording notice, and the trial cap where the agent allows it.
+  // recording notice, and the minute cap where the agent allows it.
   const clientData = buildClientData({
     callId: call.id,
     orgId: ctx.org.id,
@@ -176,7 +181,7 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
     // Campaign calls (lib/commerce) carry their typed script values on the row.
     tenantVariables: commerceVariablesOf(call.routing),
     allowedOverrides: ctx.elevenLabsOverrides,
-    capSeconds: callAllowance(ctx.org.usage).capSeconds,
+    capSeconds: connectedCallCapSeconds(ctx.org.usage),
   })
   log.debug('router.register_call', { direction: opts.direction, afterHours: opts.afterHours, callId: call.id })
   const twiml = await el.twilio.registerCall(
@@ -339,7 +344,7 @@ export async function routeInboundCall(p: Record<string, string>, log: Logger = 
     return sayAndHangup(message, language)
   }
 
-  // A plan without overage (trial) whose minutes are used up: no AI call.
+  // Out of minutes (included and purchased): no AI call, the unavailable line.
   if (!callAllowance(ctx.org.usage).allowed) {
     cl.warn('router.plan_minutes_exhausted')
     await updateCall(db, call.id, { status: 'failed', routing_reason: 'quota_exhausted', lifecycle_rank: 30 }, cl)

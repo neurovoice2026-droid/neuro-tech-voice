@@ -5,7 +5,8 @@
 // as the service flow's Step5Launch: live / saved-but-not-live / checkout).
 // The plans are the store family (plansForBusinessType('ecommerce')): the
 // trial, the self-serve store tiers and Store Enterprise as a contact-sales
-// card. The server refuses any other family for a store (409 plan_not_available).
+// card, each the homepage's store card (components/pricing, PlanChoice). The
+// server refuses any other family for a store (409 plan_not_available).
 
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CheckCircle2, Circle, CreditCard, Rocket } from 'lucide-react'
@@ -19,12 +20,14 @@ import { LiveDot } from '@/components/shared/LiveDot'
 import { OrbLoader } from '@/components/shared/OrbLoader'
 import { SectionHeading } from '@/components/shared/SectionHeading'
 import { TestAgentPanel } from '@/components/agent/TestAgentPanel'
-import { BillingPeriod, PlanCard } from '@/components/onboarding/steps/Step5Launch'
+import { BillingPeriod, PlanChoice, PlanNotStartedNote, readPlanNotice, type PlanNotice } from '@/components/onboarding/steps/Step5Launch'
+import { PlanTiers, appJumpChips } from '@/components/pricing/AppPlanTiers'
+import { TRIAL_TIER } from '@/components/pricing/plan-tier-view'
 import { useCommerceOnboardingStore, type CommerceChecklistItem } from '@/store/useCommerceOnboardingStore'
 import { cn } from '@/lib/utils'
 import { PLANS, plansForBusinessType, type Organization, type Plan } from '@/types'
 import { StepBody } from '../../StepIndicator'
-import { ContactSalesPlanCard } from '../ContactSalesPlanCard'
+import { ContactSalesNote } from '../ContactSalesPlanCard'
 import { readCommerceError } from '../api'
 import { checklistStepFor } from '../copy'
 import { useCommerceNavigation } from '../navigation'
@@ -32,9 +35,6 @@ import { CommerceStepHeader } from '../shared'
 
 /** The paid plans an online store may launch on, cheapest first; the trial comes before them. */
 const STORE_PLAN_IDS = plansForBusinessType('ecommerce')
-/** The tier most stores fit, marked "Our pick" (the billing page recommends the same one). */
-const RECOMMENDED_PLAN: Plan = 'store_growth'
-const SALES_EMAIL = 'sales@neuro-tech-voice.com'
 
 interface LaunchStepProps {
   organization: Organization
@@ -47,9 +47,13 @@ interface CompleteResponse {
   activated?: boolean
   /** Sanitized message about the primary voice provider sync. */
   warning?: string | null
+  /** Set when the paid plan chosen was not started: the store launched on the trial. */
+  plan_notice?: string | null
 }
 
-type LaunchOutcome = { kind: 'live' } | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null }
+type LaunchOutcome =
+  | { kind: 'live'; planNotice: PlanNotice | null }
+  | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null; planNotice: PlanNotice | null }
 
 /** The outcome replaces the form: bring its heading into view and give it focus. */
 function useOutcomeHeading() {
@@ -98,7 +102,7 @@ function Checklist({ items, onGoTo }: { items: CommerceChecklistItem[]; onGoTo: 
   )
 }
 
-function SuccessScreen({ agentName }: { agentName: string }) {
+function SuccessScreen({ agentName, planNotice, planName }: { agentName: string; planNotice: PlanNotice | null; planName: string }) {
   const headingRef = useOutcomeHeading()
   return (
     <StepBody className="space-y-6">
@@ -123,6 +127,8 @@ function SuccessScreen({ agentName }: { agentName: string }) {
         </p>
       </section>
 
+      {planNotice && <PlanNotStartedNote planName={planName} />}
+
       {/* The agent is synced and active now, so it can be tried in the browser. */}
       <TestAgentPanel variant="onboarding" agentName={agentName} />
 
@@ -136,7 +142,13 @@ function SuccessScreen({ agentName }: { agentName: string }) {
   )
 }
 
-function NotLiveScreen({ agentName, detail, checkoutUrl }: { agentName: string; detail: string | null; checkoutUrl: string | null }) {
+function NotLiveScreen({ agentName, detail, checkoutUrl, planNotice, planName }: {
+  agentName: string
+  detail: string | null
+  checkoutUrl: string | null
+  planNotice: PlanNotice | null
+  planName: string
+}) {
   const headingRef = useOutcomeHeading()
   return (
     <div>
@@ -147,18 +159,21 @@ function NotLiveScreen({ agentName, detail, checkoutUrl }: { agentName: string; 
         description={`Your setup is saved, but ${agentName ? `${agentName} is` : 'the agent is'} not taking calls yet.`}
       />
       <StepBody>
-        <Alert variant="warning">
-          <AlertTriangle aria-hidden="true" />
-          <AlertTitle>The voice provider setup did not complete</AlertTitle>
-          <AlertDescription>
-            {detail && <p>{detail}</p>}
-            <p>
-              {checkoutUrl
-                ? 'Once checkout is complete, open the Agent page to retry the setup and switch the agent on.'
-                : 'Open the Agent page to retry the setup and switch the agent on.'}
-            </p>
-          </AlertDescription>
-        </Alert>
+        <div className="space-y-4">
+          <Alert variant="warning">
+            <AlertTriangle aria-hidden="true" />
+            <AlertTitle>The voice provider setup did not complete</AlertTitle>
+            <AlertDescription>
+              {detail && <p>{detail}</p>}
+              <p>
+                {checkoutUrl
+                  ? 'Once checkout is complete, open the Agent page to retry the setup and switch the agent on.'
+                  : 'Open the Agent page to retry the setup and switch the agent on.'}
+              </p>
+            </AlertDescription>
+          </Alert>
+          {planNotice && <PlanNotStartedNote planName={planName} />}
+        </div>
 
         <div className="mt-10 flex flex-col-reverse gap-2 border-t border-rule pt-6 sm:flex-row sm:justify-end">
           {checkoutUrl ? (
@@ -193,6 +208,8 @@ export function LaunchStep({ organization }: LaunchStepProps) {
   const { goTo, refetchState } = useCommerceNavigation()
 
   const [annual, setAnnual] = useState(false)
+  // Lines roll in on a period switch only after the owner's first one (never on arrival).
+  const [periodChanged, setPeriodChanged] = useState(false)
   const [isLaunching, setIsLaunching] = useState(false)
   const [outcome, setOutcome] = useState<LaunchOutcome | null>(null)
 
@@ -205,7 +222,6 @@ export function LaunchStep({ organization }: LaunchStepProps) {
   const agentName = agent?.name ?? ''
   const agentLabel = agentName || 'the agent'
   const enabledAutomations = automations.filter((a) => a.enabled).length
-  const lastPlan = STORE_PLAN_IDS[STORE_PLAN_IDS.length - 1]
   const salesLedPicked = PLANS[plan].contact_sales === true
 
   async function launch() {
@@ -245,9 +261,10 @@ export function LaunchStep({ organization }: LaunchStepProps) {
       }
 
       // The account is set up, but the agent only takes calls once the server activated it.
+      const planNotice = readPlanNotice(data.plan_notice)
       if (data.activated !== true) {
         setIsLaunching(false)
-        setOutcome({ kind: 'not_live', detail: data.warning ?? null, checkoutUrl: data.checkout_url ?? null })
+        setOutcome({ kind: 'not_live', detail: data.warning ?? null, checkoutUrl: data.checkout_url ?? null, planNotice })
         return
       }
       if (data.warning) {
@@ -264,7 +281,7 @@ export function LaunchStep({ organization }: LaunchStepProps) {
       } else {
         setTimeout(() => {
           setIsLaunching(false)
-          setOutcome({ kind: 'live' })
+          setOutcome({ kind: 'live', planNotice })
         }, 1800)
       }
     } catch (err) {
@@ -275,8 +292,18 @@ export function LaunchStep({ organization }: LaunchStepProps) {
     }
   }
 
-  if (outcome?.kind === 'live') return <SuccessScreen agentName={agentName} />
-  if (outcome?.kind === 'not_live') return <NotLiveScreen agentName={agentName} detail={outcome.detail} checkoutUrl={outcome.checkoutUrl} />
+  if (outcome?.kind === 'live') return <SuccessScreen agentName={agentName} planNotice={outcome.planNotice} planName={PLANS[plan].name} />
+  if (outcome?.kind === 'not_live') {
+    return (
+      <NotLiveScreen
+        agentName={agentName}
+        detail={outcome.detail}
+        checkoutUrl={outcome.checkoutUrl}
+        planNotice={outcome.planNotice}
+        planName={PLANS[plan].name}
+      />
+    )
+  }
 
   return (
     <div>
@@ -294,47 +321,34 @@ export function LaunchStep({ organization }: LaunchStepProps) {
             className="flex-wrap"
             action={
               <>
-                <BillingPeriod annual={annual} onChange={setAnnual} disabled={isLaunching} />
+                <BillingPeriod
+                  annual={annual}
+                  onChange={(next) => {
+                    setAnnual(next)
+                    setPeriodChanged(true)
+                  }}
+                  disabled={isLaunching}
+                />
                 <Badge variant="brand">Two months free</Badge>
               </>
             }
           />
           {/* While launching, the plan sent with the request is locked: the other cards are disabled. */}
-          <div role="radiogroup" aria-labelledby="commerce-plan-title" className="grid gap-x-3 sm:grid-cols-2">
-            <PlanCard id="trial" selected={plan === 'trial'} onSelect={() => setPlan('trial')} annual={annual} badge={<Badge variant="secondary">No card required</Badge>} disabled={isLaunching && plan !== 'trial'} />
-            {STORE_PLAN_IDS.map((id) =>
-              PLANS[id].contact_sales ? (
-                <ContactSalesPlanCard
-                  key={id}
-                  id={id}
-                  selected={plan === id}
-                  onSelect={() => setPlan(id)}
-                  disabled={isLaunching && plan !== id}
-                  className={cn('sm:col-span-2', id === lastPlan && 'mb-0')}
-                />
-              ) : (
-                <PlanCard
-                  key={id}
-                  id={id}
-                  selected={plan === id}
-                  onSelect={() => setPlan(id)}
-                  annual={annual}
-                  badge={id === RECOMMENDED_PLAN ? <Badge>Our pick</Badge> : undefined}
-                  disabled={isLaunching && plan !== id}
-                  className={id === lastPlan ? 'mb-0' : undefined}
-                />
-              ),
-            )}
-          </div>
-          {salesLedPicked && (
-            <p className="mt-3 text-[13px] leading-[19px] text-muted-foreground" aria-live="polite">
-              {PLANS[plan].name} is set up with our team: you launch on the free trial now and we get in touch to agree volume and terms. In a hurry? Email{' '}
-              <a href={`mailto:${SALES_EMAIL}?subject=${encodeURIComponent(`${PLANS[plan].name} inquiry`)}`} className="font-medium text-foreground underline underline-offset-4">
-                {SALES_EMAIL}
-              </a>
-              .
-            </p>
-          )}
+          <PlanTiers role="radiogroup" aria-labelledby="commerce-plan-title" jump={appJumpChips(['trial', ...STORE_PLAN_IDS], annual)}>
+            {(['trial', ...STORE_PLAN_IDS] as Plan[]).map((id, index) => (
+              <PlanChoice
+                key={id}
+                id={id}
+                index={index}
+                selected={plan === id}
+                onSelect={() => setPlan(id)}
+                annual={annual}
+                changed={periodChanged}
+                disabled={isLaunching && plan !== id}
+              />
+            ))}
+          </PlanTiers>
+          {salesLedPicked && <ContactSalesNote plan={plan} />}
         </section>
 
         <section aria-labelledby="commerce-summary-title" className="mt-10">
@@ -347,7 +361,7 @@ export function LaunchStep({ organization }: LaunchStepProps) {
                   { label: 'Agent', value: agentName ? `${agentName} · ${profile.tone === 'formal' ? 'formal' : 'friendly'}` : '—' },
                   { label: 'Voice', value: agent?.voice_name || '—' },
                   { label: 'Automations on', value: String(enabledAutomations) },
-                  { label: 'Plan', value: PLANS[plan].name },
+                  { label: 'Plan', value: plan === 'trial' ? TRIAL_TIER.name : PLANS[plan].name },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                     <dt className="text-[13px] leading-[19px] text-muted-foreground">{row.label}</dt>

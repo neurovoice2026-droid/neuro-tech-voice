@@ -2,7 +2,7 @@
 // Step 4 — Launch & Pricing
 import { useEffect, useRef, useState } from 'react'
 import {
-  Rocket, Check, Bot, CreditCard, ArrowLeft, ArrowRight, AlertTriangle, Globe,
+  Rocket, Bot, CreditCard, ArrowLeft, ArrowRight, AlertTriangle, Globe,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,15 +11,19 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Eyebrow } from '@/components/shared/Eyebrow'
 import { LiveDot } from '@/components/shared/LiveDot'
-import { Chip, OptionCard } from '@/components/shared/OptionCard'
+import { Chip } from '@/components/shared/OptionCard'
 import { OrbLoader } from '@/components/shared/OrbLoader'
 import { SectionHeading } from '@/components/shared/SectionHeading'
 import { TestAgentPanel } from '@/components/agent/TestAgentPanel'
+import { AppPlanTierCard, PlanTierRadio, PlanTiers, appJumpChips } from '@/components/pricing/AppPlanTiers'
+import { isPickPlan, TRIAL_TIER } from '@/components/pricing/plan-tier-view'
+import { ContactSalesNote, ContactSalesPlanCard } from '@/components/onboarding/commerce/ContactSalesPlanCard'
 import { startWebsiteImportInBackground, type WebsiteImportStart } from '@/hooks/useKnowledgeWebsite'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
+import { includedMinutesFor } from '@/lib/billing/stripe-trial'
 import { toast } from 'sonner'
-import { PLANS } from '@/types'
+import { PLANS, plansForBusinessType } from '@/types'
 import type { Plan, Organization } from '@/types'
 import { StepBody, StepHeader } from '../StepIndicator'
 
@@ -29,99 +33,66 @@ interface Step6LaunchProps {
 
 // ─── Plan cards ───────────────────────────────────────────────────────────────
 
-// Annual billing = pay for 10 months (2 months free).
-export function priceFor(id: Plan, annual: boolean): number {
-  const monthly = PLANS[id].price_monthly
-  return annual ? Math.round((monthly * 10) / 12) : monthly
+/** The service plans offered at launch, after the trial: Starter … Scale, then Enterprise. */
+const SERVICE_PLAN_IDS = plansForBusinessType('services')
+
+/**
+ * The small line under a card's button at launch: what choosing it means. A paid plan starts with
+ * 14 free days before Stripe bills it (POST /api/onboarding/complete), with a small allowance until
+ * the first payment (lib/billing/stripe-trial.ts); the trial needs no card.
+ */
+export function launchMicro(id: Plan, annual: boolean): string | null {
+  if (id === 'trial') return 'No card required'
+  if (PLANS[id].contact_sales) return null
+  const freeMinutes = includedMinutesFor(id, 'trialing').toLocaleString('en-US')
+  return `14 days free with up to ${freeMinutes} minutes, then billed ${annual ? 'yearly' : 'monthly'}`
 }
 
-export interface PlanCardProps {
+export interface PlanChoiceProps {
   id: Plan
+  /** Its place among the cards (staggers the mesh's tempo). */
+  index: number
   selected: boolean
   onSelect: () => void
   annual: boolean
-  /** Chip next to the name ("Our pick", "No card required"). */
-  badge?: React.ReactNode
+  /** The owner has switched the billing period: changed lines roll in. */
+  changed: boolean
   disabled?: boolean
-  className?: string
 }
 
 /**
- * A plan as a selectable white panel (radio): name, price, billing note and features.
- * Selected = ink 2 px ring + the brand corner dot (OptionCard).
- *
- * Every card has the same five rows (name, tagline, price + note, rule, features) on the parent
- * grid's rows (subgrid), so prices, rules and lists line up across a row whatever each card holds.
- * The grid has no row gap (a subgrid shares it, and an empty tagline row would keep it): cards are
- * spaced by their own bottom margin, and the last one passes `mb-0`.
- * The radio's accessible name stays short: name, price, billing note and the minutes allowance;
- * the tagline and the rest of the list are visual detail (OptionCard has no aria-describedby).
+ * A plan at launch, as its homepage card (components/pricing): the trial, a listed plan, or the
+ * family's sales-led plan (ContactSalesPlanCard). The card's button is the radio; a click anywhere
+ * on the card chooses it too. Selected = ringed in ink with a "Selected" tab.
  */
-export function PlanCard({ id, selected, onSelect, annual, badge, disabled, className }: PlanCardProps) {
-  const p = PLANS[id]
-  const isTrial = id === 'trial'
-  const isCustom = id === 'custom'
-  const isPaid = !isTrial && !isCustom
-
-  const name = isTrial ? 'Free Trial' : p.name
-  const tagline = isTrial ? 'Set everything up, no payment' : isCustom ? 'For large teams & agencies' : null
-  const price = isTrial ? '$0' : isCustom ? `$${p.price_monthly}+` : `$${priceFor(id, annual)}`
-  const note = isTrial
-    ? `${p.minutes_limit} minutes · 14 days`
-    : isCustom
-      ? 'Volume pricing · let\'s talk'
-      : annual
-        ? 'billed annually · 2 months free'
-        : '14-day free trial'
-
+export function PlanChoice({ id, index, selected, onSelect, annual, changed, disabled }: PlanChoiceProps) {
+  if (PLANS[id].contact_sales) {
+    return <ContactSalesPlanCard id={id} index={index} selected={selected} onSelect={onSelect} annual={annual} disabled={disabled} />
+  }
+  const name = id === 'trial' ? TRIAL_TIER.name : PLANS[id].name
   return (
-    <OptionCard
-      selected={selected}
-      onSelect={onSelect}
-      // leading-6 = the badge's height, so a badge never makes one title row taller than another.
-      title={<span className="text-[15px] leading-6">{name}</span>}
-      badge={badge}
+    <AppPlanTierCard
+      plan={id}
+      annual={annual}
+      changed={changed}
+      index={index}
+      idPrefix="launch-plan"
+      state={selected ? 'selected' : undefined}
+      stateLabel="Selected"
       disabled={disabled}
-      className={cn(
-        'row-span-5 mb-3 grid grid-rows-subgrid gap-0 p-5',
-        !selected && 'bg-white shadow-hair hover:bg-band',
-        className
-      )}
-    >
-      {/* Rendered (empty) without a tagline too: the rows must match from card to card. */}
-      <span aria-hidden="true" className={cn('text-[13px] leading-[19px] text-muted-foreground', tagline && 'mt-0.5')}>
-        {tagline}
-      </span>
-      <span className="mt-4 flex flex-col">
-        <span className="flex flex-wrap items-baseline gap-x-1.5">
-          <span className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{price}</span>
-          {!isTrial && <span className="text-[13px] leading-[19px] text-muted-foreground">/ month</span>}
-          {isPaid && annual && (
-            <>
-              <s aria-hidden="true" className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">
-                ${p.price_monthly}
-              </s>
-              <span className="sr-only">(normally ${p.price_monthly} a month)</span>
-            </>
-          )}
-        </span>
-        <span className="mt-1 text-xs leading-4 text-muted-foreground">{note}</span>
-      </span>
-      <span aria-hidden="true" className="my-4 block h-px w-full bg-rule" />
-      <span className={cn('grid w-full content-start gap-x-6 gap-y-2', isCustom && 'sm:grid-cols-2')}>
-        {p.features.map((f, i) => (
-          <span
-            key={f}
-            // The first line is the minutes allowance (the trial's note already says it).
-            aria-hidden={isTrial || i > 0 ? true : undefined}
-            className="flex items-start gap-2 text-[13px] leading-[19px] text-foreground"
-          >
-            <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            {f}
-          </span>
-        ))}
-      </span>
-    </OptionCard>
+      onPick={selected ? undefined : onSelect}
+      micro={launchMicro(id, annual)}
+      action={
+        <PlanTierRadio
+          name={name}
+          label={id === 'trial' ? 'Start on the free trial' : undefined}
+          selected={selected}
+          pick={id !== 'trial' && isPickPlan(id)}
+          disabled={disabled}
+          onSelect={onSelect}
+        />
+      }
+    />
   )
 }
 
@@ -186,8 +157,38 @@ function WebsiteImportNote({ message }: { message: string }) {
   )
 }
 
+// ─── Paid plan not started (launched on the trial instead) ───────────────────
+
+/**
+ * Why POST /api/onboarding/complete launched on the trial although a paid plan
+ * was chosen: its Stripe price could not be resolved, or the checkout could
+ * not be opened.
+ */
+export type PlanNotice = 'price_unavailable' | 'checkout_unavailable'
+
+/** The launch response's plan_notice, when it is one this client knows. */
+export function readPlanNotice(value: unknown): PlanNotice | null {
+  return value === 'price_unavailable' || value === 'checkout_unavailable' ? value : null
+}
+
+/** Tells the owner the paid plan they chose was not started, and where to start it. */
+export function PlanNotStartedNote({ planName }: { planName: string }) {
+  return (
+    <Alert variant="warning">
+      <CreditCard aria-hidden="true" />
+      <AlertTitle>Your {planName} plan was not started.</AlertTitle>
+      <AlertDescription>
+        We could not start the paid plan just now, so you launched on the free trial and nothing was charged. Choose{' '}
+        {planName} again from <a href="/billing">Billing</a> whenever you are ready.
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 // ─── Success screen ───────────────────────────────────────────────────────────
-function SuccessScreen({ agentName, websiteImportError }: { agentName: string; websiteImportError: string | null }) {
+function SuccessScreen({ agentName, websiteImportError, planNotice, planName }: {
+  agentName: string; websiteImportError: string | null; planNotice: PlanNotice | null; planName: string
+}) {
   const headingRef = useOutcomeHeading()
   return (
     <StepBody className="space-y-6">
@@ -213,6 +214,7 @@ function SuccessScreen({ agentName, websiteImportError }: { agentName: string; w
         </p>
       </section>
 
+      {planNotice && <PlanNotStartedNote planName={planName} />}
       {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
 
       {/* Last onboarding step: the agent is synced and active, so it can be tried in the browser. */}
@@ -231,8 +233,9 @@ function SuccessScreen({ agentName, websiteImportError }: { agentName: string; w
 // ─── Saved, but not live yet ──────────────────────────────────────────────────
 // The server only switches the agent on when the voice provider sync is ready.
 // Nothing re-activates it later on its own, so point the user at /agent.
-function NotLiveScreen({ agentName, detail, checkoutUrl, websiteImportError }: {
+function NotLiveScreen({ agentName, detail, checkoutUrl, websiteImportError, planNotice, planName }: {
   agentName: string; detail: string | null; checkoutUrl: string | null; websiteImportError: string | null
+  planNotice: PlanNotice | null; planName: string
 }) {
   const headingRef = useOutcomeHeading()
   return (
@@ -258,6 +261,7 @@ function NotLiveScreen({ agentName, detail, checkoutUrl, websiteImportError }: {
               </p>
             </AlertDescription>
           </Alert>
+          {planNotice && <PlanNotStartedNote planName={planName} />}
           {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
         </div>
 
@@ -291,19 +295,23 @@ interface CompleteResponse {
   activated?: boolean
   /** Sanitized message about the primary voice provider sync. */
   warning?: string | null
+  /** Set when the paid plan chosen was not started: the account launched on the trial. */
+  plan_notice?: string | null
 }
 
 /** Longest wait for the website import's answer before redirecting to checkout. */
 const WEBSITE_IMPORT_WAIT_MS = 4000
 
 type LaunchOutcome =
-  | { kind: 'live' }
-  | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null }
+  | { kind: 'live'; planNotice: PlanNotice | null }
+  | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null; planNotice: PlanNotice | null }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Step6Launch({ organization }: Step6LaunchProps) {
   const { plan, setPlan, setStep, agent, voice, company } = useOnboardingStore()
   const [annual, setAnnual]             = useState(false)
+  // Lines roll in on a period switch only after the owner's first one (never on arrival).
+  const [periodChanged, setPeriodChanged] = useState(false)
   const [isLaunching, setIsLaunching]   = useState(false)
   const [outcome, setOutcome]           = useState<LaunchOutcome | null>(null)
   const [importSite, setImportSite]     = useState(false)
@@ -364,9 +372,10 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
 
       // The account is set up, but the agent only takes calls once the server
       // activated it (primary voice provider ready). Never claim "live" otherwise.
+      const planNotice = readPlanNotice(data.plan_notice)
       if (data.activated !== true) {
         setIsLaunching(false)
-        setOutcome({ kind: 'not_live', detail: data.warning ?? null, checkoutUrl: data.checkout_url ?? null })
+        setOutcome({ kind: 'not_live', detail: data.warning ?? null, checkoutUrl: data.checkout_url ?? null, planNotice })
         return
       }
 
@@ -388,10 +397,10 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         const importFailed = !!importResult && !importResult.ok
         setTimeout(() => { window.location.href = checkoutUrl }, importFailed ? 6000 : 1500)
       } else {
-        // Free plan or Stripe not configured → show success screen
+        // Free plan, Stripe not configured, or a paid plan that could not be started → success screen
         setTimeout(() => {
           setIsLaunching(false)
-          setOutcome({ kind: 'live' })
+          setOutcome({ kind: 'live', planNotice })
         }, 1800)
       }
     } catch (err) {
@@ -403,7 +412,14 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
   }
 
   if (outcome?.kind === 'live') {
-    return <SuccessScreen agentName={agent.name} websiteImportError={websiteImportError} />
+    return (
+      <SuccessScreen
+        agentName={agent.name}
+        websiteImportError={websiteImportError}
+        planNotice={outcome.planNotice}
+        planName={PLANS[plan].name}
+      />
+    )
   }
 
   if (outcome?.kind === 'not_live') {
@@ -413,6 +429,8 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         detail={outcome.detail}
         checkoutUrl={outcome.checkoutUrl}
         websiteImportError={websiteImportError}
+        planNotice={outcome.planNotice}
+        planName={PLANS[plan].name}
       />
     )
   }
@@ -431,53 +449,35 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
             className="flex-wrap"
             action={
               <>
-                <BillingPeriod annual={annual} onChange={setAnnual} disabled={isLaunching} />
+                <BillingPeriod
+                  annual={annual}
+                  onChange={(next) => {
+                    setAnnual(next)
+                    setPeriodChanged(true)
+                  }}
+                  disabled={isLaunching}
+                />
                 <Badge variant="brand">Two months free</Badge>
               </>
             }
           />
 
           {/* While launching, the plan sent with the request is locked: the other cards are disabled. */}
-          <div role="radiogroup" aria-labelledby="onboarding-plan-title" className="grid gap-x-3 sm:grid-cols-2">
-            <PlanCard
-              id="trial"
-              selected={plan === 'trial'}
-              onSelect={() => setPlan('trial')}
-              annual={annual}
-              badge={<Badge variant="secondary">No card required</Badge>}
-              disabled={isLaunching && plan !== 'trial'}
-            />
-            <PlanCard
-              id="starter"
-              selected={plan === 'starter'}
-              onSelect={() => setPlan('starter')}
-              annual={annual}
-              disabled={isLaunching && plan !== 'starter'}
-            />
-            <PlanCard
-              id="pro"
-              selected={plan === 'pro'}
-              onSelect={() => setPlan('pro')}
-              annual={annual}
-              badge={<Badge>Our pick</Badge>}
-              disabled={isLaunching && plan !== 'pro'}
-            />
-            <PlanCard
-              id="business"
-              selected={plan === 'business'}
-              onSelect={() => setPlan('business')}
-              annual={annual}
-              disabled={isLaunching && plan !== 'business'}
-            />
-            <PlanCard
-              id="custom"
-              selected={plan === 'custom'}
-              onSelect={() => setPlan('custom')}
-              annual={annual}
-              disabled={isLaunching && plan !== 'custom'}
-              className="mb-0 sm:col-span-2"
-            />
-          </div>
+          <PlanTiers role="radiogroup" aria-labelledby="onboarding-plan-title" jump={appJumpChips(['trial', ...SERVICE_PLAN_IDS], annual)}>
+            {(['trial', ...SERVICE_PLAN_IDS] as Plan[]).map((id, index) => (
+              <PlanChoice
+                key={id}
+                id={id}
+                index={index}
+                selected={plan === id}
+                onSelect={() => setPlan(id)}
+                annual={annual}
+                changed={periodChanged}
+                disabled={isLaunching && plan !== id}
+              />
+            ))}
+          </PlanTiers>
+          {PLANS[plan].contact_sales && <ContactSalesNote plan={plan} />}
         </section>
 
         {/* Summary */}
@@ -490,7 +490,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
                   { label: 'Company', value: displayCompanyName },
                   { label: 'Agent name', value: agent.name ? `${agent.name} · ${agent.personality}` : '—' },
                   { label: 'Voice', value: voice.voice_name || '—' },
-                  { label: 'Plan', value: PLANS[plan].name },
+                  { label: 'Plan', value: plan === 'trial' ? TRIAL_TIER.name : PLANS[plan].name },
                 ].map((row) => (
                   <div key={row.label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                     <dt className="text-[13px] leading-[19px] text-muted-foreground">{row.label}</dt>

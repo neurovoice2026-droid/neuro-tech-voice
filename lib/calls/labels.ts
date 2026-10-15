@@ -98,7 +98,10 @@ export const ROUTING_REASON_DESCRIPTION: Record<RoutingReason, string> = {
   no_provider: 'No voice agent could take this call. The caller heard an apology or was forwarded.',
   agent_inactive: 'Your agent was paused, so it did not take this call.',
   number_inactive: 'This phone number was paused, so the agent did not take this call.',
-  quota_exhausted: 'The minutes included in your plan are used up, so the agent did not take this call. Upgrade your plan to keep answering calls.',
+  // Every plan has a hard cap (lib/telephony/quota.ts): the call is refused only once the included and the
+  // purchased minutes are both gone. The Billing page offers what the plan can do (buy minutes, auto top-up,
+  // a bigger plan; the trial chooses a plan), so the words stay the same for every plan.
+  quota_exhausted: 'You were out of minutes (included and extra), so the agent did not take this call. Add minutes on the Billing page to keep answering calls.',
 }
 
 export function routingReasonLabel(reason: string | null | undefined): string | null {

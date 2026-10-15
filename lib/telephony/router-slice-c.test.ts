@@ -1,6 +1,6 @@
 // Router changes of slice C: register-call client data from the shared
 // builder (recording notice on outbound greetings, opaque end-user id), the
-// trial-minutes gate, and the transfer options on every human transfer
+// minute gate (every plan: included + purchased minutes), and the transfer options on every human transfer
 // (extension as sendDigits, warm-transfer whisper on app-routed transfers).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeDb, type FakeCall } from '@/tests/helpers/fake-db'
@@ -98,6 +98,29 @@ describe('register-call client data (shared builder)', () => {
     ctx.elevenLabsOverrides = new Set(['agent.first_message', 'conversation.max_duration_seconds'])
     await routeInboundCall({ CallSid: 'CA0125', From: '+40712345678', To: '+40312345678' })
     expect((registerCall.mock.calls[1][0] as RegisterParams).conversation_initiation_client_data.conversation_config_override).toEqual({ conversation: { max_duration_seconds: 120 } })
+  })
+
+  it('a paid plan out of minutes (included and purchased) is answered with the unavailable line too', async () => {
+    ctx.org.usage = { plan: 'pro', minutes_used: 900, minutes_limit: 850, extra_minutes_balance: 0 }
+    const twiml = await routeInboundCall({ CallSid: 'CA0127', From: '+40712345678', To: '+40312345678' })
+    expect(registerCall).not.toHaveBeenCalled()
+    expect(findOne(parseXml(twiml), 'Say').text).toBe(UNAVAILABLE_MESSAGE.ro)
+    expect(updates.at(-1)).toMatchObject({ status: 'failed', routing_reason: 'quota_exhausted' })
+  })
+
+  it('purchased minutes keep a paid plan answering, capped to them', async () => {
+    ctx.org.usage = { plan: 'pro', minutes_used: 900, minutes_limit: 850, extra_minutes_balance: 4 }
+    ctx.elevenLabsOverrides = new Set(['agent.first_message', 'conversation.max_duration_seconds'])
+    await routeInboundCall({ CallSid: 'CA0128', From: '+40712345678', To: '+40312345678' })
+    expect((registerCall.mock.calls[0][0] as RegisterParams).conversation_initiation_client_data.conversation_config_override).toEqual({ conversation: { max_duration_seconds: 240 } })
+  })
+
+  it('an answered outbound call whose minutes ran out meanwhile keeps the minimum capped length', async () => {
+    callRow = { ...callRow, direction: 'outbound', from_number: '+40312345678', to_number: '+40722222222' }
+    ctx.org.usage = { plan: 'starter', minutes_used: 150, minutes_limit: 150, extra_minutes_balance: 0 }
+    ctx.elevenLabsOverrides = new Set(['agent.first_message', 'conversation.max_duration_seconds'])
+    await routeOutboundConnect(CALL_ID, { CallSid: 'CA_out_2' })
+    expect((registerCall.mock.calls[0][0] as RegisterParams).conversation_initiation_client_data.conversation_config_override?.conversation).toEqual({ max_duration_seconds: 60 })
   })
 
   it('a trial with no minutes left is answered with the unavailable line, without any provider', async () => {

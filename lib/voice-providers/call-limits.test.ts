@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_DAILY_CALL_LIMIT, PLAN_CONCURRENCY, burstingEnabled, callLimitsFor, dailyCallLimit, invalidCallLimitEnv, planConcurrency } from './call-limits'
+import { STORE_PLAN_EQUIVALENT } from '@/lib/pages/entitlements'
+import { SERVICE_PLANS, type Plan } from '@/types'
 
 describe('call limits from the plan', () => {
   it('maps every plan to its concurrency and defaults the daily limit and bursting', () => {
-    expect(PLAN_CONCURRENCY).toEqual({ trial: 2, starter: 2, pro: 4, business: 6, custom: 10, store_starter: 2, store_growth: 4, store_scale: 6, store_enterprise: 10 })
+    expect(PLAN_CONCURRENCY).toEqual({ trial: 2, starter: 2, growth: 2, pro: 4, business: 6, scale: 8, custom: 10, store_starter: 2, store_growth: 4, store_scale: 6, store_enterprise: 10 })
+    // A store plan has the capacity of its service equivalent.
+    for (const [store, service] of Object.entries(STORE_PLAN_EQUIVALENT) as Array<[keyof typeof STORE_PLAN_EQUIVALENT, Plan]>) {
+      expect(PLAN_CONCURRENCY[store], store).toBe(PLAN_CONCURRENCY[service])
+    }
+    // Capacity never falls as the service ladder climbs.
+    const ladder = SERVICE_PLANS.map((p) => PLAN_CONCURRENCY[p])
+    expect(ladder).toEqual([...ladder].sort((a, b) => a - b))
+    expect(planConcurrency('scale', { ELEVENLABS_CONCURRENCY_SCALE: '12' })).toBe(12)
     expect(planConcurrency('store_scale', { ELEVENLABS_CONCURRENCY_STORE_SCALE: '7' })).toBe(7)
     expect(callLimitsFor('pro', {})).toEqual({ concurrency: 4, daily: DEFAULT_DAILY_CALL_LIMIT, bursting: true })
     expect(DEFAULT_DAILY_CALL_LIMIT).toBe(500)

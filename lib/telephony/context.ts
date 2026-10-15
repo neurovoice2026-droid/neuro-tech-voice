@@ -76,7 +76,7 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     ? db.from('agents').select('*').eq('id', number.agent_id).eq('org_id', number.org_id).maybeSingle()
     : db.from('agents').select('*').eq('org_id', number.org_id).order('created_at', { ascending: true }).limit(1).maybeSingle()
   const [{ data: org, error: orgErr }, { data: agentRow, error: agentErr }] = await Promise.all([
-    db.from('organizations').select('id, name, timezone, voice_fallback_enabled, plan, minutes_used, minutes_limit').eq('id', number.org_id).single(),
+    db.from('organizations').select('id, name, timezone, voice_fallback_enabled, plan, minutes_used, minutes_limit, extra_minutes_balance').eq('id', number.org_id).single(),
     agentQuery,
   ])
   if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
@@ -91,6 +91,7 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
       plan: (org.plan as string | null) ?? null,
       minutes_used: (org.minutes_used as number | null) ?? null,
       minutes_limit: (org.minutes_limit as number | null) ?? null,
+      extra_minutes_balance: (org.extra_minutes_balance as number | null) ?? null,
     },
   }
   if (!agentRow) return { db, number, org: orgCtx, agent: null, externalIds: {}, routingInput: null }

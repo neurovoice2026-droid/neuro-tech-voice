@@ -146,6 +146,20 @@ describe('new native inbound call', () => {
     expect(calls()[0]).toMatchObject({ routing_reason: 'quota_exhausted' })
   })
 
+  it('a paid plan out of minutes (included and purchased) is refused the same way', async () => {
+    seed({ org: { plan: 'starter', minutes_used: 150, minutes_limit: 150, extra_minutes_balance: 0 } })
+    const res = await handleInitiation(req(), log, NOON)
+    expect((res.body.conversation_config_override as { agent: { first_message: string } }).agent.first_message).toBe(UNAVAILABLE_MESSAGE.ro)
+    expect(calls()[0]).toMatchObject({ routing_reason: 'quota_exhausted' })
+  })
+
+  it('purchased minutes keep a paid plan answering, capped to them', async () => {
+    seed({ org: { plan: 'starter', minutes_used: 150, minutes_limit: 150, extra_minutes_balance: 7 } })
+    const res = await handleInitiation(req(), log, NOON)
+    expect(res.body.conversation_config_override).toEqual({ conversation: { max_duration_seconds: 420 } })
+    expect(calls()[0]).toMatchObject({ routing_reason: 'primary' })
+  })
+
   it('a trial with minutes left is capped to them', async () => {
     seed({ org: { plan: 'trial', minutes_used: 25, minutes_limit: 30 } })
     const res = await handleInitiation(req(), log, NOON)

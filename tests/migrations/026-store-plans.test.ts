@@ -30,9 +30,13 @@ describe('migration 026_store_plans', () => {
     expect(code.match(/\bALTER TABLE\b/g)).toHaveLength(2)
   })
 
-  it('accepts exactly the plan ids of PLANS, service and store tiers alike', () => {
+  it('accepts the nine plan ids PLANS had then, service and store tiers alike (028 adds Growth and Scale)', () => {
     const allowed = allowedPlanIds()
-    expect([...allowed].sort()).toEqual(Object.keys(PLANS).sort())
-    expect(allowed).toEqual(expect.arrayContaining(['store_starter', 'store_growth', 'store_scale', 'store_enterprise']))
+    expect(allowed).toEqual([
+      'trial', 'starter', 'pro', 'business', 'custom',
+      'store_starter', 'store_growth', 'store_scale', 'store_enterprise',
+    ])
+    // Every id it allowed is still a plan: 028 only widens the list.
+    for (const id of allowed) expect(Object.keys(PLANS)).toContain(id)
   })
 })

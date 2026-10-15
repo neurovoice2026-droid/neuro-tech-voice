@@ -1,15 +1,18 @@
 // ─── Organization ────────────────────────────────────────────────────────────
 
 /**
- * Plan ids as stored in organizations.plan (CHECK constraint of migration 026).
- * Service plans (starter … custom) are sold to service organizations, store
- * plans (store_*) to online stores; the trial is shared. See PLANS.
+ * Plan ids as stored in organizations.plan (CHECK constraint of migration 028).
+ * Service plans (starter … scale, and 'custom', shown as Enterprise) are sold
+ * to service organizations, store plans (store_*) to online stores; the trial
+ * is shared. See PLANS.
  */
 export type Plan =
   | 'trial'
   | 'starter'
+  | 'growth'
   | 'pro'
   | 'business'
+  | 'scale'
   | 'custom'
   | 'store_starter'
   | 'store_growth'
@@ -45,8 +48,32 @@ export interface Organization {
   plan: Plan
   stripe_customer_id: string | null
   stripe_subscription_id: string | null
+  /** Minutes used in the current period (reset to 0 at each Stripe renewal, migration 027, and every month on an annual plan, migration 028). */
   minutes_used: number
+  /** Minutes included in the plan per period. */
   minutes_limit: number
+  /** Purchased extra minutes left: never expire, used after the included ones (migration 027). */
+  extra_minutes_balance?: number
+  /** Start of the Stripe period minutes_used counts from; null before the first renewal (and on the trial). */
+  usage_period_start?: string | null
+  /**
+   * Billing interval of the plan subscription's price (migration 028), null
+   * without one. On 'year' the included minutes still start over every month
+   * (roll_annual_usage_periods, run by the maintenance cron).
+   */
+  billing_interval?: BillingInterval | null
+  /** When the "out of minutes" e-mail was sent (once per period). */
+  minutes_exhausted_notified_at?: string | null
+  /** Charge the saved payment method for a pack when the minutes left fall below the threshold. */
+  auto_topup_enabled?: boolean
+  /** Pack bought by auto top-up (100, 500, 1000 or 2500 minutes). */
+  auto_topup_pack?: number | null
+  /** Minutes left (included + purchased) under which auto top-up buys a pack (10..1000). */
+  auto_topup_threshold?: number | null
+  auto_topup_last_attempt_at?: string | null
+  /** Last failed auto top-up (auto top-up is then turned off) and its owner-facing reason. */
+  auto_topup_failed_at?: string | null
+  auto_topup_failure?: string | null
   created_at: string
   updated_at: string
 }
@@ -231,7 +258,7 @@ export type CallStatus =
  * - transferred: handed to a human
  * - no_provider: final failure, nobody could take the call
  * - agent_inactive / number_inactive: paused by the owner
- * - quota_exhausted: the trial's included minutes are used up
+ * - quota_exhausted: the minutes are used up (included and extra; the hard cap of lib/telephony/quota.ts)
  * The conversational fallback phrase is a prompt behaviour, not a routing reason.
  */
 export type RoutingReason =
@@ -399,6 +426,10 @@ export interface DashboardMetrics {
   success_rate: number
   minutes_used: number
   minutes_limit: number
+  /** Purchased extra minutes left (organizations.extra_minutes_balance). */
+  extra_balance?: number
+  /** Minutes left in total: the period's included minutes left + extra_balance. */
+  total_left?: number
   /** AI resolution rate: success / (success + failure) of call_successful; null without verdicts. */
   ai_success_rate?: number | null
   ai_outcome_breakdown?: { success: number; failure: number; unknown: number }
@@ -433,17 +464,39 @@ export type CallStats = {
 
 export interface PlanConfig {
   name: string
-  /** Monthly list price in USD. */
+  /**
+   * Monthly list price in USD. 0 on the trial, and on Enterprise ('custom'),
+   * which publishes no price at all: it is agreed with the customer
+   * (contact_sales). Never print a fee for a contact-sales plan whose price
+   * is 0; Store Enterprise's is a starting point ("from $1,000").
+   */
   price_monthly: number
   /** Annual list price in USD (billed yearly = 10× monthly, 2 months free). */
   price_annual: number
+  /**
+   * Minutes included per billing period. On Enterprise this is the allowance
+   * it starts from (Scale's); the real one is agreed with the customer.
+   */
   minutes_limit: number
-  /** Per-minute charge once the included minutes are exhausted (USD). */
+  /**
+   * Price of one extra minute (USD): prepaid packs of lib/billing/minute-packs.ts
+   * are priced at this rate, less a volume discount. Nothing is billed after
+   * the fact; 0 on the trial, which cannot buy minutes. The field keeps its
+   * historical name.
+   */
   overage_per_min: number
   features: string[]
+  /**
+   * Optional Stripe price pins from the env (STRIPE_<PLAN>[_ANNUAL]_PRICE_ID).
+   * A pin is used only while Stripe reports it active, in USD, on this
+   * interval and at exactly this plan's price, and it is tagged for the plan
+   * (metadata.ntv_plan on the price, else on its product); otherwise the
+   * app's own price (found or created by lookup key, lib/stripe/store-prices.ts)
+   * is charged. The billing webhook still maps a pinned id back to its plan.
+   */
   stripe_price_id: string
   stripe_price_id_annual: string
-  /** Custom tier — routes to "contact sales" instead of Stripe checkout. */
+  /** Sales-led tier: routes to "contact sales" instead of Stripe checkout. */
   contact_sales?: boolean
   /** Who may hold the plan: a service organization, an online store, or ('any', the trial only) both. */
   family: PlanFamily | 'any'
@@ -451,18 +504,46 @@ export interface PlanConfig {
 
 export type BillingInterval = 'month' | 'year'
 
+/** "15000" → "15,000", the same in every runtime (no locale data needed). */
+const groupDigits = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+/** The allowance bullet of a plan card: "1,000 minutes/month". */
+const minutesBullet = (minutes: number) => `${groupDigits(minutes)} minutes/month`
+/** The extra-minute bullet of a plan card: "Extra minutes at $0.20/min". */
+const extraMinutesBullet = (rate: number) => `Extra minutes at $${rate.toFixed(2)}/min`
+
+/** The price of one extra minute on every service plan (the owner's price list). */
+const SERVICE_EXTRA_MINUTE = 0.2
+
 // Phone numbers are NOT included in any plan — every number is purchased
 // separately regardless of tier (see app/(dashboard)/phone). Every org gets
 // exactly one AI voice agent regardless of tier too - there's no product
 // mechanism to create more than one, so it was never a real differentiator.
-// Pricing model: blended COGS ≈ $0.10/min (ElevenLabs voice + Twilio telephony).
-// Each paid tier is sized so the gross margin stays ≥ 60% even at full usage;
-// overage is billed at the marginal sell price (~$0.25/min) to protect margin.
-// Store plans (family 'ecommerce') follow the same model with a larger minute
-// allowance per dollar, because their calls are short outbound confirmations
-// (~1.5 min each: "~230 order confirmations" = 350 minutes): $100 for 350
-// minutes is $0.29/min (65% margin at full usage), $250 for 950 is $0.26/min
-// (62%), $500 for 2,000 is $0.25/min (60%); Store Enterprise is negotiated.
+//
+// Service plans are the owner's price list of 23 Sep 2026, the one the
+// homepage prints (lib/site.ts TIERS reads its numbers from here, so the two
+// cannot drift; tests/plan-parity.test.ts holds them together): Starter $49
+// for 400 minutes, Growth $99 for 1,000, Pro $249 for 3,000, Business $499
+// for 5,000, Scale $990 for 15,000, extra minutes at $0.20 on every plan, and
+// Enterprise priced with the customer. The feature bullets say what the
+// homepage cards say.
+//
+// Pricing model, stated truthfully: the blended cost is about $0.10 a minute
+// (ElevenLabs voice + Twilio telephony). An included minute sells for $0.1225
+// on Starter, $0.099 on Growth, $0.083 on Pro, $0.0998 on Business and $0.066
+// on Scale when every included minute is used, so at full use Starter keeps a
+// thin margin, Growth and Business run near break-even, and Pro and Scale run
+// below cost. The margin comes from allowances that are not used to the last
+// minute and from extra minutes: at $0.20 they keep about half of what they
+// sell for. Every plan stops at its minutes (hard cap); paid plans can buy
+// prepaid extra-minute packs at overage_per_min, with volume discounts
+// (lib/billing/minute-packs.ts).
+//
+// Store plans (family 'ecommerce') carry a larger fee per included minute,
+// because their calls are short outbound confirmations (~1.5 min each: the
+// card's "about 230 order calls a month" = 350 minutes): $100 for 350 minutes is $0.29 a
+// minute, $250 for 950 is $0.26 and $500 for 2,000 is $0.25, well above the
+// cost; their extra minutes run $0.25 down to $0.18; Store Enterprise is
+// negotiated from $1,000.
 // Annual = 10 × monthly on every paid plan (two months free).
 export const PLANS: Record<Plan, PlanConfig> = {
   trial: {
@@ -471,9 +552,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 0,
     minutes_limit: 5,
     overage_per_min: 0,
+    // The trial card already prints its minutes ("5 min included") and its
+    // fourteen days ("$0 for 14 days"): the bullets say what else it has.
     features: [
-      '5 minutes free',
-      '14-day trial',
+      'Test calls never use your minutes',
       'Basic analytics',
     ],
     stripe_price_id: '',
@@ -484,31 +566,53 @@ export const PLANS: Record<Plan, PlanConfig> = {
     name: 'Starter',
     price_monthly: 49,
     price_annual: 490,
-    minutes_limit: 150,
-    overage_per_min: 0.25,
+    minutes_limit: 400,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
     features: [
-      '150 minutes/month',
-      'Overage at $0.25/min',
-      'Basic analytics',
-      'Email support',
+      minutesBullet(400),
+      'Answers from your own documents',
+      'Transcripts of your calls, kept',
+      'Confirmation texts to your callers',
+      'Outbound calls you start from the dashboard',
+      extraMinutesBullet(SERVICE_EXTRA_MINUTE),
     ],
     stripe_price_id: process.env.STRIPE_STARTER_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID ?? '',
+    family: 'services',
+  },
+  growth: {
+    name: 'Growth',
+    price_monthly: 99,
+    price_annual: 990,
+    minutes_limit: 1000,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
+    features: [
+      minutesBullet(1000),
+      'Everything in Starter',
+      '2.5× Starter\'s minutes',
+      'Under $0.10 a minute when all 1,000 are used',
+      extraMinutesBullet(SERVICE_EXTRA_MINUTE),
+    ],
+    stripe_price_id: process.env.STRIPE_GROWTH_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_GROWTH_ANNUAL_PRICE_ID ?? '',
     family: 'services',
   },
   pro: {
     name: 'Pro',
     price_monthly: 249,
     price_annual: 2490,
-    minutes_limit: 850,
-    overage_per_min: 0.25,
+    minutes_limit: 3000,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
     features: [
-      '850 minutes/month',
-      'Overage at $0.25/min',
-      'Advanced analytics',
+      minutesBullet(3000),
+      'Everything in Growth',
       'Call recordings',
-      'Google integrations',
-      'Priority support',
+      'Google Workspace, in beta: Gmail, Sheets, Calendar and Docs',
+      '30-day call analytics',
+      'Clone your own voice',
+      'Custom integrations, set up by our team',
+      '24/7 priority support from a real person',
+      extraMinutesBullet(SERVICE_EXTRA_MINUTE),
     ],
     stripe_price_id: process.env.STRIPE_PRO_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_PRO_ANNUAL_PRICE_ID ?? '',
@@ -518,51 +622,78 @@ export const PLANS: Record<Plan, PlanConfig> = {
     name: 'Business',
     price_monthly: 499,
     price_annual: 4990,
-    minutes_limit: 1750,
-    overage_per_min: 0.22,
+    minutes_limit: 5000,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
     features: [
-      '1,750 minutes/month',
-      'Overage at $0.22/min',
-      'Full analytics suite',
-      'Call recordings',
-      'All integrations',
-      'Priority support',
+      minutesBullet(5000),
+      'Everything in Pro',
+      '90-day call analytics',
+      '3× Pro\'s voice-lab allowance',
+      '30 test calls a day, up from 20',
+      'A setup call with our team to get your agent live',
+      'A monthly review of your calls with our team',
+      extraMinutesBullet(SERVICE_EXTRA_MINUTE),
     ],
     stripe_price_id: process.env.STRIPE_BUSINESS_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_BUSINESS_ANNUAL_PRICE_ID ?? '',
     family: 'services',
   },
-  custom: {
-    name: 'Custom',
-    price_monthly: 999,
-    price_annual: 9990,
-    minutes_limit: 3500,
-    overage_per_min: 0.18,
+  scale: {
+    name: 'Scale',
+    price_monthly: 990,
+    price_annual: 9900,
+    minutes_limit: 15000,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
     features: [
-      'From 3,500 minutes/month',
-      'Overage from $0.18/min',
-      'Custom prompts & SLA',
-      'Dedicated support',
+      minutesBullet(15000),
+      'Everything in Business',
+      '3× Business\'s minutes',
+      'Under $0.07 a minute when all 15,000 are used',
+      'Priority onboarding',
+      extraMinutesBullet(SERVICE_EXTRA_MINUTE),
+    ],
+    stripe_price_id: process.env.STRIPE_SCALE_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_SCALE_ANNUAL_PRICE_ID ?? '',
+    family: 'services',
+  },
+  // Enterprise keeps the backend id 'custom'. No fee is published (0 here,
+  // "Talk to us" on every card), its minutes and rate are agreed with the
+  // customer: minutes_limit is the allowance it starts from (Scale's), and
+  // prepaid extra minutes cost the same $0.20 as on every service plan.
+  custom: {
+    name: 'Enterprise',
+    price_monthly: 0,
+    price_annual: 0,
+    minutes_limit: 15000,
+    overage_per_min: SERVICE_EXTRA_MINUTE,
+    features: [
+      'Everything in Scale',
+      'Minutes and a rate set with you',
+      'The largest voice-lab allowance',
+      '50 test calls a day',
+      'A written SLA',
+      'A named contact',
     ],
     stripe_price_id: '',
     stripe_price_id_annual: '',
     contact_sales: true,
     family: 'services',
   },
-  // Store plans: the Stripe price ids are optional. Without them the app finds
-  // or creates the price by lookup key (lib/stripe/store-prices.ts).
+  // Store plans: values unchanged since their launch (lib/pages/home/store-pricing.ts
+  // prints them as they are here). Their price pins are optional, like every plan's.
   store_starter: {
     name: 'Store Starter',
     price_monthly: 100,
     price_annual: 1000,
     minutes_limit: 350,
     overage_per_min: 0.25,
+    // A store card prints the allowance, the order calls it covers and the
+    // extra-minute rate above its perks (lib/pages/home/store-pricing.ts
+    // STORE_PRICING.plan), so the perks never repeat them.
     features: [
-      '350 minutes/month (~230 order confirmations)',
       'COD confirmation, abandoned cart & delivery follow-up calls',
       'WooCommerce, Shopify, Magento, PrestaShop or custom API',
       'Live order lookups during calls',
-      'Overage at $0.25/min',
       'Email support',
     ],
     stripe_price_id: process.env.STRIPE_STORE_STARTER_PRICE_ID ?? '',
@@ -576,10 +707,8 @@ export const PLANS: Record<Plan, PlanConfig> = {
     minutes_limit: 950,
     overage_per_min: 0.22,
     features: [
-      '950 minutes/month (~630 order confirmations)',
       'Everything in Store Starter',
       'Call recordings & analytics',
-      'Overage at $0.22/min',
       'Priority support',
     ],
     stripe_price_id: process.env.STRIPE_STORE_GROWTH_PRICE_ID ?? '',
@@ -593,11 +722,9 @@ export const PLANS: Record<Plan, PlanConfig> = {
     minutes_limit: 2000,
     overage_per_min: 0.2,
     features: [
-      '2,000 minutes/month (~1,300 order confirmations)',
       'Everything in Store Growth',
       'All integrations',
       'Dedicated onboarding',
-      'Overage at $0.20/min',
     ],
     stripe_price_id: process.env.STRIPE_STORE_SCALE_PRICE_ID ?? '',
     stripe_price_id_annual: process.env.STRIPE_STORE_SCALE_ANNUAL_PRICE_ID ?? '',
@@ -609,10 +736,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 10000,
     minutes_limit: 4500,
     overage_per_min: 0.18,
+    // Its card's line says "4,500 minutes and up, your own scripts and an SLA, priced with you."
     features: [
-      'From 4,500 minutes/month',
+      'Everything in Store Scale',
       'Custom scripts & SLA',
-      'Overage from $0.18/min',
       'Dedicated support',
     ],
     stripe_price_id: '',
@@ -622,11 +749,24 @@ export const PLANS: Record<Plan, PlanConfig> = {
   },
 }
 
-/** The plans a service organization may buy, cheapest first (the trial is implicit). */
-export const SERVICE_PLANS: readonly Plan[] = ['starter', 'pro', 'business', 'custom'] as const
+/** The plans a service organization may buy, cheapest first, Enterprise last (the trial is implicit). */
+export const SERVICE_PLANS: readonly Plan[] = ['starter', 'growth', 'pro', 'business', 'scale', 'custom'] as const
 
 /** The plans an online store may buy, cheapest first (the trial is implicit). */
 export const STORE_PLANS: readonly Plan[] = ['store_starter', 'store_growth', 'store_scale', 'store_enterprise'] as const
+
+/**
+ * Whether a plan is bought through Stripe Checkout: a paid plan that is not
+ * sales-led. Its Stripe price is resolved (and validated against PLANS) by
+ * lib/stripe/store-prices.ts ensurePlanPriceId.
+ */
+export function isSelfServePlan(plan: Plan): boolean {
+  const cfg = Object.hasOwn(PLANS, plan) ? PLANS[plan] : undefined
+  return !!cfg && cfg.contact_sales !== true && cfg.price_monthly > 0
+}
+
+/** The plans bought through Stripe Checkout, both families, in catalogue order. */
+export const SELF_SERVE_PLANS: readonly Plan[] = (Object.keys(PLANS) as Plan[]).filter(isSelfServePlan)
 
 /** True for a string that names a plan (never for '__proto__' or a plan Stripe knows but we do not). */
 export function isPlan(value: unknown): value is Plan {
@@ -657,7 +797,11 @@ export function planAllowedFor(plan: Plan, businessType: BusinessType | null | u
 /** The 409 plan_not_available message of checkout and onboarding. */
 export const PLAN_NOT_AVAILABLE_MESSAGE = 'This plan is not available for your type of business.'
 
-/** Pick the Stripe price id for a plan + billing interval. */
+/**
+ * The env-pinned Stripe price id of a plan and billing interval, '' when none
+ * is pinned. Checkout never charges it blindly: lib/stripe/store-prices.ts
+ * ensurePlanPriceId validates it against PLANS (and its ntv_plan tag) first.
+ */
 export function stripePriceId(plan: Plan, interval: BillingInterval): string {
   const cfg = PLANS[plan]
   return interval === 'year' ? cfg.stripe_price_id_annual : cfg.stripe_price_id

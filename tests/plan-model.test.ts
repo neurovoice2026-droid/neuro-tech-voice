@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   PLANS,
+  SELF_SERVE_PLANS,
   SERVICE_PLANS,
   STORE_PLANS,
   isPlan,
+  isSelfServePlan,
   planAllowedFor,
   planFamilyOf,
   plansForBusinessType,
@@ -16,7 +18,7 @@ import {
 
 describe('plan catalogue', () => {
   it('lists every plan of both families, with the trial the only plan of family "any"', () => {
-    expect([...SERVICE_PLANS]).toEqual(['starter', 'pro', 'business', 'custom'])
+    expect([...SERVICE_PLANS]).toEqual(['starter', 'growth', 'pro', 'business', 'scale', 'custom'])
     expect([...STORE_PLANS]).toEqual(['store_starter', 'store_growth', 'store_scale', 'store_enterprise'])
     expect(Object.keys(PLANS).sort()).toEqual(['trial', ...SERVICE_PLANS, ...STORE_PLANS].sort())
     for (const p of SERVICE_PLANS) expect(PLANS[p].family).toBe('services')
@@ -30,19 +32,57 @@ describe('plan catalogue', () => {
     expect(STORE_PLANS.map((p) => PLANS[p].overage_per_min)).toEqual([0.25, 0.22, 0.2, 0.18])
     for (const p of [...SERVICE_PLANS, ...STORE_PLANS]) {
       expect(PLANS[p].price_annual, p).toBe(PLANS[p].price_monthly * 10)
-      expect(PLANS[p].features.length, p).toBeGreaterThanOrEqual(4)
+      // A store card prints its allowance and rate above the perks, so its list is shorter.
+      expect(PLANS[p].features.length, p).toBeGreaterThanOrEqual(PLANS[p].family === 'ecommerce' ? 3 : 4)
     }
     expect(PLANS.store_enterprise.contact_sales).toBe(true)
     expect(PLANS.store_enterprise.stripe_price_id).toBe('')
     for (const p of ['store_starter', 'store_growth', 'store_scale'] as const) expect(PLANS[p].contact_sales).toBeUndefined()
   })
 
-  it('keeps every paid store tier at or above a 60% gross margin on the $0.10/min cost model', () => {
+  it('sells an included store minute for $0.25 or more and extra store minutes for $0.18 or more', () => {
     for (const p of ['store_starter', 'store_growth', 'store_scale'] as const) {
       const sellPerMinute = PLANS[p].price_monthly / PLANS[p].minutes_limit
       expect(sellPerMinute, p).toBeGreaterThanOrEqual(0.25)
       expect(PLANS[p].overage_per_min, p).toBeGreaterThanOrEqual(0.18)
     }
+  })
+
+  it('never repeats in a store plan\'s perks the allowance, the order calls or the extra-minute rate its card prints above them', () => {
+    for (const p of STORE_PLANS) {
+      for (const feature of PLANS[p].features) {
+        expect(feature, p).not.toMatch(/minutes\/month|extra minutes|order (calls|confirmations)|\$/i)
+      }
+    }
+    expect(PLANS.store_enterprise.features).toEqual(['Everything in Store Scale', 'Custom scripts & SLA', 'Dedicated support'])
+  })
+
+  it('gives the trial perks its card does not already print (its 5 minutes and 14 days are on the card)', () => {
+    expect(PLANS.trial.features).toEqual(['Test calls never use your minutes', 'Basic analytics'])
+  })
+
+  it('prices the service plans as the homepage does: $49 to $990, extra minutes at $0.20, Enterprise unpriced', () => {
+    expect(SERVICE_PLANS.map((p) => PLANS[p].name)).toEqual(['Starter', 'Growth', 'Pro', 'Business', 'Scale', 'Enterprise'])
+    expect(SERVICE_PLANS.map((p) => PLANS[p].price_monthly)).toEqual([49, 99, 249, 499, 990, 0])
+    expect(SERVICE_PLANS.map((p) => PLANS[p].minutes_limit)).toEqual([400, 1000, 3000, 5000, 15000, 15000])
+    for (const p of SERVICE_PLANS) {
+      expect(PLANS[p].overage_per_min, p).toBe(0.2)
+      expect(PLANS[p].features, p).not.toContain('Extra minutes from $0.25/min')
+    }
+    for (const p of SERVICE_PLANS.filter((x) => x !== 'custom')) {
+      expect(PLANS[p].features, p).toContain('Extra minutes at $0.20/min')
+      expect(PLANS[p].contact_sales, p).toBeUndefined()
+    }
+    expect(PLANS.custom.contact_sales).toBe(true)
+    expect(PLANS.custom.stripe_price_id).toBe('')
+    expect(PLANS.custom.features).toEqual(expect.arrayContaining(['Minutes and a rate set with you', 'A written SLA', 'A named contact']))
+  })
+
+  it('isSelfServePlan / SELF_SERVE_PLANS: the paid plans bought through Checkout, never the trial or a sales-led tier', () => {
+    expect([...SELF_SERVE_PLANS]).toEqual(['starter', 'growth', 'pro', 'business', 'scale', 'store_starter', 'store_growth', 'store_scale'])
+    for (const p of ['trial', 'custom', 'store_enterprise'] as const) expect(isSelfServePlan(p), p).toBe(false)
+    expect(isSelfServePlan('__proto__' as Plan)).toBe(false)
+    expect(isSelfServePlan('enterprise-hack' as Plan)).toBe(false)
   })
 
   it('names the store plans in English with store-oriented features', () => {
@@ -83,12 +123,14 @@ describe('plansForBusinessType / planAllowedFor', () => {
   it('isPlan recognises catalogue ids only', () => {
     expect(isPlan('store_growth')).toBe(true)
     expect(isPlan('pro')).toBe(true)
+    expect(isPlan('growth')).toBe(true)
+    expect(isPlan('scale')).toBe(true)
     expect(isPlan('__proto__')).toBe(false)
     expect(isPlan('')).toBe(false)
     expect(isPlan(null)).toBe(false)
   })
 
-  it('stripePriceId reads the env-configured id per interval and is empty for sales-led tiers', () => {
+  it('stripePriceId reads the env pin per interval (optional, validated before use) and is empty for sales-led tiers', () => {
     expect(stripePriceId('store_enterprise', 'month')).toBe('')
     expect(stripePriceId('custom', 'year')).toBe('')
     expect(stripePriceId('trial', 'month')).toBe('')

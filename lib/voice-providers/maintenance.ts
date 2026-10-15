@@ -8,7 +8,11 @@ import 'server-only'
 //   4. pull Cartesia results for fallback calls (webhooks not guaranteed),
 //      recover ElevenLabs conversations whose post-call webhook was lost
 //      (conversation_reconcile) and bill the rest from Twilio's duration;
-//   5. retention: prune telemetry, processed webhook receipts, expired
+//   5. annual plans: the included minutes start over every month
+//      (lib/billing/usage-periods.ts, roll_annual_usage_periods), then auto
+//      top-up: extra minutes for organizations below their threshold
+//      (lib/billing/auto-topup.ts), both before the store automations dial;
+//   6. retention: prune telemetry, processed webhook receipts, expired
 //      rate-limit windows and payloads of dead-lettered webhooks, hourly from
 //      a stored last-run timestamp (maintenance-state.ts), whatever the cron
 //      cadence (daily on Vercel Hobby, every 5 minutes with pg_cron).
@@ -233,6 +237,9 @@ export type MaintenanceStep = readonly [name: string, run: (deadline: number) =>
 /** conversation_reconcile never takes more than this of the run (lost-webhook recovery, many provider GETs). */
 const RECONCILE_STEP_MAX_MS = 60_000
 
+/** auto_topup never takes more than this of the run (each top-up is a few Stripe calls). */
+const AUTO_TOPUP_STEP_MAX_MS = 30_000
+
 /**
  * HEAD: cheap steps that keep billing, call data and privacy correct, in
  * order, always first. TAIL: long steps, rotated (runMaintenanceSteps).
@@ -253,6 +260,13 @@ export function maintenanceSteps(log: Logger): { head: MaintenanceStep[]; tail: 
     ['web_test_finalize', () => import('./web-test').then((m) => m.finalizeStaleWebTests(100, log))],
     ['call_retention', (deadline) => import('./call-retention').then((m) => m.runCallRetention(log, Date.now(), deadline))],
     ['business_tools_retention', () => import('@/lib/voice-tools/retention').then((m) => m.runBusinessToolRetention(log))],
+    // A new month of included minutes on annual plans, before auto top-up looks at what is left (logs the count).
+    ['annual_usage_periods', () => import('@/lib/billing/usage-periods').then((m) => m.rollAnnualUsagePeriods(createAdminClient(), log))],
+    // Extra minutes before the store calls below: organizations with auto top-up on whose minutes fell below their threshold.
+    [
+      'auto_topup',
+      (deadline) => import('@/lib/billing/auto-topup').then((m) => m.sweepAutoTopUps(createAdminClient(), log, Math.min(deadline, Date.now() + AUTO_TOPUP_STEP_MAX_MS))),
+    ],
     // E-commerce vertical: webhook deliveries, store syncs, due automation calls (its own budget, never past the run's deadline).
     ['commerce', (deadline) => import('@/lib/commerce/worker').then((m) => m.runCommerceWorker(log, { deadline }))],
     // Hourly, from the stored last run (not the clock minute: the cron may be daily).

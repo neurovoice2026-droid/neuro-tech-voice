@@ -61,6 +61,12 @@ export const RATE_LIMITS = {
   commerceRead: { name: 'commerce_read', limit: 240, windowSeconds: 60 },
   /** Unauthenticated webhook deliveries per connection (a flood never fills the queue). */
   commerceWebhook: { name: 'commerce_webhook', limit: 600, windowSeconds: 60 },
+  // Extra-minute packs (app/api/billing/minutes): the summary is polled by the
+  // billing page; each checkout opens a Stripe session; auto top-up changes
+  // may look up the saved payment method in Stripe.
+  billingMinutesRead: { name: 'billing_minutes_read', limit: 120, windowSeconds: 60 },
+  billingMinutesCheckout: { name: 'billing_minutes_checkout', limit: 10, windowSeconds: 600 },
+  billingMinutesAutoTopUp: { name: 'billing_minutes_auto_topup', limit: 20, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

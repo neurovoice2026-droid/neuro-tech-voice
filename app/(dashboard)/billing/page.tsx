@@ -1,63 +1,202 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import {
-  AlertTriangle, ArrowUpRight, Check, CreditCard, ExternalLink, Settings, Shield,
+  ArrowUpRight, CreditCard, ExternalLink, Settings, Shield, TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MinutesSection } from '@/components/billing/MinutesSection'
+import {
+  PLAN_CHANGE_LABEL,
+  formatMinutes,
+  intervalSwitchLabel,
+  isCurrentPlanCard,
+  minutesReturnNotice,
+  planChangePendingText,
+  planChangeRelation,
+  readCheckoutResult,
+  withoutMinutesParam,
+} from '@/components/billing/minutes-logic'
+import {
+  currentBillingInterval,
+  expectedPlanSwitch,
+  planSwitchDescription,
+  planSwitchMicro,
+  planSwitchToast,
+  readPlanSwitchTiming,
+} from '@/components/billing/plan-switch'
+import { AppPlanTierCard, PlanTierStatus, PlanTiers, appJumpChips, tierButtonClass } from '@/components/pricing/AppPlanTiers'
+import { BILLING_CYCLE_LABEL, billingPickerPlans, currentPlanName, planPriceText } from '@/components/pricing/plan-change'
+import { TRIAL_TIER, isPickPlan } from '@/components/pricing/plan-tier-view'
 import { OrbLoader } from '@/components/shared/OrbLoader'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionHeading } from '@/components/shared/SectionHeading'
 import { StatusChip } from '@/components/shared/StatusChip'
+import { useMinutes } from '@/hooks/useMinutes'
+import { CONTACT_SALES_HREF, CONTACT_SALES_PHONE } from '@/lib/billing/upgrade'
 import { useOrganization } from '@/hooks/useOrganization'
-import { PLANS, isPlan, planFamilyOf, plansForBusinessType } from '@/types'
-import type { Plan, BillingInterval, PlanFamily } from '@/types'
+import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
+import { useAppStore } from '@/store/useAppStore'
+import { PLANS, isPlan, isSelfServePlan, plansForBusinessType } from '@/types'
+import type { Plan, BillingInterval, Organization } from '@/types'
 
-/** The plan the picker recommends ("Our pick"), per family. */
-const RECOMMENDED: Record<PlanFamily, Plan> = { services: 'pro', ecommerce: 'store_growth' }
-
-/** Subject of the sales-led tile's email, per family. */
-const SALES_SUBJECT: Record<PlanFamily, string> = { services: 'Custom plan inquiry', ecommerce: 'Store Enterprise inquiry' }
 
 const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
+
+/** Anchors other pages link to (/billing#minutes, /billing#plans). */
+const ANCHORS = new Set(['minutes', 'plans'])
+
+/** After an in-place plan switch the webhook syncs the plan: re-read it this many times, this far apart. */
+const PLAN_SYNC_ATTEMPTS = 5
+const PLAN_SYNC_INTERVAL_MS = 2000
 
 function money(n: number): string {
   return `$${n.toLocaleString('en-US')}`
 }
 
+type PlanRequest = { plan: Plan; source: 'header' | 'card'; interval: BillingInterval }
+
 export default function BillingPage() {
+  const router = useRouter()
   const { organization: org, isLoading } = useOrganization()
-  // Which control started the redirect ("header:pro", "card:business", "portal:manage" …), so only
+  const setOrganization = useAppStore((s) => s.setOrganization)
+  const minutes = useMinutes()
+  // Which control started the request ("header:pro", "card:business", "portal:manage" …), so only
   // that button shows the orb; any value blocks the other billing actions.
   const [pending, setPending] = useState<string | null>(null)
-  const [cycle, setCycle] = useState<BillingInterval>('month')
+  // The cycle toggle starts on the interval the organization pays (an annual
+  // subscriber sees annual prices), until the owner flips it.
+  const [cycleChoice, setCycleChoice] = useState<BillingInterval | null>(null)
+  const currentInterval = currentBillingInterval(org?.billing_interval)
+  const cycle: BillingInterval = cycleChoice ?? currentInterval
+  // The cards' changed lines roll in on a cycle switch, only after the owner's first one.
+  const [cycleChanged, setCycleChanged] = useState(false)
+  // An in-place plan switch waits for the owner's confirmation (it changes the live subscription).
+  const [confirm, setConfirm] = useState<PlanRequest | null>(null)
+  // ?minutes=success|canceled: Stripe Checkout's return URLs for a minute pack (read once, on the client).
+  const [returnNotice] = useState(() => (typeof window === 'undefined' ? null : minutesReturnNotice(window.location.search)))
+  const refreshMinutes = minutes.refresh
+  const mounted = useRef(true)
+  const scrolledToAnchor = useRef(false)
 
-  async function goToCheckout(plan: Plan, source: 'header' | 'card' = 'card') {
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  // Back from Stripe through the browser's page cache: the buttons work again.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPending(null)
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
+
+  // One toast (a fixed id, so it never shows twice), then the flag is dropped from the address
+  // (the #minutes anchor stays), so a reload does not repeat it.
+  useEffect(() => {
+    if (!returnNotice) return
+    if (returnNotice.tone === 'success') toast.success(returnNotice.message, { id: 'minutes-return' })
+    else toast.info(returnNotice.message, { id: 'minutes-return' })
+    window.history.replaceState(null, '', `${window.location.pathname}${withoutMinutesParam(window.location.search)}${window.location.hash}`)
+  }, [returnNotice])
+
+  // After a paid Checkout the webhook credits the pack a moment later: re-read the minutes twice,
+  // so the new balance shows without a reload, and re-render the layout with them (its minutes
+  // banner and sidebar meter are computed on the server and do not re-render on navigation).
+  useEffect(() => {
+    if (returnNotice?.tone !== 'success') return
+    const timers = [3000, 10000].map((ms) =>
+      window.setTimeout(() => {
+        refreshMinutes()
+        router.refresh()
+      }, ms),
+    )
+    return () => timers.forEach((t) => window.clearTimeout(t))
+  }, [returnNotice, refreshMinutes, router])
+
+  // /billing#minutes and /billing#plans: the sections exist only once the plan has loaded,
+  // after the browser looked for the anchor, so bring the section into view here (once).
+  useEffect(() => {
+    if (scrolledToAnchor.current || isLoading || !org) return
+    scrolledToAnchor.current = true
+    const id = window.location.hash.slice(1)
+    if (ANCHORS.has(id)) document.getElementById(id)?.scrollIntoView({ block: 'start' })
+  }, [isLoading, org])
+
+  /** Re-reads the organization without the page's loading state (no flash after a plan switch). */
+  async function reloadOrganization(): Promise<Organization | null> {
+    try {
+      const { data, error } = await createClient().from('organizations').select('*').single()
+      if (error || !data) return null
+      setOrganization(data as Organization)
+      return data as Organization
+    } catch (err) {
+      console.warn('billing: organization reload failed', err instanceof Error ? err.message : err)
+      return null
+    }
+  }
+
+  /** The webhook moves the plan and its minutes a moment after Stripe confirms the switch. */
+  async function syncAfterPlanChange(target: string | null) {
+    for (let i = 0; i < PLAN_SYNC_ATTEMPTS && mounted.current; i++) {
+      const fresh = await reloadOrganization()
+      if (!target || fresh?.plan === target) break
+      await new Promise((resolve) => setTimeout(resolve, PLAN_SYNC_INTERVAL_MS))
+    }
+    if (!mounted.current) return
+    minutes.refresh()
+    // The layout's minutes banner and sidebar meter.
+    router.refresh()
+  }
+
+  async function changePlan({ plan, source, interval }: PlanRequest, inPlace: boolean) {
+    const failure = inPlace ? 'Could not change your plan' : 'Could not start checkout'
     setPending(`${source}:${plan}`)
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, interval: cycle }),
+        body: JSON.stringify({ plan, interval }),
       })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        window.location.assign(data.url)
+      const data: unknown = await res.json().catch(() => null)
+      const result = res.ok ? readCheckoutResult(data) : null
+      if (result?.kind === 'redirect') {
+        window.location.assign(result.url)
         return
       }
-      toast.error(data.error ?? 'Could not start checkout')
+      if (result?.kind === 'updated') {
+        // Now (the webhook applies it in a moment) or at the renewal (nothing changes until then).
+        const timing = readPlanSwitchTiming(data)
+        toast.success(planSwitchToast(PLANS[plan].name, timing))
+        setConfirm(null)
+        setPending(null)
+        if (timing.effective === 'now') void syncAfterPlanChange(result.plan ?? plan)
+        return
+      }
+      const message = data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
+        ? (data as { error: string }).error
+        : failure
+      toast.error(message)
     } catch {
-      toast.error('Could not start checkout')
+      toast.error(failure)
     }
     setPending(null)
   }
 
-  async function openPortal(source: 'manage' | 'downgrade' | 'invoices') {
+  async function openPortal(source: 'manage' | 'invoices' | 'card') {
     setPending(`portal:${source}`)
     try {
       const res = await fetch('/api/billing/portal', { method: 'POST' })
@@ -77,7 +216,7 @@ export default function BillingPage() {
     <PageHeader
       eyebrow="Billing"
       title="Billing"
-      description="Manage your subscription, payment method, and billing history."
+      description="Manage your subscription, minutes, payment method, and billing history."
     />
   )
 
@@ -92,25 +231,32 @@ export default function BillingPage() {
     )
   }
 
-  // A plan the catalogue does not know (a bad row) displays as the trial rather than breaking the page.
+  // A plan the catalog does not know (a bad row) displays as the trial rather than breaking the page.
   const currentPlan: Plan = isPlan(org.plan) ? org.plan : 'trial'
   const planCfg = PLANS[currentPlan]
-  const minutesUsed = org.minutes_used ?? 0
-  const minutesLimit = org.minutes_limit ?? planCfg.minutes_limit
-  const usagePct = minutesLimit > 0 ? Math.min(100, Math.round((minutesUsed / minutesLimit) * 100)) : 0
-  const usageTone = usagePct >= 100 ? 'danger' : usagePct >= 80 ? 'warning' : 'default'
   const hasBilling = !!org.stripe_customer_id
   const busy = pending !== null
   const isTrial = currentPlan === 'trial'
+  // A paid plan with a live subscription changes in place; anyone else goes through Stripe Checkout.
+  const inPlace = !isTrial && !!org.stripe_subscription_id
+  const pendingText = planChangePendingText(inPlace)
+
+  function requestPlan(plan: Plan, source: 'header' | 'card') {
+    // Only a self-serve plan has a price to switch to (a sales-led one is agreed with sales).
+    if (!isSelfServePlan(plan)) return
+    // The header's "Upgrade to …" keeps the interval the organization pays on, whatever tab is open.
+    const request: PlanRequest = { plan, source, interval: source === 'header' ? currentInterval : cycle }
+    if (inPlace) setConfirm(request)
+    else void changePlan(request, false)
+  }
 
   // An organization buys from its own family: an online store sees the store
   // plans, everyone else the service plans (the server enforces the same rule).
-  const family = planFamilyOf(org.business_type)
   const familyPlans = plansForBusinessType(org.business_type)
   const selfServe = familyPlans.filter((p) => !PLANS[p].contact_sales)
-  /** Plans shown as cards; the family's sales-led tier is the wide tile after them. */
-  const cardPlans: Plan[] = ['trial', ...selfServe]
-  // Each family ends in one sales-led tier (Custom, Store Enterprise).
+  /** Plans shown as cards (the trial only while on it); the family's sales-led tier is the wide tile after them. */
+  const cardPlans: Plan[] = billingPickerPlans(currentPlan, selfServe)
+  // Each family ends in one sales-led tier (Enterprise, Store Enterprise).
   const salesPlan: Plan = familyPlans.find((p) => PLANS[p].contact_sales) ?? familyPlans[familyPlans.length - 1]
   const sales = PLANS[salesPlan]
   const salesIsCurrent = currentPlan === salesPlan
@@ -119,6 +265,14 @@ export default function BillingPage() {
   const currentIndex = selfServe.indexOf(currentPlan)
   const nextTier: Plan | null = isTrial ? selfServe[0] ?? null : currentIndex >= 0 ? selfServe[currentIndex + 1] ?? null : null
 
+  // The confirmation dialog's facts.
+  const confirmCfg = confirm ? PLANS[confirm.plan] : null
+  const confirmRelation = confirm ? planChangeRelation(currentPlan, confirm.plan) : null
+  const confirmEffective = confirm ? expectedPlanSwitch({ plan: currentPlan, interval: currentInterval }, confirm) : null
+  const usedNow = org.minutes_used ?? 0
+  // Only a change that applies now can leave this period's usage above the new allowance (a renewal resets it).
+  const confirmOverLimit = !!confirmCfg && confirmEffective === 'now' && usedNow > confirmCfg.minutes_limit
+
   return (
     <PageContainer className="space-y-10">
       {header}
@@ -126,7 +280,7 @@ export default function BillingPage() {
       {/* Default-width page with a left-aligned 768 px column (as the Agent tab panels), so the
           header and content start at the same x as on every other dashboard page. */}
       <div className="max-w-[768px] space-y-10">
-        {/* Current plan + usage */}
+        {/* Current plan */}
         <section
           aria-labelledby="billing-current-plan-label billing-current-plan"
           className="overflow-hidden rounded-2xl bg-card shadow-hair"
@@ -139,14 +293,19 @@ export default function BillingPage() {
                   id="billing-current-plan"
                   className="font-heading font-title text-[28px] leading-[34px] tracking-[-0.02em]"
                 >
-                  {planCfg.name}
+                  {currentPlanName(currentPlan)}
                 </h2>
-                <StatusChip tone={isTrial ? 'warning' : 'success'} dot>
-                  {isTrial ? 'Trial' : 'Active'}
-                </StatusChip>
+                {/* The trial's name already says what it is ("Free trial"); a paid plan says it is live. */}
+                {!isTrial && (
+                  <StatusChip tone="success" dot>
+                    Active
+                  </StatusChip>
+                )}
               </div>
               <p className="mt-1 text-[15px] leading-[22px] text-muted-foreground tabular-nums">
-                {planCfg.price_monthly === 0 ? 'No subscription' : `${money(planCfg.price_monthly)} / month`}
+                {planPriceText(currentPlan, currentInterval)}
+                {' · '}
+                {formatMinutes(org.minutes_limit ?? planCfg.minutes_limit)} minutes included{isTrial ? '' : ' a month'}
               </p>
             </div>
 
@@ -166,10 +325,10 @@ export default function BillingPage() {
                 )}
                 {nextTier && (
                   <Button
-                    onClick={() => void goToCheckout(nextTier, 'header')}
+                    onClick={() => requestPlan(nextTier, 'header')}
                     disabled={busy}
                     loading={pending === `header:${nextTier}`}
-                    loadingText="Redirecting to checkout…"
+                    loadingText={pendingText}
                   >
                     <ArrowUpRight aria-hidden="true" />
                     Upgrade to {PLANS[nextTier].name}
@@ -178,43 +337,32 @@ export default function BillingPage() {
               </div>
             )}
           </div>
-
-          <div className="border-t border-rule p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
-              <p className={OVERLINE}>This month&apos;s usage</p>
-              <p className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{usagePct}% used</p>
-            </div>
-            <p className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <span className="text-[48px] leading-[52px] font-semibold tracking-[-0.03em] tabular-nums">
-                {minutesUsed.toLocaleString('en-US')}
-              </span>
-              <span className="text-[15px] leading-[22px] text-muted-foreground tabular-nums">
-                of {minutesLimit.toLocaleString('en-US')} minutes this period
-              </span>
-            </p>
-            <Progress value={usagePct} tone={usageTone} aria-label="Minutes used" className="mt-4" />
-            {usagePct >= 80 && (
-              <p className="mt-3 flex items-center gap-1.5 text-[13px] leading-[19px] text-warning">
-                <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
-                {100 - usagePct}% of minutes remaining — consider upgrading
-              </p>
-            )}
-          </div>
         </section>
 
-        {/* Plan picker */}
-        <section>
-          <Tabs value={cycle} onValueChange={(v) => setCycle(v as BillingInterval)} className="gap-0">
+        {/* Minutes: included, extra, packs, auto top-up, purchases (id="minutes") */}
+        <MinutesSection minutes={minutes} onOpenPortal={hasBilling ? () => void openPortal('card') : undefined} disabled={busy} />
+
+        {/* Plan picker: the homepage's plan cards (components/pricing), with the current plan ringed */}
+        <section id="plans" className="scroll-mt-6">
+          <Tabs
+            value={cycle}
+            onValueChange={(v) => {
+              setCycleChoice(v as BillingInterval)
+              setCycleChanged(true)
+            }}
+            className="gap-0"
+          >
             <SectionHeading
               title="Change plan"
               className="flex-wrap items-center"
               action={
                 <>
-                  <Badge variant="brand">Two months free</Badge>
+                  {/* "Monthly | Yearly", then the yearly saving: as on the homepage and in onboarding. */}
                   <TabsList aria-label="Billing cycle">
-                    <TabsTrigger value="month">Monthly</TabsTrigger>
-                    <TabsTrigger value="year">Annual</TabsTrigger>
+                    <TabsTrigger value="month">{BILLING_CYCLE_LABEL.month}</TabsTrigger>
+                    <TabsTrigger value="year">{BILLING_CYCLE_LABEL.year}</TabsTrigger>
                   </TabsList>
+                  <Badge variant="brand">Two months free</Badge>
                 </>
               }
             />
@@ -226,119 +374,79 @@ export default function BillingPage() {
                 value={c}
                 className="rounded-2xl focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-ring"
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {cardPlans.map((planId) => {
-                    const cfg = PLANS[planId]
-                    const isCurrent = planId === currentPlan
+                <PlanTiers jump={appJumpChips([...cardPlans, salesPlan], c === 'year')}>
+                  {cardPlans.map((planId, index) => {
+                    // A subscribed plan is current on the tab of the interval it is paid on; on the
+                    // other tab its card offers the interval switch.
+                    const isCurrent = isCurrentPlanCard(
+                      { plan: planId, interval: c },
+                      { plan: currentPlan, interval: currentInterval, subscribed: inPlace },
+                    )
                     const isPaid = planId !== 'trial'
-                    // Annual shows the monthly-equivalent (yearly total / 12).
-                    const displayPrice = c === 'year' && isPaid ? Math.round(cfg.price_annual / 12) : cfg.price_monthly
+                    const name = isPaid ? PLANS[planId].name : TRIAL_TIER.name
+                    // Relative to the current plan's rung: Upgrade, Downgrade or Switch (from Enterprise, a downgrade);
+                    // the current plan on the other tab switches its billing interval.
+                    const changeLabel =
+                      planId === currentPlan ? intervalSwitchLabel(c) : PLAN_CHANGE_LABEL[planChangeRelation(currentPlan, planId)]
+                    let action: ReactNode = null
+                    if (isCurrent) action = <PlanTierStatus>Your current plan</PlanTierStatus>
+                    else if (isPaid) {
+                      action = (
+                        <Button
+                          size="lg"
+                          className={tierButtonClass({ pick: isPickPlan(planId) })}
+                          onClick={() => requestPlan(planId, 'card')}
+                          disabled={busy}
+                          loading={pending === `card:${planId}`}
+                          loadingText={pendingText}
+                        >
+                          {changeLabel}<span className="sr-only">{planId === currentPlan ? ` for ${name}` : ` to ${name}`}</span>
+                        </Button>
+                      )
+                    }
 
                     return (
-                      <div
+                      <AppPlanTierCard
                         key={planId}
-                        data-current={isCurrent || undefined}
-                        className="flex flex-col rounded-2xl bg-card p-5 shadow-hair"
-                      >
-                        {/* min-h-6 = badge height, so prices line up whether or not a card has a badge. */}
-                        <div className="flex min-h-6 flex-wrap items-center gap-2">
-                          <h3 className="text-[15px] leading-[22px] font-medium">{cfg.name}</h3>
-                          {isCurrent ? (
-                            <Badge variant="secondary">Current plan</Badge>
-                          ) : planId === RECOMMENDED[family] ? (
-                            <Badge>Our pick</Badge>
-                          ) : null}
-                        </div>
-
-                        <p className="mt-3 flex items-baseline gap-1">
-                          <span className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">
-                            {money(displayPrice)}
-                          </span>
-                          <span className="text-[13px] text-muted-foreground">/mo</span>
-                        </p>
-                        <p className="mt-1 min-h-4 text-xs leading-4 text-muted-foreground tabular-nums">
-                          {c === 'year' && isPaid ? `${money(cfg.price_annual)}/yr billed annually` : null}
-                        </p>
-
-                        <ul className="mt-3 space-y-2">
-                          {cfg.features.slice(0, 3).map((f) => (
-                            <li key={f} className="flex items-start gap-2 text-[13px] leading-[19px]">
-                              <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-
-                        {!isCurrent && (isPaid || hasBilling) && (
-                          <div className="mt-auto pt-5">
-                            {isPaid ? (
-                              // Outline on every card: the header holds the one ink upgrade and
-                              // "Our pick" already marks the recommended plan.
-                              <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={() => void goToCheckout(planId)}
-                                disabled={busy}
-                                loading={pending === `card:${planId}`}
-                                loadingText="Redirecting to checkout…"
-                              >
-                                Upgrade<span className="sr-only"> to {cfg.name}</span>
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="secondary"
-                                className="w-full"
-                                onClick={() => void openPortal('downgrade')}
-                                disabled={busy}
-                                loading={pending === 'portal:downgrade'}
-                                loadingText="Opening billing portal…"
-                              >
-                                Downgrade<span className="sr-only"> to {cfg.name}</span>
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                        plan={planId}
+                        annual={c === 'year'}
+                        changed={cycleChanged}
+                        index={index}
+                        idPrefix={`billing-${c}`}
+                        state={planId === currentPlan ? 'current' : undefined}
+                        stateLabel="Current plan"
+                        action={action}
+                        micro={
+                          !isCurrent && isPaid && inPlace
+                            ? planSwitchMicro(expectedPlanSwitch({ plan: currentPlan, interval: currentInterval }, { plan: planId, interval: c }))
+                            : null
+                        }
+                      />
                     )
                   })}
 
-                  {/* The family's sales-led tier (Custom / Store Enterprise): full width */}
-                  <div
-                    data-current={salesIsCurrent || undefined}
-                    className="flex flex-col gap-4 rounded-2xl bg-secondary p-5 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-h-6 flex-wrap items-center gap-2">
-                        <h3 className="text-[15px] leading-[22px] font-medium">{sales.name}</h3>
-                        {salesIsCurrent && <Badge variant="secondary">Current plan</Badge>}
-                      </div>
-                      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                        {sales.features.slice(0, 3).map((f) => (
-                          <li key={f} className="flex items-center gap-1.5 text-[13px] leading-[19px] text-muted-foreground">
-                            <Check className="size-3.5 shrink-0" aria-hidden="true" />
-                            {f}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
-                      <p className="flex items-baseline gap-1">
-                        <span className="text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">
-                          {money(sales.price_monthly)}+
-                        </span>
-                        <span className="text-[13px] text-muted-foreground">/mo</span>
-                      </p>
-                      {!salesIsCurrent && (
-                        <a
-                          href={`mailto:sales@neuro-tech-voice.com?subject=${encodeURIComponent(SALES_SUBJECT[family])}`}
-                          className={buttonVariants({ variant: 'outline' })}
-                        >
-                          Contact sales
+                  {/* The family's sales-led tier (Enterprise / Store Enterprise): a band across both columns */}
+                  <AppPlanTierCard
+                    plan={salesPlan}
+                    annual={c === 'year'}
+                    index={cardPlans.length}
+                    idPrefix={`billing-${c}`}
+                    state={salesIsCurrent ? 'current' : undefined}
+                    stateLabel="Current plan"
+                    action={
+                      salesIsCurrent ? (
+                        <PlanTierStatus>Your current plan</PlanTierStatus>
+                      ) : (
+                        // The app's one sales channel (lib/billing/upgrade.ts), with the number printed:
+                        // a tel: link does nothing in most desktop browsers.
+                        <a href={CONTACT_SALES_HREF} className={cn(buttonVariants({ size: 'lg' }), tierButtonClass())}>
+                          Talk to us<span className="sr-only"> about {sales.name}</span>
+                          <span className="tabular-nums">{` · ${CONTACT_SALES_PHONE}`}</span>
                         </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                      )
+                    }
+                  />
+                </PlanTiers>
               </TabsContent>
             ))}
           </Tabs>
@@ -380,6 +488,66 @@ export default function BillingPage() {
           )}
         </section>
       </div>
+
+      {/* In-place plan switch: the live subscription changes, so the owner confirms first. */}
+      <Dialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setConfirm(null)
+        }}
+      >
+        <DialogContent>
+          {confirm && confirmCfg && confirmRelation && confirmEffective && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {confirm.plan === currentPlan
+                    ? `${intervalSwitchLabel(confirm.interval)}?`
+                    : `${PLAN_CHANGE_LABEL[confirmRelation]} to ${confirmCfg.name}?`}
+                </DialogTitle>
+                <DialogDescription>
+                  {planSwitchDescription({
+                    currentName: planCfg.name,
+                    targetName: confirmCfg.name,
+                    targetPrice:
+                      confirm.interval === 'year'
+                        ? `${money(confirmCfg.price_annual)} a year`
+                        : `${money(confirmCfg.price_monthly)} a month`,
+                    targetMinutes: formatMinutes(confirmCfg.minutes_limit),
+                    effective: confirmEffective,
+                    fromInterval: currentInterval,
+                    toInterval: confirm.interval,
+                  })}
+                </DialogDescription>
+              </DialogHeader>
+              {confirmOverLimit && (
+                <p className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-2.5 text-[13px] leading-[19px]">
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+                  <span>
+                    You have used {formatMinutes(usedNow)} minutes this period, more than {confirmCfg.name} includes:
+                    calls pause until you add extra minutes or your included minutes reset next month.
+                  </span>
+                </p>
+              )}
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setConfirm(null)} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void changePlan(confirm, true)}
+                  disabled={busy}
+                  loading={pending === `${confirm.source}:${confirm.plan}`}
+                  loadingText="Changing plan…"
+                >
+                  {confirm.plan === currentPlan
+                    ? intervalSwitchLabel(confirm.interval)
+                    : `${PLAN_CHANGE_LABEL[confirmRelation]} to ${confirmCfg.name}`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   )
 }

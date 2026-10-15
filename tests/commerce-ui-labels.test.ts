@@ -43,9 +43,11 @@ import {
   oauthErrorMessage,
   runOutcomeLabel,
   runStatusLabel,
+  runStatusReason,
   runSummaryLine,
   suppressionSourceLabel,
 } from '@/components/commerce/labels'
+import { MINUTES_SKIP_REASON, MINUTES_WAIT_REASON } from '@/lib/commerce/automations/dispatch'
 import { CONSENT_TEXT as RECORDED_CONSENT_TEXT } from '@/lib/commerce/automations/config'
 import { SCRIPT_VARIABLES as SERVER_SCRIPT_VARIABLES } from '@/lib/commerce/prompt'
 import { OAUTH_ERROR_CODES } from '@/lib/commerce/shopify-state'
@@ -109,6 +111,19 @@ describe('commerce labels are total', () => {
       retry_waiting: 'Retrying',
       cancelled: 'Canceled',
     })
+  })
+
+  it('prints why a run waits or was skipped for lack of minutes, not only why it was suppressed', () => {
+    expect(runStatusReason({ status: 'scheduled', eligibility_reason: MINUTES_WAIT_REASON })).toBe(MINUTES_WAIT_REASON)
+    expect(runStatusReason({ status: 'skipped', eligibility_reason: MINUTES_SKIP_REASON })).toBe(MINUTES_SKIP_REASON)
+    expect(runStatusReason({ status: 'suppressed', eligibility_reason: 'Customer opted out' })).toBe('Customer opted out')
+    expect(runStatusReason({ status: 'scheduled', eligibility_reason: null })).toBeNull()
+    expect(runStatusReason({ status: 'skipped', eligibility_reason: '  ' })).toBeNull()
+    // A reason left over from an earlier wait is not shown once the run moved on.
+    expect(runStatusReason({ status: 'completed', eligibility_reason: MINUTES_WAIT_REASON })).toBeNull()
+    // The skip reason fits every plan: a trial can neither buy minutes nor turn on auto top-up.
+    expect(MINUTES_SKIP_REASON).toBe('Out of call minutes for 24 hours, so this call was skipped. Add minutes on the Billing page to keep store calls running.')
+    expect(MINUTES_SKIP_REASON).not.toMatch(/buy extra minutes|auto top-up/i)
   })
 
   it('run outcomes', () => {

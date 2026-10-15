@@ -12,7 +12,7 @@ import { cancelRun, isCancellable } from '@/hooks/useCommerceRuns'
 import type { RunDto } from '@/lib/commerce/types'
 import { cn } from '@/lib/utils'
 import { formatDateTime, maskedOrDash, relativeTime } from './format'
-import { automationTypeLabel } from './labels'
+import { automationTypeLabel, runStatusReason } from './labels'
 import { RunOutcomeChip, RunStatusChip } from './StatusChips'
 import { LoadMoreFooter, RecordsPanel } from './ListScaffold'
 
@@ -128,6 +128,7 @@ export function RunsTable({
           <TableBody>
             {runs.map((run) => {
               const when = runWhen(run)
+              const reason = runStatusReason(run)
               const canCancel = cancellable && isCancellable(run)
               return (
                 <TableRow key={run.id}>
@@ -153,9 +154,10 @@ export function RunsTable({
                   </TableCell>
                   <TableCell>
                     <RunStatusChip status={run.status} />
-                    {run.status === 'suppressed' && run.eligibility_reason && (
-                      <span className="mt-1 block max-w-[28ch] truncate text-xs leading-4 text-muted-foreground" title={run.eligibility_reason}>
-                        {run.eligibility_reason}
+                    {/* Why it is held back, waiting (e.g. out of minutes) or skipped. */}
+                    {reason && (
+                      <span className="mt-1 block max-w-[28ch] truncate text-xs leading-4 text-muted-foreground" title={reason}>
+                        {reason}
                       </span>
                     )}
                     {run.status === 'failed' && run.error_message && (

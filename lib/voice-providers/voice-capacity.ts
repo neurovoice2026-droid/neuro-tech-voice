@@ -3,8 +3,9 @@ import 'server-only'
 // workspace, so one tenant could exhaust the voice slots of every tenant.
 // Three gates run before any provider call that creates a custom voice:
 //   1. plan: only plans whose entitlements include voice cloning
-//      (lib/pages/entitlements.ts: pro, business, custom and the store plans
-//      priced like them, store_growth and above; not trial/starter/store_starter);
+//      (lib/pages/entitlements.ts: pro, business, scale, custom and the store
+//      plans priced like them, store_growth and above; not trial, starter,
+//      growth or store_starter);
 //   2. a cap of active custom voices per organization
 //      (ELEVENLABS_MAX_CLONES_PER_ORG, default 2), re-checked after the
 //      registry insert so two concurrent requests cannot both pass it;

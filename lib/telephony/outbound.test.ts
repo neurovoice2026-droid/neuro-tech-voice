@@ -1,6 +1,7 @@
 // Outbound calls (slice C): native outcomes (success, rejection, null
 // conversation id, timeout), the outbound greeting with the recording notice,
-// the ring timeout, the plan-minutes pre-check and the opaque user_id; the
+// the ring timeout, the minute-cap pre-check (included + purchased minutes,
+// every plan) and the opaque user_id; the
 // app-routed (Twilio) outcomes: rejection, timeout, lost connection.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeDb, type FakeCall } from '@/tests/helpers/fake-db'
@@ -38,7 +39,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => db }))
 const ctx = {
   db,
   number: { id: 'num_1', org_id: ORG, agent_id: 'agent_1', number: '+40312345678', is_active: true, routing_mode: 'native_elevenlabs', supports_inbound: true, supports_outbound: true, cartesia_phone_number_id: null },
-  org: { id: ORG, name: 'Smile Clinic', timezone: 'Europe/Bucharest', voice_fallback_enabled: true, usage: { plan: 'starter', minutes_used: 0, minutes_limit: 150 } as { plan: string; minutes_used: number; minutes_limit: number } },
+  org: { id: ORG, name: 'Smile Clinic', timezone: 'Europe/Bucharest', voice_fallback_enabled: true, usage: { plan: 'starter', minutes_used: 0, minutes_limit: 150 } as { plan: string; minutes_used: number; minutes_limit: number; extra_minutes_balance?: number | null } },
   agent: { id: 'agent_1', name: 'Ana', is_active: true, language: 'ro', primary: 'elevenlabs', fallback: null, maxDurationSeconds: 900, transferNumber: null, transferEnabled: false, recordingNotice: true },
   externalIds: { elevenlabs: 'el_agent_1' },
   elevenLabsOverrides: new Set(['agent.first_message', 'conversation.max_duration_seconds']),
@@ -50,7 +51,7 @@ vi.mock('@/lib/voice-providers/routing', () => ({
   outboundRoutingInput: (x: unknown) => x,
 }))
 
-import { startOutboundCall, twilioCreateUncertainty } from './outbound'
+import { outOfMinutesMessage, startOutboundCall, twilioCreateUncertainty } from './outbound'
 
 beforeEach(() => {
   vi.stubEnv('VOICE_PUBLIC_BASE_URL', 'https://voice.example.com')
@@ -119,6 +120,33 @@ describe('native outbound (POST /v1/convai/twilio/outbound-call)', () => {
     expect((err as RequestError).status).toBe(409)
     expect(outboundCall).not.toHaveBeenCalled()
     expect(inserts).toHaveLength(0)
+  })
+
+  it('a paid plan out of minutes (included and purchased) places no call and points to buying minutes', async () => {
+    ctx.org.usage = { plan: 'starter', minutes_used: 150, minutes_limit: 150, extra_minutes_balance: 0 }
+    const err = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' }).catch((x: unknown) => x)
+    expect(err).toBeInstanceOf(RequestError)
+    expect((err as RequestError).status).toBe(409)
+    expect((err as RequestError).message).toBe(outOfMinutesMessage('starter'))
+    expect((err as RequestError).message).toContain('Buy extra minutes')
+    // The store dispatcher tells this refusal apart from other 409s (it waits for minutes instead of skipping).
+    expect((err as RequestError).details).toEqual({ reason: 'minutes_exhausted' })
+    expect(outboundCall).not.toHaveBeenCalled()
+    expect(inserts).toHaveLength(0)
+  })
+
+  it('a trial out of minutes is told to choose a plan', async () => {
+    ctx.org.usage = { plan: 'trial', minutes_used: 5, minutes_limit: 5 }
+    const err = await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' }).catch((x: unknown) => x)
+    expect((err as RequestError).message).toBe(outOfMinutesMessage('trial'))
+    expect((err as RequestError).message).toContain('Choose a plan')
+  })
+
+  it('purchased minutes keep a paid plan calling, capped to them', async () => {
+    ctx.org.usage = { plan: 'starter', minutes_used: 400, minutes_limit: 150, extra_minutes_balance: 3 }
+    await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' })
+    const data = (outboundCall.mock.calls[0][0] as { conversation_initiation_client_data: { conversation_config_override: { conversation?: { max_duration_seconds: number } } } }).conversation_initiation_client_data
+    expect(data.conversation_config_override.conversation).toEqual({ max_duration_seconds: 180 })
   })
 
   it('a trial call is capped to the minutes left (override allowed by the agent)', async () => {

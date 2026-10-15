@@ -4,7 +4,7 @@ import 'server-only'
 //     /api/telephony/twilio/outbound-connect and the router picks the healthy
 //     provider exactly like an inbound call (ElevenLabs → Cartesia fallback).
 //   native_elevenlabs numbers: ElevenLabs places the call (no failover).
-// Validation (E.164, ownership, capabilities, agent state, plan minutes)
+// Validation (E.164, ownership, capabilities, agent state, minutes left)
 // happens before any external request; the caller route enforces auth,
 // origin and rate limits. Both paths ring the callee for
 // OUTBOUND_RING_TIMEOUT_S and open with the outbound greeting (AI disclosure
@@ -100,6 +100,13 @@ export function twilioCreateUncertainty(err: unknown): 'timeout' | 'network' | n
   return 'network'
 }
 
+/** The 409 message of a call refused for lack of minutes: a trial chooses a plan, a paid plan buys minutes. */
+export function outOfMinutesMessage(plan: string | null): string {
+  return plan === 'trial'
+    ? 'You have used all the call minutes of your trial. Choose a plan on the Billing page to place more calls.'
+    : 'You are out of call minutes. Buy extra minutes or turn on auto top-up on the Billing page to place more calls.'
+}
+
 export async function startOutboundCall(req: OutboundRequest, log: Logger = createLogger()): Promise<OutboundResult> {
   const to = normalizeE164(req.toNumber)
   if (!to) throw new RequestError('invalid_request', 'Enter the number in international format, e.g. +40712345678.', 400)
@@ -121,11 +128,10 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
   const ctx = await loadRoutingContext(number)
   if (!ctx.agent) throw new RequestError('precondition_failed', 'Set up your agent before placing calls.', 409)
   if (!ctx.agent.is_active) throw new RequestError('precondition_failed', 'Your agent is paused. Activate it to place calls.', 409)
-  // Plan without overage (trial): no call once the included minutes are used up.
+  // Hard minute cap (lib/telephony/quota.ts): no call once the included and
+  // purchased minutes are used up; otherwise the call is capped to them.
   const allowance = callAllowance(ctx.org.usage)
-  if (!allowance.allowed) {
-    throw new RequestError('precondition_failed', 'You have used all the call minutes included in your plan. Upgrade your plan to place more calls.', 409)
-  }
+  if (!allowance.allowed) throw new RequestError('precondition_failed', outOfMinutesMessage(ctx.org.usage?.plan ?? null), 409, { reason: 'minutes_exhausted' })
   const timeLimit = typeof allowance.capSeconds === 'number' ? Math.min(ctx.agent.maxDurationSeconds, allowance.capSeconds) : ctx.agent.maxDurationSeconds
   const l = log.child({ orgId: req.orgId, agentId: ctx.agent.id, to: maskPhone(to), purpose: req.purpose })
 

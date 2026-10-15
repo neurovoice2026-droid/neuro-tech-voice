@@ -137,7 +137,7 @@ export const FACTS = {
   testFiles: 120, // FLOOR. *.test.ts(x) repo-wide (127 with this page's test)
   migrations: 12, // EXACT. supabase/migrations/*.sql
   stripeEvents: 7, // EXACT. `case '…':` in app/api/billing/webhook/route.ts
-  cronSteps: ["reconcile_unbilled_calls", "roll_usage_periods", "report_overage", "booking_reminders",
+  cronSteps: ["reconcile_unbilled_calls", "annual_usage_periods", "auto_topup", "booking_reminders",
     "resync_stale_agents", "purge_expired_kv", "purge_orphan_uploads", "warm_cartesia_budget"], // EXACT, route order
   cronAt: "07:00 UTC", // vercel.json "0 7 * * *"
   webhookAttempts: 3, // = WEBHOOK_MAX_ATTEMPTS (lib/workflows/webhook.ts, server-only)
@@ -529,9 +529,11 @@ const LENSES: readonly Lens[] = [
   ] },
   { id: "nightly", label: `Every morning at ${FACTS.cronAt}`, foot: "A step that fails shows in the logs and never stops the others.", steps: [
     { id: "wake", title: "Vercel Cron calls the job", hops: ["cron-api"], text: `Vercel Cron calls the daily job at ${FACTS.cronAt}, with a secret. Its ${word(FACTS.cronSteps.length)} steps run on their own, and each is safe to run twice.` },
-    { id: "reconcile", title: "Bills calls left unbilled", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Bills any answered call whose billing didn’t finish, without ever billing it twice." },
-    { id: "roll", title: "Starts the next usage period", cron: "roll_usage_periods", hops: ["api-supabase"], text: "Starts the next usage period for paid plans." },
-    { id: "overage", title: "Reports overage to Stripe", cron: "report_overage", hops: [{ edge: "stripe-api", reverse: true }], text: "Reports minutes past the allowance to Stripe." },
+    { id: "reconcile", title: "Counts calls left uncounted", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Counts the minutes of any answered call whose usage wasn’t recorded, without ever counting it twice." },
+    // Monthly plans start their next period when Stripe renews them (the webhook); annual plans get fresh minutes every month here.
+    { id: "roll", title: "Starts next month’s minutes", cron: "annual_usage_periods", hops: ["api-supabase"], text: "Gives annual plans fresh included minutes each month. Monthly plans get theirs when Stripe renews them." },
+    // Minutes are prepaid (plans and packs): nothing is reported or billed after the fact.
+    { id: "topup", title: "Tops up minutes", cron: "auto_topup", hops: [{ edge: "stripe-api", reverse: true }], text: "Buys a prepaid pack of minutes for owners who turned on auto top-up and are running low, charged to their saved card with an invoice." },
     { id: "reminders", title: "Texts appointment reminders", cron: "booking_reminders", hops: [{ edge: "twilio-api", reverse: true }], text: "Texts appointment reminders." },
     { id: "resync", title: "Re-syncs stale agents", cron: "resync_stale_agents", ring: ["cartesia", "elevenlabs"], text: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.` },
     { id: "purge", title: "Deletes expired locks and flags", cron: "purge_expired_kv", hops: ["api-supabase"], text: "Deletes expired locks and flags." },
