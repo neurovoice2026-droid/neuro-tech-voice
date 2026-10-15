@@ -99,6 +99,16 @@ code, docs and merchant-facing UI are English.
   (`lib/billing/stripe-trial.ts`); upgrades are charged at once, downgrades
   and monthly/yearly switches apply at renewal; "Talk to us" calls the sales
   phone number.
+- `4f14e2d` feat(billing): hourly maintenance step `stripe_plan_catalog`
+  (lib/billing/stripe-catalog.ts) resolves the monthly and annual Stripe price
+  of all 8 self-serve plans through `ensurePlanPriceId`, so the catalogue
+  exists in Stripe before any checkout; plus a fix for a replayed product
+  create that returned a product archived since. Verified in production: the
+  09:10 UTC tick on 2026-10-15 reported `checked 16, ready 16, failed 0`,
+  and the six July env pins were logged as `pinned_price_ignored`
+  (`untagged`). Stripe (read through the Stripe connector before this):
+  no subscriptions; the July products "Neuro Tech Voice — Starter/Pro/
+  Business" are still active and can be archived by the owner.
 - Known, intentional limits (documented in `docs/commerce-integrations.md`):
   custom-connector HMAC covers the body only; Shopify expiring tokens are not
   refreshed (offline token in use); Shopify `customer_phone` stays
