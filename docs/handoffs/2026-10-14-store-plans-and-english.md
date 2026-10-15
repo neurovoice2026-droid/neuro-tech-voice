@@ -317,9 +317,12 @@ steps below are kept as the runbook for the next billing change.
 
 ## Manual items that only the owner can do
 
-- Optional: Stripe Dashboard > Settings > Branding (brand colour #551a89,
-  accent #140a24, the crown icon) so invoices, receipts and the customer
-  portal match too. Checkout itself is already branded from the code.
+- Stripe account branding (invoices, receipts, customer portal, and the
+  Checkout defaults) was set through the Stripe connector on 2026-10-15:
+  brand and accent #551a89, white Checkout background, #551a89 button,
+  Inter, rounded. Left for the owner: upload the icon in Stripe Dashboard >
+  Settings > Branding (the connector exposes no file upload). Use the crown,
+  https://www.neurotechvoice.com/brand/checkout-icon.png (256×256 PNG).
 - Decide whether the homepage service prices stay as they are: at about
   $0.10/min cost, Pro (3,000 min for $249) and Scale (15,000 for $990) lose
   money when a customer uses every included minute; Growth and Business are
