@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Stripe from 'stripe'
-import { checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { CHECKOUT_LOGO_PATH, checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 
 function logger() {
   const lines: Array<{ level: string; event: string; data: unknown }> = []
@@ -25,20 +27,49 @@ beforeEach(() => {
 })
 
 describe('checkoutBranding', () => {
-  it('dresses the page like the site, simply: white, brand violet button, Inter, rounded, the name written in the header', () => {
+  it('dresses the page like the site, simply: white, brand violet button, Inter, rounded, the name alone in the header', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://www.example.com/')
     expect(checkoutBranding()).toEqual({
       display_name: 'NeuroVoice',
       background_color: '#ffffff',
       button_color: '#551a89',
       border_style: 'rounded',
       font_family: 'inter',
+      // The name as an image: with a logo Checkout drops its generic shop glyph.
+      logo: { type: 'url', url: 'https://www.example.com/brand/checkout-logo.png' },
     })
   })
 
-  it('sends no logo or icon image: the header is the name alone', () => {
-    const branding = checkoutBranding()
-    expect(branding).not.toHaveProperty('logo')
-    expect(branding).not.toHaveProperty('icon')
+  it('never sends an icon (it would sit before the name)', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://www.example.com')
+    expect(checkoutBranding()).not.toHaveProperty('icon')
+  })
+
+  it('keeps only the origin of the app URL for the logo', () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', '  https://app.example.com/some/path?x=1 ')
+    expect(checkoutBranding()?.logo).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-logo.png' })
+  })
+
+  it('sends no logo Stripe could not fetch: http, localhost, malformed or unset app URL; the rest stays', () => {
+    for (const url of ['http://localhost:3000', 'http://app.example.com', 'not a url', '']) {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', url)
+      const branding = checkoutBranding()
+      expect(branding).not.toHaveProperty('logo')
+      expect(branding?.display_name).toBe('NeuroVoice')
+      expect(branding?.button_color).toBe('#551a89')
+    }
+  })
+
+  it('the logo it points at ships in public/: a wide PNG within Stripe\'s 512 KB, drawn at 4x the 28px header', () => {
+    const file = join(process.cwd(), 'public', CHECKOUT_LOGO_PATH)
+    expect(existsSync(file)).toBe(true)
+    const bytes = readFileSync(file)
+    expect(bytes.subarray(1, 4).toString('ascii')).toBe('PNG')
+    const width = bytes.readUInt32BE(16)
+    const height = bytes.readUInt32BE(20)
+    expect(height).toBe(112)
+    expect(width).toBeGreaterThan(height)
+    expect(bytes.length).toBeLessThanOrEqual(512 * 1024)
   })
 
   it('STRIPE_CHECKOUT_BRANDING=off sends nothing', () => {

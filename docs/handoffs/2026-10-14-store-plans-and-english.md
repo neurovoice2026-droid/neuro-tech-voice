@@ -115,10 +115,13 @@ code, docs and merchant-facing UI are English.
   pack, onboarding, phone number) is created through
   `createBrandedCheckoutSession` (lib/stripe/checkout-branding.ts) with
   `branding_settings`: display name NeuroVoice, white background, #551a89
-  button, Inter, rounded corners, and no logo or icon image: the header is
-  the name NeuroVoice written out. On 2026-10-15 the owner tried the crown,
-  then a logo picture (Checkout draws a logo ~28px tall), and settled on the
-  name alone ("simplu"). A branding field Stripe refuses is logged
+  button, Inter, rounded corners, and the name NeuroVoice alone in the
+  header. On 2026-10-15 the owner tried the crown, then a logo picture
+  (Checkout draws a logo ~28px tall), and settled on the name alone
+  ("simplu"). Given only display_name, Checkout puts a generic shop glyph
+  before the name, so the name is also sent as the logo: "NeuroVoice" in
+  Inter, ink on transparent (public/brand/checkout-logo.png, 357×112), from
+  NEXT_PUBLIC_APP_URL when it is https. A branding field Stripe refuses is logged
   (`stripe.checkout_branding_rejected`, field and code only) and the session
   is created again without branding; `STRIPE_CHECKOUT_BRANDING=off` turns it
   off. Invoices and receipts keep the Dashboard branding (Stripe's rule).
