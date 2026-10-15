@@ -27,7 +27,7 @@ beforeEach(() => {
 })
 
 describe('checkoutBranding', () => {
-  it('dresses the page like the site: white, brand violet button, Inter, rounded, the NEUROVOICE wordmark and brand square from the https origin', () => {
+  it('dresses the page like the site: white, brand violet button, Inter, rounded, the owner\'s logo picture from the https origin', () => {
     expect(checkoutBranding('https://www.example.com/')).toEqual({
       display_name: 'NeuroVoice',
       background_color: '#ffffff',
@@ -60,7 +60,7 @@ describe('checkoutBranding', () => {
   })
 
   // Stripe's image rules (Dashboard branding, the strictest it documents): PNG
-  // or JPG, at most 512 KB; the icon square and at least 128×128.
+  // or JPG, at most 512 KB, square, at least 128×128.
   function png(path: string) {
     const file = join(process.cwd(), 'public', path)
     expect(existsSync(file)).toBe(true)
@@ -69,19 +69,19 @@ describe('checkoutBranding', () => {
     return { size: bytes.length, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
   }
 
-  it('the icon it points at ships in public/: a square PNG Stripe accepts', () => {
-    const icon = png(CHECKOUT_ICON_PATH)
-    expect(icon.width).toBe(icon.height)
-    expect(icon.width).toBeGreaterThanOrEqual(128)
-    expect(icon.size).toBeLessThanOrEqual(512 * 1024)
+  it.each([
+    ['icon', CHECKOUT_ICON_PATH],
+    ['logo', CHECKOUT_LOGO_PATH],
+  ])('the %s it points at ships in public/: a square PNG Stripe accepts', (_name, path) => {
+    const image = png(path)
+    expect(image.width).toBe(image.height)
+    expect(image.width).toBeGreaterThanOrEqual(128)
+    expect(image.size).toBeLessThanOrEqual(512 * 1024)
   })
 
-  it('the logo it points at ships in public/: a wide PNG, so the wordmark reads at the header height', () => {
-    const logo = png(CHECKOUT_LOGO_PATH)
-    // Checkout draws the logo about 28px tall: a wide wordmark keeps its letters legible.
-    expect(logo.width / logo.height).toBeGreaterThan(4)
-    expect(logo.height).toBeGreaterThanOrEqual(56)
-    expect(logo.size).toBeLessThanOrEqual(512 * 1024)
+  it('the logo and the icon are the same picture (the owner\'s logo)', () => {
+    const read = (path: string) => readFileSync(join(process.cwd(), 'public', path))
+    expect(read(CHECKOUT_LOGO_PATH).equals(read(CHECKOUT_ICON_PATH))).toBe(true)
   })
 })
 

@@ -1,9 +1,9 @@
 import 'server-only'
 // Stripe-hosted Checkout dressed like the site: white page, the brand violet
 // on the pay button, Inter (the site's body face), rounded corners, and the
-// NEUROVOICE wordmark in the header (the logo; Checkout shows it about 28px
-// tall, so it is the bare wordmark, ink on transparent, cut from the brand
-// square) with the brand square as the favicon (the icon). Passed per session
+// owner's logo picture (NEUROVOICE on the violet-teal glow, chosen by the
+// owner over the crown) as the header logo and the favicon. Checkout draws
+// the logo about 28px tall. Passed per session
 // (branding_settings), so it does not depend on the account's Dashboard
 // branding; a field left out falls back to the Dashboard's value. Invoices
 // and receipts keep the Dashboard branding (Stripe's rule).
@@ -21,10 +21,10 @@ import 'server-only'
 import type Stripe from 'stripe'
 import type { Logger } from '@/lib/observability/logger'
 
-/** The brand square, NEUROVOICE on the violet-teal glow (public/brand/checkout-icon.png, 512×512): the favicon. */
+/** The owner's logo picture as the favicon (public/brand/checkout-icon.png, 512×512). */
 export const CHECKOUT_ICON_PATH = '/brand/checkout-icon.png'
 
-/** The NEUROVOICE wordmark, ink on transparent (public/brand/checkout-logo.png, 870×136): the header. */
+/** The owner's logo picture as the header logo (public/brand/checkout-logo.png, 512×512, the same picture). */
 export const CHECKOUT_LOGO_PATH = '/brand/checkout-logo.png'
 
 /** The name the wordmark spells; Checkout shows it only when the logo is not sent. */

@@ -77,7 +77,7 @@ describe('POST /api/billing/minutes/checkout', () => {
       payment_intent_data: { metadata },
       success_url: 'https://app.example.com/billing?minutes=success#minutes',
       cancel_url: 'https://app.example.com/billing?minutes=canceled#minutes',
-      // The site's look, with the wordmark and the brand square served from the app origin.
+      // The site's look, with the owner's logo picture served from the app origin.
       branding_settings: {
         button_color: '#551a89',
         logo: { type: 'url', url: 'https://app.example.com/brand/checkout-logo.png' },
