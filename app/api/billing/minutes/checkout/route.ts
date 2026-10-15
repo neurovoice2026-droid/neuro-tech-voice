@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         customer_update: { address: 'auto', name: 'auto' },
         success_url: `${appUrl}/billing?minutes=success#minutes`,
         cancel_url: `${appUrl}/billing?minutes=canceled#minutes`,
-      }, appUrl, log)
+      }, log)
       log.info('billing.minutes_checkout_created', { minutes, amountCents: quote.amount_cents })
       return NextResponse.json({ url: session.url })
     } catch (err) {

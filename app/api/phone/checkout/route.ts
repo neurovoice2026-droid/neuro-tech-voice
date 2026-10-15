@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         // tell this apart from a plan subscription.
         metadata,
         subscription_data: { metadata },
-      }, appUrl, log)
+      }, log)
 
       log.info('phone.checkout_created', { number: maskPhone(number) })
       return NextResponse.json({ url: session.url })

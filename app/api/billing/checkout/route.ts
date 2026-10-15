@@ -189,7 +189,7 @@ export async function POST(request: Request) {
         // ntv_plan on the subscription is the webhook's second signal for the
         // plan, after the price id (the price itself carries it too).
         subscription_data: { metadata: { org_id: org.id, ntv_plan: plan } },
-      }, appUrl, log)
+      }, log)
 
       return NextResponse.json({ url: session.url })
     } catch (err) {

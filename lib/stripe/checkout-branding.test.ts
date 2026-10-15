@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type Stripe from 'stripe'
-import { CHECKOUT_ICON_PATH, CHECKOUT_LOGO_PATH, checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
+import { checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 
 function logger() {
   const lines: Array<{ level: string; event: string; data: unknown }> = []
@@ -27,89 +25,53 @@ beforeEach(() => {
 })
 
 describe('checkoutBranding', () => {
-  it('dresses the page like the site: white, brand violet button, Inter, rounded, the owner\'s logo picture from the https origin', () => {
-    expect(checkoutBranding('https://www.example.com/')).toEqual({
+  it('dresses the page like the site, simply: white, brand violet button, Inter, rounded, the name written in the header', () => {
+    expect(checkoutBranding()).toEqual({
       display_name: 'NeuroVoice',
       background_color: '#ffffff',
       button_color: '#551a89',
       border_style: 'rounded',
       font_family: 'inter',
-      logo: { type: 'url', url: 'https://www.example.com/brand/checkout-logo.png' },
-      icon: { type: 'url', url: 'https://www.example.com/brand/checkout-icon.png' },
     })
   })
 
-  it('keeps only the origin of the app URL for the images', () => {
-    const branding = checkoutBranding('  https://app.example.com/some/path?x=1 ')
-    expect(branding?.logo).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-logo.png' })
-    expect(branding?.icon).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-icon.png' })
-  })
-
-  it('sends no image Stripe could not fetch: http, localhost over http, or a malformed URL', () => {
-    for (const url of ['http://localhost:3000', 'http://app.example.com', 'not a url', '']) {
-      const branding = checkoutBranding(url)
-      expect(branding?.logo).toBeUndefined()
-      expect(branding?.icon).toBeUndefined()
-      expect(branding?.button_color).toBe('#551a89')
-    }
+  it('sends no logo or icon image: the header is the name alone', () => {
+    const branding = checkoutBranding()
+    expect(branding).not.toHaveProperty('logo')
+    expect(branding).not.toHaveProperty('icon')
   })
 
   it('STRIPE_CHECKOUT_BRANDING=off sends nothing', () => {
     vi.stubEnv('STRIPE_CHECKOUT_BRANDING', ' OFF ')
-    expect(checkoutBranding('https://www.example.com')).toBeUndefined()
-  })
-
-  // Stripe's image rules (Dashboard branding, the strictest it documents): PNG
-  // or JPG, at most 512 KB, square, at least 128×128.
-  function png(path: string) {
-    const file = join(process.cwd(), 'public', path)
-    expect(existsSync(file)).toBe(true)
-    const bytes = readFileSync(file)
-    expect(bytes.subarray(1, 4).toString('ascii')).toBe('PNG')
-    return { size: bytes.length, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
-  }
-
-  it.each([
-    ['icon', CHECKOUT_ICON_PATH],
-    ['logo', CHECKOUT_LOGO_PATH],
-  ])('the %s it points at ships in public/: a square PNG Stripe accepts', (_name, path) => {
-    const image = png(path)
-    expect(image.width).toBe(image.height)
-    expect(image.width).toBeGreaterThanOrEqual(128)
-    expect(image.size).toBeLessThanOrEqual(512 * 1024)
-  })
-
-  it('the logo and the icon are the same picture (the owner\'s logo)', () => {
-    const read = (path: string) => readFileSync(join(process.cwd(), 'public', path))
-    expect(read(CHECKOUT_LOGO_PATH).equals(read(CHECKOUT_ICON_PATH))).toBe(true)
+    expect(checkoutBranding()).toBeUndefined()
   })
 })
 
 describe('createBrandedCheckoutSession', () => {
   it('creates the session once, with the branding next to the caller params', async () => {
     const { log } = logger()
-    const session = await createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)
+    const session = await createBrandedCheckoutSession(stripe, params, log)
     expect(session).toEqual({ id: 'cs_1', url: 'https://checkout.stripe.test/s' })
     expect(create).toHaveBeenCalledTimes(1)
-    expect(create.mock.calls[0][0]).toEqual({ ...params, branding_settings: checkoutBranding('https://www.example.com') })
+    expect(create.mock.calls[0][0]).toEqual({ ...params, branding_settings: checkoutBranding() })
   })
 
   it('a branding field Stripe refuses never costs the sale: created again without branding, logged by field and code only', async () => {
-    create.mockRejectedValueOnce(stripeError('branding_settings[icon][url]'))
+    create.mockRejectedValueOnce(stripeError('branding_settings[font_family]'))
     const { log, lines } = logger()
-    const session = await createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)
+    const session = await createBrandedCheckoutSession(stripe, params, log)
     expect(session.url).toBe('https://checkout.stripe.test/s')
     expect(create).toHaveBeenCalledTimes(2)
     expect(create.mock.calls[1][0]).toEqual(params)
     expect(create.mock.calls[1][0]).not.toHaveProperty('branding_settings')
-    expect(lines).toEqual([{ level: 'warn', event: 'stripe.checkout_branding_rejected', data: { param: 'branding_settings[icon][url]', code: 'parameter_invalid' } }])
+    expect(lines).toEqual([{ level: 'warn', event: 'stripe.checkout_branding_rejected', data: { param: 'branding_settings[font_family]', code: 'parameter_invalid' } }])
     expect(JSON.stringify(lines)).not.toContain('secret_ref')
   })
 
   it('an API version that does not know branding_settings at all is handled the same way', async () => {
     create.mockRejectedValueOnce(stripeError('branding_settings'))
     const { log } = logger()
-    await createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)
+    await createBrandedCheckoutSession(stripe, params, log)
     expect(create).toHaveBeenCalledTimes(2)
   })
 
@@ -117,7 +79,7 @@ describe('createBrandedCheckoutSession', () => {
     const declined = stripeError('line_items[0][price]')
     create.mockRejectedValueOnce(declined)
     const { log, lines } = logger()
-    await expect(createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)).rejects.toBe(declined)
+    await expect(createBrandedCheckoutSession(stripe, params, log)).rejects.toBe(declined)
     expect(create).toHaveBeenCalledTimes(1)
     expect(lines).toEqual([])
   })
@@ -126,7 +88,7 @@ describe('createBrandedCheckoutSession', () => {
     const down = Object.assign(new Error('socket hang up'), { type: 'StripeConnectionError' })
     create.mockRejectedValueOnce(down)
     const { log } = logger()
-    await expect(createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)).rejects.toBe(down)
+    await expect(createBrandedCheckoutSession(stripe, params, log)).rejects.toBe(down)
     expect(create).toHaveBeenCalledTimes(1)
   })
 
@@ -134,14 +96,14 @@ describe('createBrandedCheckoutSession', () => {
     const odd = stripeError('branding_settings[logo]', 'StripeAPIError')
     create.mockRejectedValueOnce(odd)
     const { log } = logger()
-    await expect(createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)).rejects.toBe(odd)
+    await expect(createBrandedCheckoutSession(stripe, params, log)).rejects.toBe(odd)
     expect(create).toHaveBeenCalledTimes(1)
   })
 
   it('switched off: the caller params go to Stripe untouched', async () => {
     vi.stubEnv('STRIPE_CHECKOUT_BRANDING', 'off')
     const { log } = logger()
-    await createBrandedCheckoutSession(stripe, params, 'https://www.example.com', log)
+    await createBrandedCheckoutSession(stripe, params, log)
     expect(create).toHaveBeenCalledTimes(1)
     expect(create.mock.calls[0][0]).toBe(params)
   })

@@ -383,7 +383,7 @@ export async function POST(request: Request) {
             // after the price id (a store price carries it too).
             metadata: { org_id: org.id, ntv_plan: body.plan },
           },
-        }, appUrl, log)
+        }, log)
 
         return NextResponse.json({ success: true, checkout_url: session.url, activated, primary_provider: primaryProvider, warning, sync })
       } catch (err) {

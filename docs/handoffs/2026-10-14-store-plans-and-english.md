@@ -115,13 +115,10 @@ code, docs and merchant-facing UI are English.
   pack, onboarding, phone number) is created through
   `createBrandedCheckoutSession` (lib/stripe/checkout-branding.ts) with
   `branding_settings`: display name NeuroVoice, white background, #551a89
-  button, Inter, rounded corners; the owner's logo picture (NEUROVOICE on the
-  violet-teal glow, 512×512) as the header logo and the favicon
-  (public/brand/checkout-logo.png and checkout-icon.png, the same picture),
-  served from the app's https origin. On 2026-10-15 the owner chose this
-  picture over the crown, and asked for the picture itself, not a wordmark
-  cut from it (Checkout draws the logo ~28px tall). A branding field Stripe
-  refuses is logged
+  button, Inter, rounded corners, and no logo or icon image: the header is
+  the name NeuroVoice written out. On 2026-10-15 the owner tried the crown,
+  then a logo picture (Checkout draws a logo ~28px tall), and settled on the
+  name alone ("simplu"). A branding field Stripe refuses is logged
   (`stripe.checkout_branding_rejected`, field and code only) and the session
   is created again without branding; `STRIPE_CHECKOUT_BRANDING=off` turns it
   off. Invoices and receipts keep the Dashboard branding (Stripe's rule).
@@ -324,10 +321,9 @@ steps below are kept as the runbook for the next billing change.
 - Stripe account branding (invoices, receipts, customer portal, and the
   Checkout defaults) was set through the Stripe connector on 2026-10-15:
   brand and accent #551a89, white Checkout background, #551a89 button,
-  Inter, rounded. Left for the owner: upload the icon in Stripe Dashboard >
-  Settings > Branding (the connector exposes no file upload): the logo
-  picture https://www.neurotechvoice.com/brand/checkout-logo.png (512×512
-  PNG) as both icon and logo (Stripe wants square, min 128px, max 512 KB).
+  Inter, rounded. No icon or logo is uploaded there, on purpose: one
+  uploaded in Stripe Dashboard > Settings > Branding would also show next to
+  the name on Checkout, where the owner wants the name alone.
 - Decide whether the homepage service prices stay as they are: at about
   $0.10/min cost, Pro (3,000 min for $249) and Scale (15,000 for $990) lose
   money when a customer uses every included minute; Growth and Business are
