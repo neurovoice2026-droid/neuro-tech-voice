@@ -85,6 +85,20 @@ code, docs and merchant-facing UI are English.
   that completed onboarding keep `services`. A Google account registered
   before 024 is not a new account: signing in with it returns its old
   organization.
+- `3881da1` feat(billing): prepaid extra minutes and plans that match the
+  homepage (2026-10-15). Migrations 027 and 028 applied in production first
+  (`list_migrations` shows both; all new columns, `minute_purchases` with
+  RLS, the service-role-only functions and both guards verified). Deploy
+  `dpl_HFVtFs7TXW3NcN3D9ehyjxN4vXkR` READY on www.neurotechvoice.com; the
+  07:30 UTC cron tick ran on it with `ok: true` and the new
+  `auto_topup` and `annual_usage_periods` steps. Validation before the push:
+  tsc clean, eslint 0 errors, vitest 259 files / 2,956 tests, `next build`
+  clean. Supabase advisors: nothing new (only INFO "unused index" on the
+  empty `minute_purchases`). Defaults chosen without the owner and easy to
+  change: Stripe's 14 free days grant at most 100 minutes
+  (`lib/billing/stripe-trial.ts`); upgrades are charged at once, downgrades
+  and monthly/yearly switches apply at renewal; "Talk to us" calls the sales
+  phone number.
 - Known, intentional limits (documented in `docs/commerce-integrations.md`):
   custom-connector HMAC covers the body only; Shopify expiring tokens are not
   refreshed (offline token in use); Shopify `customer_phone` stays
@@ -241,6 +255,9 @@ The store plans keep the values in the table above. Annual = 10 x monthly.
 
 ## Remaining steps for this task (in order)
 
+DONE on 2026-10-15 (commit `3881da1`, see "Delivered on main" above). The
+steps below are kept as the runbook for the next billing change.
+
 1. Read the workflow result or re-run validation: `npx tsc --noEmit`,
    `npx eslint .` (0 errors), `npx vitest run`, `npm run build`.
 2. Review the money path by hand: `app/api/billing/checkout/route.ts`,
@@ -277,6 +294,18 @@ The store plans keep the values in the table above. Annual = 10 x monthly.
    `STRIPE_STORE_*_PRICE_ID` can pin them later), remaining manual items.
 
 ## Manual items that only the owner can do
+
+- Stripe Checkout colours and logo: Stripe Dashboard > Settings > Branding
+  (brand colour #551a89, accent #140a24, upload the logo and icon). The API
+  used here cannot set them.
+- Decide whether the homepage service prices stay as they are: at about
+  $0.10/min cost, Pro (3,000 min for $249) and Scale (15,000 for $990) lose
+  money when a customer uses every included minute; Growth and Business are
+  near break-even. Lowering their included minutes is a one-line change in
+  `types/index.ts` PLANS (the homepage follows automatically).
+- Optional: the July env prices `STRIPE_{STARTER,PRO,BUSINESS}[_ANNUAL]_PRICE_ID`
+  are now ignored (no `ntv_plan` tag). They can be removed from Vercel and
+  their products archived in Stripe; nothing depends on them.
 
 - Register the Shopify app (non-embedded, redirect URI
   `https://www.neurotechvoice.com/api/commerce/oauth/shopify/callback`,
