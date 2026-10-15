@@ -292,8 +292,20 @@ export function maintenanceSteps(log: Logger): { head: MaintenanceStep[]; tail: 
     ['default_voice_migration', () => import('./default-voices').then((m) => m.runScheduledDefaultVoiceMigration(log))],
     ['voice_orphans', () => import('./voice-orphans').then((m) => m.runVoiceOrphanMaintenance(log))],
     ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
+    // Hourly, from the stored last run: the monthly and annual Stripe price of every self-serve plan exists.
+    // Its own budget, never past the run's deadline; the hourly slot is not claimed when no time is left.
+    ['stripe_plan_catalog', (deadline) => runStripePlanCatalog(log, deadline)],
   ]
   return { head, tail }
+}
+
+/** The stripe_plan_catalog step: skipped (slot unclaimed) without time left, else hourly from the stored last run. */
+export async function runStripePlanCatalog(log: Logger, deadline: number): Promise<unknown> {
+  if (Date.now() >= deadline) return { skipped: 'time_budget' }
+  const c = await import('@/lib/billing/stripe-catalog')
+  const m = await import('./maintenance-state')
+  const stepDeadline = Math.min(deadline, Date.now() + c.PLAN_CATALOG_STEP_MAX_MS)
+  return m.runIfDue(c.PLAN_CATALOG_STEP_KEY, c.PLAN_CATALOG_INTERVAL_MS, log, () => c.ensureStripePlanCatalog(log, stepDeadline))
 }
 
 /** maintenance_state key holding where the next run starts the tail. */

@@ -14,7 +14,13 @@ vi.mock('@/lib/billing/auto-topup', () => ({ sweepAutoTopUps: (...a: unknown[]) 
 const rollAnnualUsagePeriods = vi.fn()
 vi.mock('@/lib/billing/usage-periods', () => ({ rollAnnualUsagePeriods: (...a: unknown[]) => rollAnnualUsagePeriods(...a) }))
 
-import { SKIPPED_SYNC_RETRY_DELAY_MS, TAIL_ROTATION_KEY, maintenanceSteps, retryAgentSyncs, runMaintenanceSteps, type MaintenanceStep } from './maintenance'
+const ensureStripePlanCatalog = vi.fn()
+vi.mock('@/lib/billing/stripe-catalog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/billing/stripe-catalog')>()),
+  ensureStripePlanCatalog: (...a: unknown[]) => ensureStripePlanCatalog(...a),
+}))
+
+import { SKIPPED_SYNC_RETRY_DELAY_MS, TAIL_ROTATION_KEY, maintenanceSteps, retryAgentSyncs, runMaintenanceSteps, runStripePlanCatalog, type MaintenanceStep } from './maintenance'
 import type { Logger } from '@/lib/observability/logger'
 
 function logger() {
@@ -56,7 +62,7 @@ describe('maintenance step order', () => {
     const all = [...head, ...tail].map(([n]) => n)
     expect(new Set(all).size).toBe(all.length)
     expect(tail.map(([n]) => n).sort()).toEqual(
-      ['account_deletions', 'config_rollout', 'default_voice_migration', 'knowledge_retries', 'knowledge_sync', 'library_voices', 'platform_tools', 'rejected_clones', 'voice_housekeeping', 'voice_orphans', 'voice_saves'].sort(),
+      ['account_deletions', 'config_rollout', 'default_voice_migration', 'knowledge_retries', 'knowledge_sync', 'library_voices', 'platform_tools', 'rejected_clones', 'stripe_plan_catalog', 'voice_housekeeping', 'voice_orphans', 'voice_saves'].sort(),
     )
   })
 })
@@ -252,5 +258,38 @@ describe('retryAgentSyncs', () => {
     const late = await retryAgentSyncs(20, logger().log, { now: NOW, deadline: Date.now() - 1 })
     expect(syncAgent).not.toHaveBeenCalled()
     expect(late.map((d) => d.status)).toEqual(['deferred', 'deferred'])
+  })
+})
+
+describe('stripe_plan_catalog step', () => {
+  beforeEach(() => {
+    state.db = stateDb()
+    ensureStripePlanCatalog.mockReset().mockResolvedValue({ checked: 16, ready: 16, failed: [] })
+  })
+
+  it('without time left it neither runs nor claims its hourly slot', async () => {
+    const { log } = logger()
+    expect(await runStripePlanCatalog(log, Date.now() - 1)).toEqual({ skipped: 'time_budget' })
+    expect(ensureStripePlanCatalog).not.toHaveBeenCalled()
+    expect(state.db!.tables.maintenance_state).toEqual([])
+  })
+
+  it('runs once an hour under its own key, with a deadline capped at 30 seconds and never past the run', async () => {
+    const { log } = logger()
+    const runDeadline = Date.now() + 120_000
+    expect(await runStripePlanCatalog(log, runDeadline)).toEqual({ checked: 16, ready: 16, failed: [] })
+    expect(ensureStripePlanCatalog).toHaveBeenCalledTimes(1)
+    const passed = ensureStripePlanCatalog.mock.calls[0][1] as number
+    expect(passed).toBeLessThanOrEqual(Date.now() + 30_000)
+    expect(passed).toBeLessThan(runDeadline)
+    expect(state.db!.tables.maintenance_state).toEqual([expect.objectContaining({ key: 'stripe_plan_catalog' })])
+    // The next run within the hour does not check again.
+    expect(await runStripePlanCatalog(log, Date.now() + 120_000)).toEqual({ skipped: 'not_due' })
+    expect(ensureStripePlanCatalog).toHaveBeenCalledTimes(1)
+    // A short run deadline wins over the 30-second cap.
+    state.db = stateDb()
+    const shortDeadline = Date.now() + 5_000
+    await runStripePlanCatalog(log, shortDeadline)
+    expect(ensureStripePlanCatalog.mock.calls[1][1]).toBe(shortDeadline)
   })
 })

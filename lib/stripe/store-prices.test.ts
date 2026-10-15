@@ -15,7 +15,7 @@ vi.hoisted(() => {
 
 const stripe = {
   prices: { list: vi.fn(), create: vi.fn(), retrieve: vi.fn() },
-  products: { create: vi.fn(), update: vi.fn() },
+  products: { create: vi.fn(), update: vi.fn(), retrieve: vi.fn() },
 }
 vi.mock('./client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./client')>()),
@@ -121,6 +121,7 @@ beforeEach(() => {
   stripe.prices.retrieve.mockReset()
   stripe.products.create.mockReset().mockResolvedValue({ id: 'prod_new' })
   stripe.products.update.mockReset().mockResolvedValue({ id: 'prod_updated' })
+  stripe.products.retrieve.mockReset().mockImplementation(async (id: string) => ({ id, active: true }))
 })
 
 /**
@@ -131,15 +132,18 @@ beforeEach(() => {
  */
 function idempotentCreates() {
   const products = new Map<string, { id: string }>()
+  const liveProducts = new Map<string, { id: string; active: boolean }>()
   const prices = new Map<string, ReturnType<typeof priceFrom>>()
   const live = new Map<string, ReturnType<typeof priceFrom>>()
   stripe.products.create.mockImplementation(async (_params: unknown, opts: { idempotencyKey: string }) => {
     const seen = products.get(opts.idempotencyKey)
-    if (seen) return seen
+    if (seen) return { ...seen, ...REPLAYED }
     const created = { id: `prod_${products.size + 1}` }
     products.set(opts.idempotencyKey, created)
+    liveProducts.set(created.id, { ...created, active: true })
     return created
   })
+  stripe.products.retrieve.mockImplementation(async (id: string) => liveProducts.get(id))
   stripe.prices.create.mockImplementation(async (params: PriceParams, opts: { idempotencyKey: string }) => {
     const seen = prices.get(opts.idempotencyKey)
     if (seen) return { ...seen, ...REPLAYED }
@@ -149,7 +153,7 @@ function idempotentCreates() {
     return created
   })
   stripe.prices.retrieve.mockImplementation(async (id: string) => live.get(id))
-  return { products, prices, live }
+  return { products, liveProducts, prices, live }
 }
 
 describe('ensurePlanPriceId', () => {
@@ -404,6 +408,25 @@ describe('ensurePlanPriceId', () => {
       expect(await ensurePlanPriceId('pro', 'year')).toBe('price_new_ntv_pro_year')
       expect(stripe.prices.retrieve).not.toHaveBeenCalled()
     })
+  })
+
+  it('a replayed product create whose product was archived since gets a successor, and the price is created on it', async () => {
+    const catalog = idempotentCreates()
+    // The first run creates the Growth product and its monthly price.
+    const first = await ensurePlanPriceId('growth', 'month')
+    expect(stripe.prices.create).toHaveBeenLastCalledWith(expect.objectContaining({ product: 'prod_1' }), { idempotencyKey: 'ntv_price_growth_month_9900' })
+    // The owner archives that product in the Stripe Dashboard (within the key's 24 hours).
+    catalog.liveProducts.set('prod_1', { id: 'prod_1', active: false })
+    resetPlanPriceCache()
+    // A cold lambda finds no usable price (its product is archived), and the product create replays the archived one.
+    const second = await ensurePlanPriceId('growth', 'month')
+    expect(stripe.products.retrieve).toHaveBeenCalledWith('prod_1')
+    expect(stripe.products.create).toHaveBeenLastCalledWith(expect.anything(), { idempotencyKey: `${productIdempotencyKey('growth')}_after_prod_1` })
+    // The successor's price takes a key naming the product (the original key was used with the archived one).
+    expect(stripe.prices.create).toHaveBeenLastCalledWith(expect.objectContaining({ product: 'prod_2' }), { idempotencyKey: 'ntv_price_growth_month_9900_prod_2' })
+    expect(second).not.toBe(first)
+    expect(catalog.live.get(second)?.product).toBe('prod_2')
+    expect(logs.warn.map(([event]) => event)).toContain('billing.plan_product_archived')
   })
 
   it('two cold callers racing on the same plan and interval end up with one product and one price', async () => {

@@ -137,8 +137,8 @@ export function priceMatchesPlan(price: PriceShape, amountCents: number, interva
 }
 
 /** True when Stripe answered a create from its idempotency cache (the object as first created, maybe stale since). */
-function isIdempotentReplay(price: Stripe.Price): boolean {
-  const headers = (price as Partial<Stripe.Response<Stripe.Price>>).lastResponse?.headers
+function isIdempotentReplay(created: Stripe.Price | Stripe.Product): boolean {
+  const headers = (created as Partial<Stripe.Response<Stripe.Price | Stripe.Product>>).lastResponse?.headers
   return headers?.['idempotent-replayed'] === 'true'
 }
 
@@ -253,6 +253,31 @@ async function usablePinnedPrice(stripe: Stripe, plan: Plan, interval: BillingIn
   return pinned
 }
 
+/**
+ * Creates the plan's product (one per plan and content, idempotency key
+ * productIdempotencyKey). A replayed create returns the product as it was
+ * first created, which may have been archived since (an owner tidying the
+ * Stripe Dashboard within the key's 24 hours): it is read back, and an
+ * archived or deleted one gets a successor under a key derived from it, which
+ * racing callers share too. `successor` says the product is such a successor.
+ */
+async function createPlanProduct(stripe: Stripe, plan: Plan, cfg: PlanConfig): Promise<{ id: string; successor: boolean }> {
+  const baseKey = productIdempotencyKey(plan, cfg)
+  let idempotencyKey = baseKey
+  for (let attempt = 0; attempt < MAX_PRICE_CREATES; attempt++) {
+    const product = await stripe.products.create(
+      { name: planProductName(cfg), description: planProductDescription(cfg), metadata: { ntv_plan: plan } },
+      { idempotencyKey },
+    )
+    if (!isIdempotentReplay(product)) return { id: product.id, successor: attempt > 0 }
+    const live = await stripe.products.retrieve(product.id)
+    if (usableProductId(live)) return { id: live.id, successor: attempt > 0 }
+    log().warn('billing.plan_product_archived', { plan, productId: product.id })
+    idempotencyKey = `${baseKey}_after_${product.id}`
+  }
+  throw new Error(`No usable Stripe product for ${plan}`)
+}
+
 async function findOrCreatePrice(
   stripe: Stripe,
   plan: Plan,
@@ -276,15 +301,16 @@ async function findOrCreatePrice(
   // The plan's product: the outdated price's, else the other interval's, else a new one.
   const reused = [existing, sibling].find((p) => p && usableProductId(p.product))
   let productId: string
+  // A product created to replace one archived since its create was first
+  // made (see createPlanProduct): its prices take keys of their own.
+  let successorProduct = false
   if (reused) {
     productId = usableProductId(reused.product)!
     await syncProductLabel(stripe, reused.product, plan, cfg)
   } else {
-    const product = await stripe.products.create(
-      { name: planProductName(cfg), description: planProductDescription(cfg), metadata: { ntv_plan: plan } },
-      { idempotencyKey: productIdempotencyKey(plan, cfg) },
-    )
-    productId = product.id
+    const created = await createPlanProduct(stripe, plan, cfg)
+    productId = created.id
+    successorProduct = created.successor
   }
 
   const params: Stripe.PriceCreateParams = {
@@ -302,7 +328,10 @@ async function findOrCreatePrice(
     metadata: { ntv_plan: plan, ntv_interval: interval },
   }
 
-  const baseKey = priceIdempotencyKey(plan, interval, amountCents)
+  // The price key names the amount; on a successor product it names the
+  // product too, since Stripe refuses a key replayed with other parameters
+  // (the original key was first used with the archived product).
+  const baseKey = successorProduct ? `${priceIdempotencyKey(plan, interval, amountCents)}_${productId}` : priceIdempotencyKey(plan, interval, amountCents)
   let idempotencyKey = baseKey
   for (let attempt = 0; attempt < MAX_PRICE_CREATES; attempt++) {
     const created = await stripe.prices.create(params, { idempotencyKey })
