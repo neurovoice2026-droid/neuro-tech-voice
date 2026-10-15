@@ -350,3 +350,52 @@ steps below are kept as the runbook for the next billing change.
   limits}` show the service-plan hint ("Pro plan and above") to store
   organizations on the trial; passing the business type there is a small
   change.
+
+## 2026-10-15 full verification and fixes
+
+A read-only audit covered production (Vercel, Supabase, cron, public pages,
+every webhook and API rejecting unauthenticated calls), the voice
+integrations, Stripe, the store integrations, and both dashboards rendered
+in the local preview harness (service personas plus new store personas).
+63 confirmed findings; the code ones were fixed in `4a9d587` (3205 tests,
+tsc, eslint on the 126 changed files, build all clean) and re-checked:
+
+- Production after deploy `dpl_D5gAr4smdT7EqAz7pphxN3k1pLQ9`: cron ticks ok
+  with 0 step errors; `/api/phone/search` 401 without a session; robots.txt,
+  sitemap.xml (30 URLs) and the canonical URL live; neuro-tech-voice.vercel.app
+  redirects 308 to www; every internal link on the home page answers 200.
+- Migrations applied: 029 (trial minutes default 5, existing rows untouched)
+  and 030 (integrations tokens server-only, tenant writes refused, a Google
+  integration active only with a token; the one token-less gmail row was
+  switched off). 030 went in after the code deploy, as it requires.
+- Stripe webhook we_1To5KrRpTgvHue52OEPxPCTj now also sends
+  `invoice.payment_failed` and `checkout.session.async_payment_succeeded`.
+- Preview harness: 43 screens of both dashboards and onboarding (service and
+  store) render with no errors, console errors or failed requests.
+
+Owner items found by the audit (not code):
+- HIGH: Resend refuses mail (403 validation_error): verify the sending domain
+  in Resend (DNS) or fix RESEND_FROM_EMAIL; until then welcome, password-reset
+  and message-alert e-mails are not delivered.
+- HIGH: the ElevenLabs workspace is on the Free tier (10,018 credits a month,
+  shared by every tenant, no instant cloning) while the plans sell 400 to
+  15,000 minutes per customer: upgrade before selling.
+- Shopify: register the app and set SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET
+  (the UI shows Shopify as "Not available yet" until then).
+- SmartBill issues invoices as 'Normala' at 0% VAT: decide the VAT settings.
+- ELEVENLABS_AGENT_AUTH=false is pinned in production (agent auth off): keep
+  only if a live call test shows a path that needs it.
+- ELEVENLABS_VOICE_NOTICE_WEBHOOK_SECRET is not set (voice-notice webhook 503).
+- ElevenLabs PII redaction is enterprise-only: upgrade or set
+  ELEVENLABS_PII_REDACTION=false (now one warning a day instead of errors).
+- Supabase Auth leaked-password protection is off (dashboard toggle).
+- Remove the six July price pins STRIPE_{STARTER,PRO,BUSINESS}[_ANNUAL]_PRICE_ID
+  from Vercel (their products are archived).
+- 18 trial organizations still hold 30 minutes (the new default is 5).
+- 9 agents of July organizations were never created at a voice provider;
+  creating them makes real provider agents, so it waits for an explicit go.
+- The "14 days" of the trial is not enforced anywhere (minutes are).
+- Five live preview Checkout sessions (metadata purpose branding_preview*)
+  expire on their own within 24 hours; nobody has their links.
+- Live calls were not placed (owner rule): run docs/voice-provider-test-plan.md
+  on the owner's own number to confirm inbound, outbound and transfer.
