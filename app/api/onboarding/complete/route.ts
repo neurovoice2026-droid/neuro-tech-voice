@@ -38,6 +38,7 @@ import { deferBackground } from '@/lib/observability/telemetry'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import { createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 import { ensurePlanPriceId } from '@/lib/stripe/store-prices'
 import { findPlanSubscriptions } from '@/lib/stripe/plan-subscription'
 import { sendEmail } from '@/lib/email/client'
@@ -363,7 +364,7 @@ export async function POST(request: Request) {
           if (error) throw new Error(`stripe_customer_id write failed: ${error.message}`)
         }
 
-        const session = await stripe.checkout.sessions.create({
+        const session = await createBrandedCheckoutSession(stripe, {
           customer: customerId,
           payment_method_types: ['card'],
           mode: 'subscription',
@@ -382,7 +383,7 @@ export async function POST(request: Request) {
             // after the price id (a store price carries it too).
             metadata: { org_id: org.id, ntv_plan: body.plan },
           },
-        })
+        }, appUrl, log)
 
         return NextResponse.json({ success: true, checkout_url: session.url, activated, primary_provider: primaryProvider, warning, sync })
       } catch (err) {

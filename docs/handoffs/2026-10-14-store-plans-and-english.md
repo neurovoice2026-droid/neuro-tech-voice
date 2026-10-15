@@ -107,8 +107,20 @@ code, docs and merchant-facing UI are English.
   09:10 UTC tick on 2026-10-15 reported `checked 16, ready 16, failed 0`,
   and the six July env pins were logged as `pinned_price_ignored`
   (`untagged`). Stripe (read through the Stripe connector before this):
-  no subscriptions; the July products "Neuro Tech Voice — Starter/Pro/
-  Business" are still active and can be archived by the owner.
+  no subscriptions. On 2026-10-15 the six July products ("Neuro Tech Voice —
+  Starter/Pro/Business") and their six prices were archived through the
+  Stripe connector; Stripe now lists exactly the 8 tagged products and the 16
+  lookup-key prices (ntv_<plan>_<month|year>) at the PLANS amounts.
+- Checkout branding (this follow-up): every Checkout Session (plan, minute
+  pack, onboarding, phone number) is created through
+  `createBrandedCheckoutSession` (lib/stripe/checkout-branding.ts) with
+  `branding_settings`: display name NeuroVoice, white background, #551a89
+  button, Inter, rounded corners, the crown icon
+  (public/brand/checkout-icon.png, 256×256, served from the app's https
+  origin). A branding field Stripe refuses is logged
+  (`stripe.checkout_branding_rejected`, field and code only) and the session
+  is created again without branding; `STRIPE_CHECKOUT_BRANDING=off` turns it
+  off. Invoices and receipts keep the Dashboard branding (Stripe's rule).
 - Known, intentional limits (documented in `docs/commerce-integrations.md`):
   custom-connector HMAC covers the body only; Shopify expiring tokens are not
   refreshed (offline token in use); Shopify `customer_phone` stays
@@ -305,17 +317,17 @@ steps below are kept as the runbook for the next billing change.
 
 ## Manual items that only the owner can do
 
-- Stripe Checkout colours and logo: Stripe Dashboard > Settings > Branding
-  (brand colour #551a89, accent #140a24, upload the logo and icon). The API
-  used here cannot set them.
+- Optional: Stripe Dashboard > Settings > Branding (brand colour #551a89,
+  accent #140a24, the crown icon) so invoices, receipts and the customer
+  portal match too. Checkout itself is already branded from the code.
 - Decide whether the homepage service prices stay as they are: at about
   $0.10/min cost, Pro (3,000 min for $249) and Scale (15,000 for $990) lose
   money when a customer uses every included minute; Growth and Business are
   near break-even. Lowering their included minutes is a one-line change in
   `types/index.ts` PLANS (the homepage follows automatically).
 - Optional: the July env prices `STRIPE_{STARTER,PRO,BUSINESS}[_ANNUAL]_PRICE_ID`
-  are now ignored (no `ntv_plan` tag). They can be removed from Vercel and
-  their products archived in Stripe; nothing depends on them.
+  are ignored (no `ntv_plan` tag) and their products are archived in Stripe;
+  the six Vercel variables can be removed; nothing depends on them.
 
 - Register the Shopify app (non-embedded, redirect URI
   `https://www.neurotechvoice.com/api/commerce/oauth/shopify/callback`,

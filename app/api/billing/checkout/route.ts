@@ -13,6 +13,7 @@ import {
 import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import { createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 import { ensurePlanPriceId } from '@/lib/stripe/store-prices'
 import {
   findPlanSubscriptions,
@@ -172,7 +173,7 @@ export async function POST(request: Request) {
         if (error) throw new Error(`stripe_customer_id write failed: ${error.message}`)
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await createBrandedCheckoutSession(stripe, {
         customer: customerId,
         mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }],
@@ -188,7 +189,7 @@ export async function POST(request: Request) {
         // ntv_plan on the subscription is the webhook's second signal for the
         // plan, after the price id (the price itself carries it too).
         subscription_data: { metadata: { org_id: org.id, ntv_plan: plan } },
-      })
+      }, appUrl, log)
 
       return NextResponse.json({ url: session.url })
     } catch (err) {

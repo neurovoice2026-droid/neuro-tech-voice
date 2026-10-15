@@ -12,6 +12,7 @@ import {
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import { createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 import { PHONE_NUMBER_MONTHLY_PRICE_USD } from '@/lib/phone/pricing'
 import { maskPhone, normalizeE164 } from '@/lib/phone/e164'
 
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
         ...(agent_id ? { agent_id } : {}),
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await createBrandedCheckoutSession(stripe, {
         customer: customerId,
         mode: 'subscription',
         line_items: [
@@ -131,7 +132,7 @@ export async function POST(request: Request) {
         // tell this apart from a plan subscription.
         metadata,
         subscription_data: { metadata },
-      })
+      }, appUrl, log)
 
       log.info('phone.checkout_created', { number: maskPhone(number) })
       return NextResponse.json({ url: session.url })

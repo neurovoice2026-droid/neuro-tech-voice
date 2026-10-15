@@ -13,6 +13,7 @@ import { RequestError, apiError, assertSameOrigin, errorResponse, parseJsonBody,
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import { createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { MINUTE_PACKS, packQuote } from '@/lib/billing/minute-packs'
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       }
 
       const metadata = { type: 'minute_pack', org_id: org.id, minutes: String(minutes), plan }
-      const session = await stripe.checkout.sessions.create({
+      const session = await createBrandedCheckoutSession(stripe, {
         mode: 'payment',
         customer: customerId,
         line_items: [
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
         customer_update: { address: 'auto', name: 'auto' },
         success_url: `${appUrl}/billing?minutes=success#minutes`,
         cancel_url: `${appUrl}/billing?minutes=canceled#minutes`,
-      })
+      }, appUrl, log)
       log.info('billing.minutes_checkout_created', { minutes, amountCents: quote.amount_cents })
       return NextResponse.json({ url: session.url })
     } catch (err) {
