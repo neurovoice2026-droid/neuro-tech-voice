@@ -1,13 +1,18 @@
 import 'server-only'
 // Stripe-hosted Checkout dressed like the site: white page, the brand violet
 // on the pay button, Inter (the site's body face), rounded corners, and the
-// crown as the page icon and favicon next to the NeuroVoice name. Passed per
-// session (branding_settings), so it does not depend on the account's
-// Dashboard branding; a field left out falls back to the Dashboard's value.
-// Invoices and receipts keep the Dashboard branding (Stripe's rule).
+// NEUROVOICE wordmark in the header (the logo; Checkout shows it about 28px
+// tall, so it is the bare wordmark, ink on transparent, cut from the brand
+// square) with the brand square as the favicon (the icon). Passed per session
+// (branding_settings), so it does not depend on the account's Dashboard
+// branding; a field left out falls back to the Dashboard's value. Invoices
+// and receipts keep the Dashboard branding (Stripe's rule).
 //
-// STRIPE_CHECKOUT_BRANDING=off sends no branding at all. The icon is a URL
-// Stripe fetches, so it is sent only from an https origin (never localhost).
+// STRIPE_CHECKOUT_BRANDING=off sends no branding at all. The logo and icon are
+// URLs Stripe fetches (through its image proxy, when the page loads; the
+// session create does not check them), so they are sent only from an https
+// origin (never localhost); without them Checkout shows the icon from the
+// Dashboard, or none, next to CHECKOUT_DISPLAY_NAME.
 // A session Stripe refuses because of a branding field is created again
 // without branding: the buyer still pays, on the Dashboard's look. These
 // calls carry no idempotency key and a refused create makes nothing, so the
@@ -16,10 +21,13 @@ import 'server-only'
 import type Stripe from 'stripe'
 import type { Logger } from '@/lib/observability/logger'
 
-/** The square crown (public/brand/checkout-icon.png, 256×256). */
+/** The brand square, NEUROVOICE on the violet-teal glow (public/brand/checkout-icon.png, 512×512): the favicon. */
 export const CHECKOUT_ICON_PATH = '/brand/checkout-icon.png'
 
-/** The name the site's wordmark spells (NEUROVOICE). */
+/** The NEUROVOICE wordmark, ink on transparent (public/brand/checkout-logo.png, 870×136): the header. */
+export const CHECKOUT_LOGO_PATH = '/brand/checkout-logo.png'
+
+/** The name the wordmark spells; Checkout shows it only when the logo is not sent. */
 export const CHECKOUT_DISPLAY_NAME = 'NeuroVoice'
 
 type Branding = NonNullable<Stripe.Checkout.SessionCreateParams['branding_settings']>
@@ -43,7 +51,10 @@ export function checkoutBranding(appUrl: string): Branding | undefined {
     font_family: 'inter', // the site's body face; covers every Latin locale Checkout picks (ro included)
   }
   const origin = httpsOrigin(appUrl)
-  if (origin) branding.icon = { type: 'url', url: `${origin}${CHECKOUT_ICON_PATH}` }
+  if (origin) {
+    branding.logo = { type: 'url', url: `${origin}${CHECKOUT_LOGO_PATH}` }
+    branding.icon = { type: 'url', url: `${origin}${CHECKOUT_ICON_PATH}` }
+  }
   return branding
 }
 

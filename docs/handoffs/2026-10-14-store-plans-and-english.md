@@ -115,9 +115,13 @@ code, docs and merchant-facing UI are English.
   pack, onboarding, phone number) is created through
   `createBrandedCheckoutSession` (lib/stripe/checkout-branding.ts) with
   `branding_settings`: display name NeuroVoice, white background, #551a89
-  button, Inter, rounded corners, the crown icon
-  (public/brand/checkout-icon.png, 256×256, served from the app's https
-  origin). A branding field Stripe refuses is logged
+  button, Inter, rounded corners; the owner's NEUROVOICE wordmark as the
+  header logo (public/brand/checkout-logo.png, 870×136, ink on transparent,
+  cut from the owner's brand square so it reads at Checkout's ~28px logo
+  height) and the brand square itself as the favicon
+  (public/brand/checkout-icon.png, 512×512), both served from the app's https
+  origin. The owner replaced the crown with this artwork on 2026-10-15. A
+  branding field Stripe refuses is logged
   (`stripe.checkout_branding_rejected`, field and code only) and the session
   is created again without branding; `STRIPE_CHECKOUT_BRANDING=off` turns it
   off. Invoices and receipts keep the Dashboard branding (Stripe's rule).
@@ -321,8 +325,9 @@ steps below are kept as the runbook for the next billing change.
   Checkout defaults) was set through the Stripe connector on 2026-10-15:
   brand and accent #551a89, white Checkout background, #551a89 button,
   Inter, rounded. Left for the owner: upload the icon in Stripe Dashboard >
-  Settings > Branding (the connector exposes no file upload). Use the crown,
-  https://www.neurotechvoice.com/brand/checkout-icon.png (256×256 PNG).
+  Settings > Branding (the connector exposes no file upload): the brand
+  square https://www.neurotechvoice.com/brand/checkout-icon.png (512×512
+  PNG, NEUROVOICE on the glow; Stripe wants square, min 128px, max 512 KB).
 - Decide whether the homepage service prices stay as they are: at about
   $0.10/min cost, Pro (3,000 min for $249) and Scale (15,000 for $990) lose
   money when a customer uses every included minute; Growth and Business are

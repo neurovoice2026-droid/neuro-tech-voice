@@ -77,8 +77,12 @@ describe('POST /api/billing/minutes/checkout', () => {
       payment_intent_data: { metadata },
       success_url: 'https://app.example.com/billing?minutes=success#minutes',
       cancel_url: 'https://app.example.com/billing?minutes=canceled#minutes',
-      // The site's look, with the crown served from the app origin.
-      branding_settings: { button_color: '#551a89', icon: { type: 'url', url: 'https://app.example.com/brand/checkout-icon.png' } },
+      // The site's look, with the wordmark and the brand square served from the app origin.
+      branding_settings: {
+        button_color: '#551a89',
+        logo: { type: 'url', url: 'https://app.example.com/brand/checkout-logo.png' },
+        icon: { type: 'url', url: 'https://app.example.com/brand/checkout-icon.png' },
+      },
     })
     expect(sessionParams()).not.toHaveProperty('subscription_data')
     expect(stripe.client.customers.create).not.toHaveBeenCalled()

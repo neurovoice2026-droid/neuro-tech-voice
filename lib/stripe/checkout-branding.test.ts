@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type Stripe from 'stripe'
-import { CHECKOUT_ICON_PATH, checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
+import { CHECKOUT_ICON_PATH, CHECKOUT_LOGO_PATH, checkoutBranding, createBrandedCheckoutSession } from '@/lib/stripe/checkout-branding'
 
 function logger() {
   const lines: Array<{ level: string; event: string; data: unknown }> = []
@@ -27,24 +27,28 @@ beforeEach(() => {
 })
 
 describe('checkoutBranding', () => {
-  it('dresses the page like the site: white, brand violet button, Inter, rounded, the crown from the https origin', () => {
+  it('dresses the page like the site: white, brand violet button, Inter, rounded, the NEUROVOICE wordmark and brand square from the https origin', () => {
     expect(checkoutBranding('https://www.example.com/')).toEqual({
       display_name: 'NeuroVoice',
       background_color: '#ffffff',
       button_color: '#551a89',
       border_style: 'rounded',
       font_family: 'inter',
+      logo: { type: 'url', url: 'https://www.example.com/brand/checkout-logo.png' },
       icon: { type: 'url', url: 'https://www.example.com/brand/checkout-icon.png' },
     })
   })
 
-  it('keeps only the origin of the app URL for the icon', () => {
-    expect(checkoutBranding('  https://app.example.com/some/path?x=1 ')?.icon).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-icon.png' })
+  it('keeps only the origin of the app URL for the images', () => {
+    const branding = checkoutBranding('  https://app.example.com/some/path?x=1 ')
+    expect(branding?.logo).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-logo.png' })
+    expect(branding?.icon).toEqual({ type: 'url', url: 'https://app.example.com/brand/checkout-icon.png' })
   })
 
-  it('sends no icon Stripe could not fetch: http, localhost over http, or a malformed URL', () => {
+  it('sends no image Stripe could not fetch: http, localhost over http, or a malformed URL', () => {
     for (const url of ['http://localhost:3000', 'http://app.example.com', 'not a url', '']) {
       const branding = checkoutBranding(url)
+      expect(branding?.logo).toBeUndefined()
       expect(branding?.icon).toBeUndefined()
       expect(branding?.button_color).toBe('#551a89')
     }
@@ -55,10 +59,29 @@ describe('checkoutBranding', () => {
     expect(checkoutBranding('https://www.example.com')).toBeUndefined()
   })
 
-  it('the icon it points at ships in public/ and is a PNG', () => {
-    const file = join(process.cwd(), 'public', CHECKOUT_ICON_PATH)
+  // Stripe's image rules (Dashboard branding, the strictest it documents): PNG
+  // or JPG, at most 512 KB; the icon square and at least 128×128.
+  function png(path: string) {
+    const file = join(process.cwd(), 'public', path)
     expect(existsSync(file)).toBe(true)
-    expect(readFileSync(file).subarray(1, 4).toString('ascii')).toBe('PNG')
+    const bytes = readFileSync(file)
+    expect(bytes.subarray(1, 4).toString('ascii')).toBe('PNG')
+    return { size: bytes.length, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+  }
+
+  it('the icon it points at ships in public/: a square PNG Stripe accepts', () => {
+    const icon = png(CHECKOUT_ICON_PATH)
+    expect(icon.width).toBe(icon.height)
+    expect(icon.width).toBeGreaterThanOrEqual(128)
+    expect(icon.size).toBeLessThanOrEqual(512 * 1024)
+  })
+
+  it('the logo it points at ships in public/: a wide PNG, so the wordmark reads at the header height', () => {
+    const logo = png(CHECKOUT_LOGO_PATH)
+    // Checkout draws the logo about 28px tall: a wide wordmark keeps its letters legible.
+    expect(logo.width / logo.height).toBeGreaterThan(4)
+    expect(logo.height).toBeGreaterThanOrEqual(56)
+    expect(logo.size).toBeLessThanOrEqual(512 * 1024)
   })
 })
 
